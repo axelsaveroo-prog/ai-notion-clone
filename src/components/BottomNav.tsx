@@ -40,7 +40,7 @@ export function BottomNav() {
         {isAiOpen ? (
           /* Animated Morphing Input Bar */
           <form onSubmit={handleAiSubmit} className="flex items-center gap-2 w-full animate-fadeIn">
-            <Sparkles className="w-4 h-4 text-orange-400 shrink-0 animate-spin-slow" />
+            <Sparkles className="w-4 h-4 text-orange-400 shrink-0" />
             <input
               type="text"
               autoFocus
@@ -61,6 +61,46 @@ export function BottomNav() {
               type="button"
               onClick={() => setIsAiOpen(false)}
               className="text-gray-400 hover:text-white p-1 transition-colors"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </form>
+        ) : (
+          /* Standard Icon Bar */
+          <>
+            <Link href="/" className={`p-2.5 rounded-full transition-all ${pathname === "/" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"}`} title="Home">
+              <Home className="w-5 h-5" />
+            </Link>
+
+            <Link href="/tasks" className={`p-2.5 rounded-full transition-all ${pathname === "/tasks" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"}`} title="Tasks">
+              <CheckSquare className="w-5 h-5" />
+            </Link>
+
+            {/* Center Animated AI Button */}
+            <button
+              type="button"
+              onClick={() => setIsAiOpen(true)}
+              className="p-3.5 rounded-full transition-all duration-300 shadow-lg scale-110 bg-[#f97316] text-black font-bold hover:bg-orange-600 hover:scale-125 flex items-center justify-center active:scale-95"
+              title="Open AI Prompt"
+            >
+              <Sparkles className="w-5 h-5" />
+            </button>
+
+            <Link href="/calendar" className={`p-2.5 rounded-full transition-all ${pathname === "/calendar" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"}`} title="Calendar">
+              <Calendar className="w-5 h-5" />
+            </Link>
+
+            <Link href="/user" className={`p-2.5 rounded-full transition-all ${pathname === "/user" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"}`} title="User Profile">
+              <User className="w-5 h-5" />
+            </Link>
+          </>
+        )}
+
+      </nav>
+    </div>
+  );
+}              className="text-gray-400 hover:text-white p-1 transition-colors"
               title="Close"
             >
               <X className="w-4 h-4" />
