@@ -5,3 +5,4 @@ export {
     default as usersToDocuments,
     usersToDocumentsRelations,
 } from "./users-to-documents";
+export * from "./tasks";
