@@ -6,27 +6,42 @@ import { MobileContainer } from "@/components/MobileContainer";
 export default function Home() {
   return (
     <MobileContainer>
-      {/* Top Header with Integrated AI Search Pill */}
-      <header className="border-b border-[#1f1f22] bg-[#121214]/80 backdrop-blur-md px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 sticky top-4 z-10 mb-6 shadow-md">
-        <div className="flex items-center justify-between w-full sm:w-auto">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">⚡</span>
-            <h1 className="font-bold text-sm tracking-tight text-white">Sika Creative OS</h1>
+      {/* Header Photo Banner */}
+      <div className="w-full h-32 sm:h-40 rounded-3xl overflow-hidden relative mb-4 border border-[#27272a] shadow-lg">
+        <img
+          src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop"
+          alt="Header Cover"
+          className="w-full h-full object-cover opacity-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0c] via-transparent to-transparent"></div>
+      </div>
+
+      {/* Company Box with Circular Logo Frame */}
+      <div className="bg-[#161618] border border-[#27272a] p-4 sm:p-5 rounded-3xl flex items-center justify-between mb-6 shadow-xl">
+        <div className="flex items-center gap-3.5">
+          {/* Circular Logo Frame */}
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center font-black text-black text-lg shadow-md border-2 border-[#27272a] shrink-0">
+            SC
           </div>
-          <div className="text-[10px] text-orange-400 font-medium bg-orange-500/10 px-2.5 py-0.5 rounded-full border border-orange-500/20 sm:hidden flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
-            Connected
+          <div>
+            <h1 className="font-bold text-base text-white tracking-tight">Sika Creative OS</h1>
+            <p className="text-xs text-orange-400 font-medium">Pabrik Dalam Workspace</p>
           </div>
         </div>
 
-        {/* AI Command Pill in Header */}
-        <div className="w-full sm:w-72">
-          <AICommandBar />
+        <div className="text-[10px] text-orange-400 font-medium bg-orange-500/10 px-2.5 py-1 rounded-full border border-orange-500/20 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
+          Live
         </div>
-      </header>
+      </div>
+
+      {/* Integrated AI Command Section */}
+      <div id="ai-command" className="mb-6">
+        <AICommandBar />
+      </div>
 
       {/* Main Workspace Feed */}
-      <main className="flex-1 flex flex-col gap-6 pb-16">
+      <main className="flex-1 flex flex-col gap-6 pb-20">
         <ForYouKanban />
         <TeamCalendar />
       </main>
