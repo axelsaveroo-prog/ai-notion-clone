@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import Header from "@/components/header";
 import ReactQueryProvider from "@/components/providers/react-query-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { BottomNav } from "@/components/BottomNav";
@@ -8,8 +7,8 @@ import { BottomNav } from "@/components/BottomNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    title: "Notion OS",
-    description: "A Notion clone with AI capabilities",
+    title: "Sika Creative OS",
+    description: "A Notion-style workspace with AI capabilities",
 };
 
 export default function RootLayout({
@@ -27,9 +26,9 @@ export default function RootLayout({
 
                 <body className="bg-[#0b0b0c] text-gray-100 antialiased min-h-screen">
                     <ReactQueryProvider>
-                        <Header />
+                        {/* Header removed for a completely clean custom look */}
                         
-                        <main className="min-h-[calc(100vh-60px)] bg-[#0b0b0c] pb-20">
+                        <main className="min-h-screen bg-[#0b0b0c] pb-24">
                             {children}
                         </main>
 
