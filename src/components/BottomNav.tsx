@@ -9,14 +9,13 @@ export function BottomNav() {
 
   return (
     <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
-      {/* Floating Pill Container */}
       <nav className="pointer-events-auto bg-[#161618]/90 backdrop-blur-lg border border-[#27272a] rounded-full p-2 shadow-2xl flex items-center gap-2">
         
         {/* 1. Home */}
         <Link
           href="/"
           className={`p-3 rounded-full transition-all ${
-            pathname === "/" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"
+            pathname === "/" ? "bg-[#f97316] text-black shadow-md scale-105 font-bold" : "text-gray-400 hover:text-white hover:bg-[#222226]"
           }`}
           title="Home"
         >
@@ -27,18 +26,18 @@ export function BottomNav() {
         <Link
           href="/calendar"
           className={`p-3 rounded-full transition-all ${
-            pathname === "/calendar" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"
+            pathname === "/calendar" ? "bg-[#f97316] text-black shadow-md scale-105 font-bold" : "text-gray-400 hover:text-white hover:bg-[#222226]"
           }`}
           title="Calendar"
         >
           <Calendar className="w-5 h-5" />
         </Link>
 
-        {/* 3. Attendance (Center Highlighted Icon style) */}
+        {/* 3. Attendance (Center Highlighted Icon) */}
         <Link
           href="/attendance"
           className={`p-4 rounded-full transition-all ${
-            pathname === "/attendance" || pathname === "/" // Or highlight when active
+            pathname === "/attendance"
               ? "bg-[#f97316] text-black shadow-lg scale-110 font-bold"
               : "bg-[#222226] text-orange-400 hover:bg-[#2a2a2e]"
           }`}
@@ -47,11 +46,11 @@ export function BottomNav() {
           <Clock className="w-6 h-6" />
         </Link>
 
-        {/* 4. Calendar (Repeated as requested) */}
+        {/* 4. Calendar (Repeated) */}
         <Link
           href="/calendar"
           className={`p-3 rounded-full transition-all ${
-            pathname === "/calendar" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"
+            pathname === "/calendar" ? "bg-[#f97316] text-black shadow-md scale-105 font-bold" : "text-gray-400 hover:text-white hover:bg-[#222226]"
           }`}
           title="Calendar"
         >
@@ -62,7 +61,7 @@ export function BottomNav() {
         <Link
           href="/user"
           className={`p-3 rounded-full transition-all ${
-            pathname === "/user" ? "bg-[#f97316] text-black shadow-md scale-105" : "text-gray-400 hover:text-white hover:bg-[#222226]"
+            pathname === "/user" ? "bg-[#f97316] text-black shadow-md scale-105 font-bold" : "text-gray-400 hover:text-white hover:bg-[#222226]"
           }`}
           title="User Profile"
         >
