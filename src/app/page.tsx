@@ -8,7 +8,7 @@ export default function Home() {
       {/* Header Photo Banner */}
       <div className="w-full h-32 sm:h-40 rounded-3xl overflow-hidden relative mb-4 border border-[#27272a] shadow-lg">
         <img
-          src="/SIKA LOGOS WHITE.png"
+          src="/BANNER.png"
           alt="Header Cover"
           className="w-full h-full object-cover opacity-80"
         />
@@ -20,14 +20,14 @@ export default function Home() {
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-full bg-[#222226] flex items-center justify-center border-2 border-[#27272a] shrink-0 overflow-hidden shadow-md">
             <img 
-              src="/BANNER.png" 
+              src="/SIKA LOGOS WHITE.png" 
               alt="Company Logo" 
               className="w-full h-full object-cover" 
             />
           </div>
           <div>
-            <h1 className="font-bold text-base text-white tracking-tight">Official Sika Apps</h1>
-            <p className="text-xs text-orange-400 font-medium">Pabrik Dalam</p>
+            <h1 className="font-bold text-base text-white tracking-tight">OFFICIAL SIKA APPS</h1>
+            <p className="text-xs text-orange-400 font-medium">The Main Factory</p>
           </div>
         </div>
         
