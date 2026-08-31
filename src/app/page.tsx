@@ -1,3 +1,4 @@
+import { AICommandBar } from "@/components/AICommandBar";
 import { ArrowLeftCircle } from "lucide-react";
 
 export default function Home() {
@@ -12,6 +13,7 @@ export default function Home() {
             <p className="ml-2 mt-4 text-sm font-semibold text-gray-400">
                 To be able to receive invites you need to first create a room!
             </p>
+            <AICommandBar/>
         </main>
     );
 }
