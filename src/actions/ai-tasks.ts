@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/db/index";
+import db from "@/db";
 import { tasks } from "@/db/schema";
 import { eq, ilike } from "drizzle-orm";
 
