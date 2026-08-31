@@ -1,11 +1,7 @@
-import React from "react";
-
-import LiveBlocksProvider from "@/components/providers/live-blocks-provider";
-
-export default function PageLayout({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
-    return <LiveBlocksProvider>{children}</LiveBlocksProvider>;
+export default function DocLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[#0b0b0c] text-white">
+      {children}
+    </div>
+  );
 }
