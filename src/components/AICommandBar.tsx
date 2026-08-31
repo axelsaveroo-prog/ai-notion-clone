@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { handleAITaskCommand } from "@/actions/ai-tasks";
+import { Sparkles, ArrowRight } from "lucide-react";
 
 export function AICommandBar() {
   const [prompt, setPrompt] = useState("");
@@ -11,41 +11,45 @@ export function AICommandBar() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
-
     setLoading(true);
     setResponseMessage("");
 
     try {
-      const res = await handleAITaskCommand(prompt);
-      setResponseMessage(res.message);
-    } catch (error) {
-      setResponseMessage("Something went wrong executing the command.");
+      const res = await fetch("/actions/ai-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      setResponseMessage(data.message || "Executed successfully!");
+    } catch {
+      setResponseMessage("Error processing command.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-4 bg-white rounded-lg shadow-md border border-gray-200 my-4 max-w-xl">
-      <h3 className="font-semibold text-gray-800 mb-2">🤖 AI Workspace Assistant</h3>
-      <form onSubmit={handleSubmit} className="flex gap-2">
+    <div className="w-full relative">
+      <form onSubmit={handleSubmit} className="flex items-center bg-[#161618] border border-[#27272a] rounded-full px-3.5 py-1.5 shadow-inner focus-within:border-orange-500 transition-colors">
+        <Sparkles className="w-4 h-4 text-orange-400 mr-2 shrink-0" />
         <input
           type="text"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="e.g., Mark all tasks for Project Alpha as done"
-          className="flex-1 px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+          placeholder="Ask AI or type command..."
+          className="w-full bg-transparent text-xs text-white placeholder:text-gray-500 focus:outline-none"
         />
         <button
           type="submit"
           disabled={loading}
-          className="bg-black text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+          className="bg-[#f97316] text-black p-1.5 rounded-full hover:bg-orange-600 disabled:opacity-50 transition-colors shrink-0 ml-1"
         >
-          {loading ? "Thinking..." : "Run AI"}
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </form>
       {responseMessage && (
-        <p className="text-xs text-gray-600 mt-2 font-medium">{responseMessage}</p>
+        <p className="text-[10px] text-orange-400 mt-1 px-3 font-medium">{responseMessage}</p>
       )}
     </div>
   );
