@@ -26,26 +26,14 @@ export default function RootLayout({
                 />
 
                 <body className="bg-[#0b0b0c] text-gray-100 antialiased min-h-screen">
-          <ReactQueryProvider>
-              <Header />
-              
-              <main className="min-h-[calc(100vh-60px)] bg-[#0b0b0c]">
-                  {children}
-              </main>
-
-              <BottomNav />
-
-              <Toaster position="top-center" />
-          </ReactQueryProvider>
-      </body>
-                <body className="bg-[#0b0b0c] text-gray-100 antialiased min-h-screen">
                     <ReactQueryProvider>
                         <Header />
                         
-                        {/* Clean full-width dark workspace container */}
-                        <main className="min-h-[calc(100vh-60px)] bg-[#0b0b0c]">
+                        <main className="min-h-[calc(100vh-60px)] bg-[#0b0b0c] pb-20">
                             {children}
                         </main>
+
+                        <BottomNav />
 
                         <Toaster position="top-center" />
                     </ReactQueryProvider>
