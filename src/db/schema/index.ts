@@ -6,3 +6,4 @@ export {
     usersToDocumentsRelations,
 } from "./users-to-documents";
 export * from "./tasks";
+export * from "./attendance";
