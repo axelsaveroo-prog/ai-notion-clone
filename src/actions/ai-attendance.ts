@@ -6,7 +6,7 @@ import { attendance } from "@/db/schema";
 export async function recordAttendance(type: "CHECK_IN" | "CHECK_OUT", latitude: number, longitude: number, userId: string) {
   try {
     await db.insert(attendance).values({
-      id: Math.random().toString(36.substring(2, 9)),
+      id: Math.random().toString(36).substring(2, 9),
       userId: userId,
       type: type,
       latitude: latitude.toString(),
