@@ -1,4 +1,3 @@
-import { AICommandBar } from "@/components/AICommandBar";
 import { ForYouKanban } from "@/components/ForYouKanban";
 import { TeamCalendar } from "@/components/TeamCalendar";
 import { MobileContainer } from "@/components/MobileContainer";
@@ -19,7 +18,6 @@ export default function Home() {
       {/* Company Box with Circular Logo Frame */}
       <div className="bg-[#161618] border border-[#27272a] p-4 sm:p-5 rounded-3xl flex items-center justify-between mb-6 shadow-xl">
         <div className="flex items-center gap-3.5">
-          {/* Circular Logo Frame */}
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center font-black text-black text-lg shadow-md border-2 border-[#27272a] shrink-0">
             SC
           </div>
@@ -33,11 +31,6 @@ export default function Home() {
           <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
           Live
         </div>
-      </div>
-
-      {/* Integrated AI Command Section */}
-      <div id="ai-command" className="mb-6">
-        <AICommandBar />
       </div>
 
       {/* Main Workspace Feed */}
