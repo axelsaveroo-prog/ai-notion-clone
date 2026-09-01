@@ -18,9 +18,10 @@ export default function Home() {
     if (window.location.hostname.startsWith("app.")) {
       setIsAppDomain(true);
     }
+    // Extended splash screen duration to 1.8 seconds for a luxury feel
     const loadingTimer = setTimeout(() => {
       setIsAppLoading(false);
-    }, 600);
+    }, 1800);
 
     return () => clearTimeout(loadingTimer);
   }, []);
@@ -72,11 +73,11 @@ export default function Home() {
   if (isAppDomain) {
     if (isAppLoading) {
       return (
-        <div className="fixed inset-0 bg-[#0b0b0c] flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-[#0b0b0c] flex items-center justify-center z-50 transition-opacity duration-500">
           <img
             src="/touch icon sika-04.png"
             alt="Loading..."
-            className="w-16 h-16 object-contain animate-pulse rounded-2xl"
+            className="w-32 h-32 md:w-40 md:h-40 object-contain animate-pulse rounded-3xl drop-shadow-2xl"
           />
         </div>
       );
