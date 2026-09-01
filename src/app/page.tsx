@@ -8,7 +8,7 @@ import { MobileContainer } from "@/components/MobileContainer";
 export default function Home() {
   const [isAppDomain, setIsAppDomain] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(false);
-  const [stage, setStage] = useState<"logo" | "typing1" | "typing2">("logo");
+  const [stage, setStage] = useState<"logo" | "typing1" | "typing2" | "typing2Done">("logo");
   const [displayedText, setDisplayedText] = useState("");
   
   const fullText1 = "Welcome.";
@@ -18,7 +18,6 @@ export default function Home() {
     if (window.location.hostname.startsWith("app.")) {
       setIsAppDomain(true);
 
-      // Check if the splash screen has already been shown in this session
       const hasLoadedBefore = sessionStorage.getItem("sika_app_loaded");
       if (!hasLoadedBefore) {
         setIsAppLoading(true);
@@ -32,16 +31,27 @@ export default function Home() {
     }
   }, []);
 
+  // Looping cinematic sequence timer for the public page
   useEffect(() => {
     if (isAppDomain) return;
 
-    const timer = setTimeout(() => {
-      setStage("typing1");
-    }, 4000);
+    let timeout: NodeJS.Timeout;
 
-    return () => clearTimeout(timer);
-  }, [isAppDomain]);
+    if (stage === "logo") {
+      timeout = setTimeout(() => {
+        setStage("typing1");
+      }, 4000);
+    } else if (stage === "typing2Done") {
+      timeout = setTimeout(() => {
+        setDisplayedText("");
+        setStage("logo");
+      }, 3000);
+    }
 
+    return () => clearTimeout(timeout);
+  }, [stage, isAppDomain]);
+
+  // Typewriter effect
   useEffect(() => {
     if (isAppDomain) return;
 
@@ -70,6 +80,7 @@ export default function Home() {
           j++;
         } else {
           clearInterval(interval);
+          setStage("typing2Done");
         }
       }, 70);
       return () => clearInterval(interval);
@@ -108,11 +119,12 @@ export default function Home() {
 
   return (
     <main className="relative w-screen h-screen bg-[#09090b] text-white flex flex-col items-center justify-center overflow-hidden font-sans">
+      {/* Background with full brightness opacity-100 and lighter overlay */}
       <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none opacity-80"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none opacity-100"
         style={{ backgroundImage: "url('/BACKGROUND WEBSITE-2.png')" }}
       />
-      <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
 
       <div className="z-10 flex flex-col items-center justify-center text-center px-4">
         {stage === "logo" && (
