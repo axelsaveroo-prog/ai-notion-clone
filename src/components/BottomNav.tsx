@@ -21,7 +21,7 @@ export function BottomNav() {
         {isAiOpen ? (
           <form 
             onSubmit={(e) => { e.preventDefault(); setPrompt(""); setIsAiOpen(false); }} 
-            className="flex items-center gap-3 w-full animate-fade-in"
+            className="flex items-center gap-3 w-full"
           >
             <Sparkles className="w-5 h-5 text-gray-400 shrink-0" />
             <input
@@ -41,27 +41,6 @@ export function BottomNav() {
           </form>
         ) : (
           <>
-            <Link href="/" className={`p-3 rounded-full transition-colors ${pathname === "/" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
-              <Home className="w-5 h-5" />
-            </Link>
-            <Link href="/tasks" className={`p-3 rounded-full transition-colors ${pathname === "/tasks" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
-              <CheckSquare className="w-5 h-5" />
-            </Link>
-            <button type="button" onClick={() => setIsAiOpen(true)} className="p-3.5 rounded-full shadow-lg bg-white text-black hover:bg-gray-200 transition-transform active:scale-95">
-              <Sparkles className="w-6 h-6" />
-            </button>
-            <Link href="/calendar" className={`p-3 rounded-full transition-colors ${pathname === "/calendar" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
-              <Calendar className="w-5 h-5" />
-            </Link>
-            <Link href="/user" className={`p-3 rounded-full transition-colors ${pathname === "/user" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
-              <User className="w-5 h-5" />
-            </Link>
-          </>
-        )}
-      </nav>
-    </div>
-  );
-}          <>
             <Link href="/" className={`p-3 rounded-full transition-colors ${pathname === "/" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
               <Home className="w-5 h-5" />
             </Link>
