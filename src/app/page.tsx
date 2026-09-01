@@ -120,7 +120,7 @@ export default function Home() {
             <img
               src="/Asset 2@1080x.png"
               alt="Sika Creative Studio"
-              className="h-20 md:h-28 w-auto object-contain select-none drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]"
+              className="h-20 md:h-28 w-auto object-contain select-none"
             />
           </div>
         )}
@@ -136,7 +136,7 @@ export default function Home() {
       </div>
 
       <div className="absolute bottom-6 text-[10px] tracking-widest text-gray-400 uppercase drop-shadow">
-        © {new Date().getFullYear()} Sika Creative Group. All rights reserved.
+        © {new Date().getFullYear()} CV. SEKELOMPOK KREATOR CUAN. All rights reserved.
       </div>
     </main>
   );
