@@ -52,6 +52,11 @@
         "tailwindcss-animate": "^1.0.7",
         "yjs": "^13.6.20",
         "zod": "^3.24.1"
+        "@prisma/client": "^5.10.0",
+        "@clerk/nextjs": "^4.29.x (or your current version)",
+        "react": "^18",
+        "react-dom": "^18",
+        "lucide-react": "^latest"
     },
     "devDependencies": {
         "@testing-library/dom": "^10.4.0",
@@ -76,5 +81,12 @@
         "typescript": "^5",
         "vite-tsconfig-paths": "^5.1.4",
         "vitest": "^2.1.8"
+        "prisma": "^5.10.0",
+        "typescript": "^5",
+        "@types/node": "^20",
+        "@types/react": "^18",
+        "@types/react-dom": "^18",
+        "postcss": "^8",
+        "tailwindcss": "^3"
     }
 }
