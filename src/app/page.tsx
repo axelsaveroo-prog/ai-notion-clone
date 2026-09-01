@@ -8,8 +8,9 @@ import { MobileContainer } from "@/components/MobileContainer";
 export default function Home() {
   const [isAppDomain, setIsAppDomain] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(false);
-  const [stage, setStage] = useState<"logo" | "typing1" | "typing2" | "typing2Done">("logo");
+  const [stage, setStage] = useState<"logo" | "typing1" | "typing2" | "fadeout">("logo");
   const [displayedText, setDisplayedText] = useState("");
+  const [fadeAnim, setFadeAnim] = useState(true);
   
   const fullText1 = "Welcome.";
   const fullText2 = "Something big is being built right now.";
@@ -31,32 +32,43 @@ export default function Home() {
     }
   }, []);
 
-  // Looping cinematic sequence timer for the public page
+  // Smooth looping cinematic sequence manager
   useEffect(() => {
     if (isAppDomain) return;
 
     let timeout: NodeJS.Timeout;
 
     if (stage === "logo") {
+      setFadeAnim(true);
       timeout = setTimeout(() => {
-        setStage("typing1");
+        setFadeAnim(false);
+        setTimeout(() => {
+          setStage("typing1");
+          setFadeAnim(true);
+        }, 500); // Wait for fade out
+      }, 3500);
+    } else if (stage === "typing2") {
+      // Wait after typing fullText2, then fade out smoothly to restart loop
+      timeout = setTimeout(() => {
+        setFadeAnim(false);
+        setTimeout(() => {
+          setDisplayedText("");
+          setStage("logo");
+          setFadeAnim(true);
+        }, 800); // Smooth fade transition back to logo
       }, 4000);
-    } else if (stage === "typing2Done") {
-      timeout = setTimeout(() => {
-        setDisplayedText("");
-        setStage("logo");
-      }, 3000);
     }
 
     return () => clearTimeout(timeout);
   }, [stage, isAppDomain]);
 
-  // Typewriter effect
+  // Typewriter effect handler
   useEffect(() => {
     if (isAppDomain) return;
 
     if (stage === "typing1") {
       let i = 0;
+      setDisplayedText("");
       const interval = setInterval(() => {
         if (i <= fullText1.length) {
           setDisplayedText(fullText1.substring(0, i));
@@ -64,23 +76,32 @@ export default function Home() {
         } else {
           clearInterval(interval);
           setTimeout(() => {
-            setStage("typing2");
-            setDisplayedText("");
-          }, 1200);
+            setFadeAnim(false);
+            setTimeout(() => {
+              setStage("typing2");
+              setDisplayedText("");
+              setFadeAnim(true);
+            }, 500);
+          }, 1000);
         }
       }, 120);
       return () => clearInterval(interval);
     }
+  }, [stage, isAppDomain]);
+
+  // Typewriter for second line
+  useEffect(() => {
+    if (isAppDomain) return;
 
     if (stage === "typing2") {
       let j = 0;
+      setDisplayedText("");
       const interval = setInterval(() => {
         if (j <= fullText2.length) {
           setDisplayedText(fullText2.substring(0, j));
           j++;
         } else {
           clearInterval(interval);
-          setStage("typing2Done");
         }
       }, 70);
       return () => clearInterval(interval);
@@ -119,16 +140,16 @@ export default function Home() {
 
   return (
     <main className="relative w-screen h-screen bg-[#09090b] text-white flex flex-col items-center justify-center overflow-hidden font-sans">
-      {/* Background with full brightness opacity-100 and lighter overlay */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none opacity-100"
         style={{ backgroundImage: "url('/BACKGROUND WEBSITE-2.png')" }}
       />
       <div className="absolute inset-0 bg-black/20 pointer-events-none" />
 
-      <div className="z-10 flex flex-col items-center justify-center text-center px-4">
+      {/* Main cinematic container with smooth opacity transitions */}
+      <div className={`z-10 flex flex-col items-center justify-center text-center px-4 transition-opacity duration-700 ${fadeAnim ? "opacity-100" : "opacity-0"}`}>
         {stage === "logo" && (
-          <div className="flex flex-col items-center gap-6 transition-opacity duration-1000 animate-fade-in">
+          <div className="flex flex-col items-center gap-6">
             <img
               src="/Asset 2@1080x.png"
               alt="Sika Creative Studio"
@@ -147,7 +168,8 @@ export default function Home() {
         )}
       </div>
 
-      <div className="absolute bottom-6 text-[10px] tracking-widest text-gray-400 uppercase drop-shadow">
+      {/* Bottom text updated to white with 70% opacity */}
+      <div className="absolute bottom-6 text-[10px] tracking-widest text-white/70 uppercase drop-shadow">
         © {new Date().getFullYear()} CV. SEKELOMPOK KREATOR CUAN. All rights reserved.
       </div>
     </main>
