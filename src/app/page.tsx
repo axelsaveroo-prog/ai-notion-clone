@@ -19,7 +19,7 @@ export default function Home() {
     }
   }, []);
 
-  // Cinematic sequence timer: Increased to 4 seconds for a slower, high-end feel
+  // Cinematic sequence timer
   useEffect(() => {
     if (isAppDomain) return;
 
@@ -84,10 +84,16 @@ export default function Home() {
     );
   }
 
-  // IF VISITING MAIN DOMAIN: Public landing page with your actual logo and slower fade
+  // IF VISITING MAIN DOMAIN: Public landing page with new background and larger logo
   return (
     <main className="relative w-screen h-screen bg-[#09090b] text-white flex flex-col items-center justify-center overflow-hidden font-sans">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.03)_0%,transparent_70%)] pointer-events-none" />
+      
+      {/* Custom Background Image with subtle overlay for contrast */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none opacity-80"
+        style={{ backgroundImage: "url('/BACKGROUND WEBSITE-2.png')" }}
+      />
+      <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
       <div className="z-10 flex flex-col items-center justify-center text-center px-4">
         {stage === "logo" && (
@@ -95,14 +101,14 @@ export default function Home() {
             <img
               src="/Asset 2@1080x.png"
               alt="Sika Creative Studio"
-              className="h-12 md:h-16 w-auto object-contain select-none opacity-90 drop-shadow-2xl transition-opacity duration-1000"
+              className="h-20 md:h-28 w-auto object-contain select-none drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)] transition-opacity duration-1000"
             />
           </div>
         )}
 
         {(stage === "typing1" || stage === "typing2") && (
           <div className="flex flex-col items-center gap-2">
-            <h1 className="text-3xl md:text-5xl font-light tracking-tight text-gray-100 min-h-[3.5rem] flex items-center">
+            <h1 className="text-3xl md:text-5xl font-light tracking-tight text-gray-100 min-h-[3.5rem] flex items-center drop-shadow-md">
               {displayedText}
               <span className="inline-block w-2 h-6 md:h-8 bg-white ml-1 animate-pulse" />
             </h1>
@@ -110,8 +116,8 @@ export default function Home() {
         )}
       </div>
 
-      <div className="absolute bottom-6 text-[10px] tracking-widest text-gray-600 uppercase">
-        © {new Date().getFullYear()} CV. SEKELOMPOK KREATOR CUAN. All rights reserved.
+      <div className="absolute bottom-6 text-[10px] tracking-widest text-gray-400 uppercase drop-shadow">
+        © {new Date().getFullYear()} Sika Creative Group. All rights reserved.
       </div>
     </main>
   );
