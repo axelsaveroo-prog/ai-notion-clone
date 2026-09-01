@@ -10,7 +10,6 @@ export default function UserPage() {
   const [memo, setMemo] = useState("");
   const [saved, setSaved] = useState(false);
 
-  // Load saved memo from localStorage on mount
   useEffect(() => {
     const cachedMemo = localStorage.getItem("sika_studio_memo");
     if (cachedMemo) setMemo(cachedMemo);
@@ -51,9 +50,10 @@ export default function UserPage() {
             </div>
             <div>
               <SignedOut>
+                {/* Fixed Clerk Sign In button */}
                 <SignInButton mode="modal">
-                  <button className="bg-white text-black font-semibold px-4 py-2 rounded-xl text-xs hover:bg-gray-200 transition-colors shadow-sm">
-                    Sign In
+                  <button className="bg-white text-black font-semibold px-4 py-2 rounded-xl text-xs hover:bg-gray-200 transition-colors shadow-sm cursor-pointer">
+                    Sign In to Sika
                   </button>
                 </SignInButton>
               </SignedOut>
@@ -67,10 +67,10 @@ export default function UserPage() {
           </div>
         </div>
 
-        {/* 2. Field GPS Attendance (Sleek Dark Mode Component) */}
+        {/* 2. Field GPS Attendance */}
         <AttendanceTracker />
 
-        {/* 3. Studio Quick Scratchpad (Powered by LocalStorage) */}
+        {/* 3. Studio Quick Scratchpad */}
         <div className="bg-[#121214] border border-[#222226] p-5 rounded-2xl shadow-sm flex flex-col gap-3">
           <div className="flex items-center justify-between border-b border-[#222226] pb-3">
             <div className="flex items-center gap-2 text-white font-medium text-xs">
@@ -79,7 +79,7 @@ export default function UserPage() {
             </div>
             <button
               onClick={handleSaveMemo}
-              className="text-[10px] bg-[#1a1a1e] hover:bg-white hover:text-black text-gray-300 px-3 py-1 rounded-lg border border-[#222226] font-medium transition-colors flex items-center gap-1"
+              className="text-[10px] bg-[#1a1a1e] hover:bg-white hover:text-black text-gray-300 px-3 py-1 rounded-lg border border-[#222226] font-medium transition-colors flex items-center gap-1 cursor-pointer"
             >
               {saved ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
               {saved ? "Saved" : "Save Memo"}
