@@ -7,7 +7,7 @@ import { MobileContainer } from "@/components/MobileContainer";
 
 export default function Home() {
   const [isAppDomain, setIsAppDomain] = useState(false);
-  const [isAppLoading, setIsAppLoading] = useState(true);
+  const [isAppLoading, setIsAppLoading] = useState(false);
   const [stage, setStage] = useState<"logo" | "typing1" | "typing2">("logo");
   const [displayedText, setDisplayedText] = useState("");
   
@@ -17,13 +17,19 @@ export default function Home() {
   useEffect(() => {
     if (window.location.hostname.startsWith("app.")) {
       setIsAppDomain(true);
-    }
-    // Extended splash screen duration to 1.8 seconds for a luxury feel
-    const loadingTimer = setTimeout(() => {
-      setIsAppLoading(false);
-    }, 1800);
 
-    return () => clearTimeout(loadingTimer);
+      // Check if the splash screen has already been shown in this session
+      const hasLoadedBefore = sessionStorage.getItem("sika_app_loaded");
+      if (!hasLoadedBefore) {
+        setIsAppLoading(true);
+        const loadingTimer = setTimeout(() => {
+          setIsAppLoading(false);
+          sessionStorage.setItem("sika_app_loaded", "true");
+        }, 1800);
+
+        return () => clearTimeout(loadingTimer);
+      }
+    }
   }, []);
 
   useEffect(() => {
