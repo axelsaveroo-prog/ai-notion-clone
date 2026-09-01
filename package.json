@@ -8,11 +8,6 @@
         "build": "prisma generate && next build",
         "start": "next start",
         "lint": "next lint"
-        "format": "prettier src/ --write",
-        "db:migrate": "cross-env DB_MIGRATING=true drizzle-kit migrate",
-        "db:generate": "drizzle-kit generate",
-        "db:studio": "drizzle-kit studio",
-        "test": "vitest"
     },
     "dependencies": {
         "@blocknote/core": "0.21.0",
