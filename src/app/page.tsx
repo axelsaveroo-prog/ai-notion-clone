@@ -14,19 +14,18 @@ export default function Home() {
   const fullText2 = "Something big is being built right now.";
 
   useEffect(() => {
-    // Check if the current URL contains 'app.'
     if (window.location.hostname.startsWith("app.")) {
       setIsAppDomain(true);
     }
   }, []);
 
-  // Sequence controller for the landing page
+  // Cinematic sequence timer: Increased to 4 seconds for a slower, high-end feel
   useEffect(() => {
     if (isAppDomain) return;
 
     const timer = setTimeout(() => {
       setStage("typing1");
-    }, 2500);
+    }, 4000);
 
     return () => clearTimeout(timer);
   }, [isAppDomain]);
@@ -46,9 +45,9 @@ export default function Home() {
           setTimeout(() => {
             setStage("typing2");
             setDisplayedText("");
-          }, 1000);
+          }, 1200);
         }
-      }, 100);
+      }, 120);
       return () => clearInterval(interval);
     }
 
@@ -61,12 +60,12 @@ export default function Home() {
         } else {
           clearInterval(interval);
         }
-      }, 60);
+      }, 70);
       return () => clearInterval(interval);
     }
   }, [stage, isAppDomain]);
 
-  // IF VISITING APP DOMAIN: Render your workspace dashboard
+  // IF VISITING APP DOMAIN: Render secure internal OS workspace
   if (isAppDomain) {
     return (
       <MobileContainer>
@@ -85,20 +84,19 @@ export default function Home() {
     );
   }
 
-  // IF VISITING MAIN DOMAIN: Render your cinematic landing page
+  // IF VISITING MAIN DOMAIN: Public landing page with your actual logo and slower fade
   return (
     <main className="relative w-screen h-screen bg-[#09090b] text-white flex flex-col items-center justify-center overflow-hidden font-sans">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.03)_0%,transparent_70%)] pointer-events-none" />
 
       <div className="z-10 flex flex-col items-center justify-center text-center px-4">
         {stage === "logo" && (
-          <div className="flex flex-col items-center gap-4 transition-opacity duration-1000">
-            <div className="w-16 h-16 bg-white text-black rounded-2xl flex items-center justify-center font-bold text-2xl shadow-2xl tracking-tighter">
-              S
-            </div>
-            <span className="text-xs uppercase tracking-[0.3em] text-gray-500 font-medium">
-              Sika Creative Studio
-            </span>
+          <div className="flex flex-col items-center gap-6 transition-opacity duration-1000 animate-fade-in">
+            <img
+              src="/Asset 2@1080x.png"
+              alt="Sika Creative Studio"
+              className="h-12 md:h-16 w-auto object-contain select-none opacity-90 drop-shadow-2xl transition-opacity duration-1000"
+            />
           </div>
         )}
 
@@ -108,16 +106,6 @@ export default function Home() {
               {displayedText}
               <span className="inline-block w-2 h-6 md:h-8 bg-white ml-1 animate-pulse" />
             </h1>
-            {stage === "typing2" && displayedText === fullText2 && (
-              <div className="pt-6">
-                <a
-                  href="https://app.sikacreative.com"
-                  className="text-xs uppercase tracking-widest bg-[#18181b] hover:bg-white hover:text-black border border-[#27272a] px-6 py-3 rounded-xl transition-all duration-300 font-medium"
-                >
-                  Access Internal OS
-                </a>
-              </div>
-            )}
           </div>
         )}
       </div>
