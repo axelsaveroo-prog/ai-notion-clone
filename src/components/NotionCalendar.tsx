@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar as CalendarIcon, Plus, ExternalLink, ChevronLeft, ChevronRight, LayoutGrid, List, Clock } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, ExternalLink, LayoutGrid, Clock } from "lucide-react";
 
 interface CalendarEvent {
   id: string;
@@ -14,7 +14,7 @@ interface CalendarEvent {
 
 export function NotionCalendar() {
   const [viewMode, setViewMode] = useState<"notion" | "embed">("notion");
-  const [currentMonth, setCurrentMonth] = useState("September 2026");
+  const [currentMonth] = useState("September 2026");
   
   const [events, setEvents] = useState<CalendarEvent[]>([
     { id: "1", title: "Akasa Land Strategy Review", date: "2026-09-05", time: "10:00 AM", client: "AKASA LAND", assignee: "You & Team" },
@@ -49,32 +49,31 @@ export function NotionCalendar() {
   return (
     <div className="w-full flex flex-col gap-5">
       
-      {/* Notion Database Header Controls */}
-      <div className="bg-[#161618] border border-[#27272a] p-4 rounded-3xl shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* Database Header Controls */}
+      <div className="bg-[#121214] border border-[#222226] p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         
-        {/* Title & Month switcher */}
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-[#222226] border border-[#27272a] text-orange-400">
+          <div className="p-2.5 rounded-xl bg-[#161618] border border-[#222226] text-gray-200">
             <CalendarIcon className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-base text-white">Schedule Database</h3>
-              <span className="text-[10px] bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-md font-semibold border border-orange-500/20">Notion View</span>
+              <h3 className="font-semibold text-sm text-white">Schedule Database</h3>
+              <span className="text-[10px] bg-[#1a1a1e] text-gray-300 px-2 py-0.5 rounded font-medium border border-[#222226]">Notion View</span>
             </div>
-            <p className="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5">
+            <p className="text-xs text-gray-400 mt-0.5">
               <span>{currentMonth}</span>
             </p>
           </div>
         </div>
 
-        {/* View Switcher & Google Calendar Sync toggle */}
+        {/* View Switcher */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-          <div className="bg-[#121214] p-1 rounded-xl border border-[#27272a] flex items-center gap-1">
+          <div className="bg-[#161618] p-1 rounded-xl border border-[#222226] flex items-center gap-1">
             <button
               onClick={() => setViewMode("notion")}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                viewMode === "notion" ? "bg-[#f97316] text-black shadow-md" : "text-gray-400 hover:text-white"
+                viewMode === "notion" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-white"
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" /> Workspace DB
@@ -82,7 +81,7 @@ export function NotionCalendar() {
             <button
               onClick={() => setViewMode("embed")}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                viewMode === "embed" ? "bg-[#f97316] text-black shadow-md" : "text-gray-400 hover:text-white"
+                viewMode === "embed" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-white"
               }`}
             >
               <ExternalLink className="w-3.5 h-3.5" /> Google Sync Embed
@@ -92,23 +91,22 @@ export function NotionCalendar() {
 
       </div>
 
-      {/* Main Content Area: Notion Database vs Live Google Calendar Embed */}
       {viewMode === "notion" ? (
         <div className="flex flex-col gap-4">
           
           {/* Quick Add Event Bar */}
-          <form onSubmit={addEvent} className="bg-[#161618] border border-[#27272a] p-4 rounded-3xl shadow-xl grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+          <form onSubmit={addEvent} className="bg-[#121214] border border-[#222226] p-4 rounded-2xl shadow-sm grid grid-cols-1 sm:grid-cols-4 gap-2.5">
             <input
               type="text"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="Event title (e.g. Client Briefing)..."
-              className="px-3 py-2 bg-[#121214] border border-[#27272a] rounded-xl text-xs text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              placeholder="Event title..."
+              className="px-3 py-2 bg-[#161618] border border-[#222226] rounded-xl text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-gray-500"
             />
             <select
               value={newClient}
               onChange={(e) => setNewClient(e.target.value)}
-              className="px-3 py-2 bg-[#121214] border border-[#27272a] rounded-xl text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              className="px-3 py-2 bg-[#161618] border border-[#222226] rounded-xl text-xs text-gray-300 focus:outline-none focus:border-gray-500"
             >
               <option value="AKASA LAND">AKASA LAND</option>
               <option value="APERIO">APERIO</option>
@@ -118,43 +116,43 @@ export function NotionCalendar() {
               type="date"
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
-              className="px-3 py-2 bg-[#121214] border border-[#27272a] rounded-xl text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              className="px-3 py-2 bg-[#161618] border border-[#222226] rounded-xl text-xs text-gray-300 focus:outline-none focus:border-gray-500"
             />
             <button
               type="submit"
-              className="bg-[#f97316] text-black font-semibold px-4 py-2 rounded-xl text-xs hover:bg-orange-600 transition-colors flex items-center justify-center gap-1.5 shadow-md"
+              className="bg-white text-black font-semibold px-4 py-2 rounded-xl text-xs hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             >
               <Plus className="w-4 h-4" /> Add Event Entry
             </button>
           </form>
 
-          {/* Notion Table / Board Format */}
-          <div className="bg-[#161618] border border-[#27272a] rounded-3xl overflow-hidden shadow-xl">
-            <div className="px-6 py-4 border-b border-[#27272a] flex items-center justify-between text-xs font-bold text-gray-400 uppercase tracking-wider">
+          {/* Table / Board Format */}
+          <div className="bg-[#121214] border border-[#222226] rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-6 py-3.5 border-b border-[#222226] flex items-center justify-between text-[11px] font-medium text-gray-400 uppercase tracking-wider">
               <span>Event / Deliverable</span>
               <span>Client Tag</span>
               <span>Date & Time</span>
               <span>Assignee</span>
             </div>
 
-            <div className="divide-y divide-[#27272a]">
+            <div className="divide-y divide-[#222226]">
               {events.map((ev) => (
-                <div key={ev.id} className="px-6 py-4 flex items-center justify-between hover:bg-[#1a1a1e] transition-colors text-xs">
+                <div key={ev.id} className="px-6 py-4 flex items-center justify-between hover:bg-[#161618] transition-colors text-xs">
                   <div className="flex items-center gap-3">
-                    <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                    <span className="font-semibold text-white">{ev.title}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                    <span className="font-medium text-white">{ev.title}</span>
                   </div>
 
-                  <span className="bg-orange-500/10 text-orange-400 px-2.5 py-1 rounded-md font-bold text-[10px] border border-orange-500/20">
+                  <span className="bg-[#1a1a1e] text-gray-300 px-2.5 py-1 rounded font-medium text-[10px] border border-[#222226]">
                     {ev.client}
                   </span>
 
                   <div className="flex items-center gap-1.5 text-gray-300">
-                    <Clock className="w-3.5 h-3.5 text-orange-400" />
+                    <Clock className="w-3.5 h-3.5 text-gray-400" />
                     <span>{ev.date} ({ev.time})</span>
                   </div>
 
-                  <span className="bg-[#222226] text-gray-300 px-3 py-1 rounded-lg border border-[#27272a] font-medium">
+                  <span className="bg-[#161618] text-gray-300 px-3 py-1 rounded-lg border border-[#222226] font-medium text-[11px]">
                     {ev.assignee}
                   </span>
                 </div>
@@ -165,21 +163,20 @@ export function NotionCalendar() {
         </div>
       ) : (
         /* Native Google Calendar Dark Embedded View */
-        <div className="bg-[#161618] border border-[#27272a] p-4 rounded-3xl shadow-xl overflow-hidden">
+        <div className="bg-[#121214] border border-[#222226] p-4 rounded-2xl shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-3 px-2">
             <p className="text-xs text-gray-400">Live Google Calendar Workspace Feed</p>
             <a
               href="https://calendar.google.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-orange-400 hover:text-orange-300 flex items-center gap-1 font-medium bg-[#222226] px-3 py-1 rounded-lg border border-[#27272a]"
+              className="text-xs text-gray-300 hover:text-white flex items-center gap-1 font-medium bg-[#161618] px-3 py-1 rounded-lg border border-[#222226]"
             >
               Open in Google <ExternalLink className="w-3 h-3" />
             </a>
           </div>
           
-          <div className="w-full h-[550px] rounded-2xl overflow-hidden border border-[#27272a] bg-[#121214]">
-            {/* Embedded Google Calendar with dark filter aesthetics */}
+          <div className="w-full h-[550px] rounded-xl overflow-hidden border border-[#222226] bg-[#161618]">
             <iframe
               src="https://calendar.google.com/calendar/embed?src=en.indonesian%23holiday%40group.v.calendar.google.com&ctz=Asia%2FJakarta"
               style={{ border: 0 }}
