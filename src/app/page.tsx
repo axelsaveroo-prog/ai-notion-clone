@@ -111,7 +111,7 @@ export default function Home() {
       </div>
 
       <div className="absolute bottom-6 text-[10px] tracking-widest text-gray-600 uppercase">
-        © {new Date().getFullYear()} Sika Creative Group. All rights reserved.
+        © {new Date().getFullYear()} CV. SEKELOMPOK KREATOR CUAN. All rights reserved.
       </div>
     </main>
   );
