@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import ForYouKanban from "@/components/ForYouKanban";
-import TeamCalendar from "@/components/TeamCalendar";
-import MobileContainer from "@/components/MobileContainer";
+import { ForYouKanban } from "@/components/ForYouKanban";
+import { TeamCalendar } from "@/components/TeamCalendar";
+import { MobileContainer } from "@/components/MobileContainer";
 
 export default function Home() {
   const [isAppDomain, setIsAppDomain] = useState(false);
