@@ -3,7 +3,6 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import ReactQueryProvider from "@/components/providers/react-query-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { BottomNav } from "@/components/BottomNav";
 
 import "./globals.css";
 
@@ -27,7 +26,6 @@ export default function RootLayout({
                         <main className="min-h-screen bg-[#0e0e10] pb-24">
                             {children}
                         </main>
-                        <BottomNav />
                         <Toaster position="top-center" />
                     </ReactQueryProvider>
                 </body>
