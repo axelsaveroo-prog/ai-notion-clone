@@ -20,49 +20,47 @@ export function ForYouKanban() {
     setTasks(tasks.map(t => t.id === id ? { ...t, status: newStatus } : t));
   };
 
-  const columns: { key: Task["status"]; label: string; bg: string }[] = [
-    { key: "todo", label: "To Do", bg: "border-gray-800" },
-    { key: "in_progress", label: "In Progress", bg: "border-orange-500/30" },
-    { key: "done", label: "Done", bg: "border-green-500/30" },
+  const columns: { key: Task["status"]; label: string }[] = [
+    { key: "todo", label: "To Do" },
+    { key: "in_progress", label: "In Progress" },
+    { key: "done", label: "Done" },
   ];
 
   return (
-    <div className="w-full bg-[#161618] border border-[#27272a] p-5 rounded-2xl shadow-xl">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-lg text-white flex items-center gap-2">
-          <span>📌</span> FOR YOU — Tasks
+    <div className="w-full bg-[#121214] border border-[#222226] p-6 rounded-2xl shadow-sm">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="font-semibold text-sm tracking-wide text-white uppercase">
+          📌 FOR YOU — Tasks
         </h3>
-        <span className="text-xs bg-orange-500/10 text-orange-400 px-2.5 py-1 rounded-full border border-orange-500/20 font-medium">
+        <span className="text-[11px] bg-[#1a1a1e] text-gray-300 px-3 py-1 rounded-md border border-[#222226] font-medium">
           Assigned to You
         </span>
       </div>
 
-      {/* Kanban Columns Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {columns.map(col => (
-          <div key={col.key} className={`bg-[#121214] p-3 rounded-xl border ${col.bg} flex flex-col gap-3`}>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 px-1">
+          <div key={col.key} className="bg-[#161618] p-3.5 rounded-xl border border-[#222226] flex flex-col gap-3">
+            <h4 className="text-[11px] font-medium uppercase tracking-wider text-gray-400 px-1">
               {col.label} ({tasks.filter(t => t.status === col.key).length})
             </h4>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2.5">
               {tasks.filter(t => t.status === col.key).map(task => (
-                <div key={task.id} className="bg-[#1a1a1e] p-3 rounded-lg border border-[#27272a] shadow-sm flex flex-col gap-2">
-                  <span className="text-[10px] bg-orange-500/15 text-orange-400 font-semibold px-2 py-0.5 rounded w-fit">
+                <div key={task.id} className="bg-[#121214] p-3 rounded-lg border border-[#222226] flex flex-col gap-2.5 shadow-sm">
+                  <span className="text-[10px] bg-[#1a1a1e] text-gray-300 font-medium px-2 py-0.5 rounded w-fit border border-[#27272a]">
                     {task.client}
                   </span>
-                  <p className="text-xs font-medium text-gray-200">{task.title}</p>
+                  <p className="text-xs text-gray-200 font-normal leading-relaxed">{task.title}</p>
                   
-                  {/* Quick Status Shift Actions */}
-                  <div className="flex gap-1 pt-1 border-t border-[#27272a]/50 text-[10px]">
+                  <div className="flex gap-2 pt-2 border-t border-[#222226] text-[10px]">
                     {col.key !== "todo" && (
-                      <button onClick={() => moveTask(task.id, "todo")} className="text-gray-400 hover:text-white">← To Do</button>
+                      <button onClick={() => moveTask(task.id, "todo")} className="text-gray-400 hover:text-white transition-colors">← To Do</button>
                     )}
                     {col.key !== "in_progress" && (
-                      <button onClick={() => moveTask(task.id, "in_progress")} className="text-orange-400 hover:text-orange-300 ml-auto">Progress</button>
+                      <button onClick={() => moveTask(task.id, "in_progress")} className="text-gray-300 hover:text-white ml-auto transition-colors">Progress</button>
                     )}
                     {col.key !== "done" && (
-                      <button onClick={() => moveTask(task.id, "done")} className="text-green-400 hover:text-green-300 ml-auto">Done ✓</button>
+                      <button onClick={() => moveTask(task.id, "done")} className="text-white font-medium hover:underline ml-auto">Done ✓</button>
                     )}
                   </div>
                 </div>
