@@ -18,7 +18,6 @@ export default function Home() {
     if (window.location.hostname.startsWith("app.")) {
       setIsAppDomain(true);
     }
-    // Brief splash screen delay for a silky-smooth transition
     const loadingTimer = setTimeout(() => {
       setIsAppLoading(false);
     }, 600);
@@ -26,7 +25,6 @@ export default function Home() {
     return () => clearTimeout(loadingTimer);
   }, []);
 
-  // Cinematic sequence timer for the public page
   useEffect(() => {
     if (isAppDomain) return;
 
@@ -37,7 +35,6 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [isAppDomain]);
 
-  // Typewriter effect
   useEffect(() => {
     if (isAppDomain) return;
 
@@ -72,7 +69,6 @@ export default function Home() {
     }
   }, [stage, isAppDomain]);
 
-  // APP DOMAIN: Show a color-matched splash loader while mounting
   if (isAppDomain) {
     if (isAppLoading) {
       return (
@@ -103,7 +99,6 @@ export default function Home() {
     );
   }
 
-  // MAIN DOMAIN: Public Landing Page
   return (
     <main className="relative w-screen h-screen bg-[#09090b] text-white flex flex-col items-center justify-center overflow-hidden font-sans">
       <div 
