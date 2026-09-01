@@ -19,7 +19,8 @@ export async function generateMetadata(): Promise<Metadata> {
         title: isApp ? "Sika Creative OS" : "Sika Creative Studio",
         description: isApp ? "A minimalist workspace" : "Official website of Sika Creative Group",
         icons: {
-            icon: isApp ? "/favicon web sika-02.png" : "/favicon web sika-01.png",
+            icon: isApp ? "/touch icon sika-04.png" : "/touch icon sika-03.png",
+            apple: isApp ? "/touch icon sika-04.png" : "/touch icon sika-03.png",
         },
     };
 }
