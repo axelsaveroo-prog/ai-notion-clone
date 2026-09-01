@@ -139,13 +139,13 @@ export default function Home() {
   }
 
   return (
-    <main className="relative w-screen h-screen bg-[#09090b] text-white flex flex-col items-center justify-center overflow-hidden font-sans">
+    <main className="relative w-screen h-[100dvh] bg-[#09090b] text-white flex flex-col items-center justify-center overflow-hidden font-sans">
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none opacity-100"
         style={{ backgroundImage: "url('/BACKGROUND WEBSITE-2.png')" }}
       />
-      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-
+      <div className="absolute inset-0 bg-black/25 pointer-events-none" />
+      
       {/* Main cinematic container with smooth opacity transitions */}
       <div className={`z-10 flex flex-col items-center justify-center text-center px-4 transition-opacity duration-700 ${fadeAnim ? "opacity-100" : "opacity-0"}`}>
         {stage === "logo" && (
