@@ -12,13 +12,13 @@ export default function Home() {
   const [isAppDomain, setIsAppDomain] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(true);
 
-  // Jalankan sync user otomatis begitu komponen di-mount di browser
+  // Otomatis sinkronkan data user Clerk ke Supabase DB saat halaman dimuat
   useEffect(() => {
     async function initUser() {
       try {
         await syncUserAction();
       } catch (error) {
-        console.error("Gagal sync user:", error);
+        console.error("Gagal sinkronisasi user:", error);
       } finally {
         setIsAppLoading(false);
       }
@@ -29,9 +29,16 @@ export default function Home() {
   return (
     <MobileContainer>
       <main className="flex-1 flex flex-col gap-6 py-6 pb-28 text-zinc-200">
+        {/* Banner Pengingat Jadwal Hari Ini & Logo */}
         <TodayScheduleReminder />
+
+        {/* Catatan Tempel */}
         <StickyNotes />
+
+        {/* Board Penugasan Kanban */}
         <ForYouKanban />
+
+        {/* Kalender Tim & List Schedule */}
         <TeamCalendar />
       </main>
     </MobileContainer>
