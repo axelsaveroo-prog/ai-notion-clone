@@ -2,12 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   typescript: {
-    // Mengabaikan error TypeScript saat proses build
+    // Mengabaikan error tipe saat build produksi di Vercel
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    // Mengabaikan error ESLint saat proses build
-    ignoreDuringBuilds: true,
   },
 };
 

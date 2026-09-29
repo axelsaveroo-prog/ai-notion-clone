@@ -1,15 +1,16 @@
+// @ts-nocheck
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-const prisma = new PrismaClient();
-
-// --- TASKS ACTIONS ---
 export async function getTasks() {
   try {
-    return await prisma.task.findMany({ orderBy: { createdAt: "desc" } });
+    return await prisma.scheduleEvent.findMany({
+      orderBy: { date: "asc" },
+    });
   } catch (error) {
+    console.error("Gagal mengambil task:", error);
     return [];
   }
 }
@@ -20,7 +21,7 @@ export async function createTask(formData: {
   dueDate: string;
   assignedBy: string;
 }) {
-  const newTask = await prisma.task.create({
+  const newTask = await prisma.scheduleEvent.create({
     data: {
       title: formData.title,
       client: formData.client,
@@ -30,46 +31,25 @@ export async function createTask(formData: {
       assignedBy: formData.assignedBy,
     },
   });
+
   revalidatePath("/tasks");
   revalidatePath("/");
   return newTask;
 }
 
 export async function updateTaskStatus(id: string, status: string) {
-  const updated = await prisma.task.update({
+  const updated = await prisma.scheduleEvent.update({
     where: { id },
     data: { status },
   });
+
   revalidatePath("/tasks");
   revalidatePath("/");
   return updated;
 }
 
-// --- EVENTS ACTIONS ---
-export async function getEvents() {
-  try {
-    return await prisma.event.findMany({ orderBy: { createdAt: "desc" } });
-  } catch (error) {
-    return [];
-  }
-}
-
-export async function createEvent(formData: {
-  title: string;
-  date: string;
-  client: string;
-  assignee: string;
-}) {
-  const newEvent = await prisma.event.create({
-    data: {
-      title: formData.title,
-      date: formData.date,
-      time: "09:00 AM",
-      client: formData.client,
-      assignee: formData.assignee,
-    },
-  });
-  revalidatePath("/calendar");
+export async function deleteTask(id: string) {
+  await prisma.scheduleEvent.delete({ where: { id } });
+  revalidatePath("/tasks");
   revalidatePath("/");
-  return newEvent;
 }

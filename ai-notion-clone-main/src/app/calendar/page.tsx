@@ -6,7 +6,7 @@ import {
   createCalendarEvent, 
   updateCalendarEvent, 
   deleteCalendarEvent 
-} from "@/app/action/action";
+} from "@/actions/actions";
 import Link from "next/link";
 import { 
   ChevronLeft, 
@@ -169,7 +169,7 @@ export default function CalendarPage() {
         });
       }
 
-      await fetchEventsFromDB(); // Reload data terbaru
+      await fetchEventsFromDB();
       setIsModalOpen(false);
       setSelectedDate(formDate);
     } catch (error) {
@@ -181,7 +181,7 @@ export default function CalendarPage() {
   const handleDeleteEvent = async (id: string) => {
     try {
       await deleteCalendarEvent(id);
-      await fetchEventsFromDB(); // Reload data
+      await fetchEventsFromDB();
       if (editingId === id) {
         setIsModalOpen(false);
       }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { getChatMessages, sendChatMessage } from "@/app/action/action";
+import { getChatMessages, sendChatMessage } from "@/actions/actions";
 import { 
   MessageSquare, 
   Hash, 
