@@ -1,0 +1,29 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Task {
+  id           String   @id @default(cuid())
+  title        String
+  client       String
+  status       String   @default("todo")
+  assignedDate String
+  dueDate      String
+  assignedBy   String
+  createdAt    DateTime @default(now())
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  title     String
+  date      String
+  time      String
+  client    String
+  assignee  String
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0b0b0c;
+  --foreground: #f3f4f6;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+/* Custom styling for dark mode inputs */
+input, textarea {
+  background: #161618 !important;
+  border-color: #27272a !important;
+  color: #f3f4f6 !important;
+}
+
+input:focus, textarea:focus {
+  border-color: #f97316 !important; /* Orange accent */
+  box-shadow: 0 0 0 1px #f97316;
+}
