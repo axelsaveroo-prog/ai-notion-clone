@@ -1,29 +1,28 @@
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
-model Task {
-  id           String   @id @default(cuid())
-  title        String
-  client       String
-  status       String   @default("todo")
-  assignedDate String
-  dueDate      String
-  assignedBy   String
-  createdAt    DateTime @default(now())
-}
-
-model Event {
+model ScheduleEvent {
   id        String   @id @default(cuid())
   title     String
+  client    String
   date      String
   time      String
-  client    String
-  assignee  String
+  assignees String[]
+  createdAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  channelId String
+  sender    String
+  text      String?
+  fileUrl   String?
+  fileType  String?
   createdAt DateTime @default(now())
 }

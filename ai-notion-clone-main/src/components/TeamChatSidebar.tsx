@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { getChatMessages, sendChatMessage } from "@/app/action/action";
 import { 
   MessageSquare, 
   Hash, 
@@ -13,8 +15,7 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Download,
-  Users,
-  AArrowDown
+  Users
 } from "lucide-react";
 
 interface Attachment {
@@ -54,7 +55,7 @@ const AVAILABLE_MEMBERS = [
 ];
 
 export function TeamChatSidebar() {
-  const [isOpen, setIsOpen] = useState(false); // default collapsed agar tidak menutupi tampilan awal
+  const [isOpen, setIsOpen] = useState(false); // default collapsed
 
   const [channels, setChannels] = useState<Channel[]>([
     { id: "ch-1", name: "general-internal", type: "group", members: ["You", "KING AXEL", "Keyzia", "Ben"] },
@@ -64,15 +65,7 @@ export function TeamChatSidebar() {
   ]);
 
   const [activeChannelId, setActiveChannelId] = useState<string>("ch-1");
-  const [messages, setMessages] = useState<Record<string, Message[]>>({
-    "ch-1": [
-      { id: "m1", sender: "Sarah", text: "Pagi tim, jangan lupa cek notulen MoM kemarin ya.", time: "09:15", isSelf: false },
-      { id: "m2", sender: "You", text: "Siap, draft asset video sudah siap direview.", time: "09:20", isSelf: true },
-    ],
-    "ch-2": [
-      { id: "m3", sender: "Alex", text: "Assets untuk Aperio sudah aku upload di folder drive.", time: "11:00", isSelf: false },
-    ],
-  });
+  const [messages, setMessages] = useState<Record<string, Message[]>>({});
 
   const [inputText, setInputText] = useState("");
   const [pendingFile, setPendingFile] = useState<Attachment | null>(null);
@@ -85,6 +78,61 @@ export function TeamChatSidebar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
+  // 1. Fetch pesan dari Supabase DB & aktifkan Listener Realtime
+  useEffect(() => {
+    async function loadMessages() {
+      try {
+        const dbMsgs = await getChatMessages(activeChannelId);
+        if (dbMsgs) {
+          const formatted = dbMsgs.map((m: any) => ({
+            id: m.id,
+            sender: m.sender,
+            text: m.text || "",
+            time: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isSelf: m.sender === "You",
+            attachment: m.fileUrl ? { name: "File Attachment", size: "Storage", type: m.fileType || "file", url: m.fileUrl } : undefined,
+          }));
+          setMessages((prev) => ({ ...prev, [activeChannelId]: formatted }));
+        }
+      } catch (error) {
+        console.error("Gagal memuat pesan:", error);
+      }
+    }
+
+    loadMessages();
+
+    // Supabase Realtime Subscription
+    const channel = supabase
+      .channel(`chat_${activeChannelId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "ChatMessage", filter: `channelId=eq.${activeChannelId}` },
+        (payload) => {
+          const newMsg = payload.new;
+          const formattedMsg: Message = {
+            id: newMsg.id,
+            sender: newMsg.sender,
+            text: newMsg.text || "",
+            time: new Date(newMsg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isSelf: newMsg.sender === "You",
+            attachment: newMsg.fileUrl ? { name: "File Attachment", size: "Storage", type: newMsg.fileType || "file", url: newMsg.fileUrl } : undefined,
+          };
+
+          setMessages((prev) => {
+            const currentList = prev[activeChannelId] || [];
+            if (currentList.some((m) => m.id === newMsg.id)) return prev;
+            return { ...prev, [activeChannelId]: [...currentList, formattedMsg] };
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeChannelId]);
+
+  // Auto Scroll ke pesan paling bawah
   useEffect(() => {
     if (isOpen) {
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -115,30 +163,28 @@ export function TeamChatSidebar() {
     e.target.value = "";
   };
 
-  // Kirim Pesan
-  const handleSendMessage = (e: React.FormEvent) => {
+  // Kirim Pesan ke Database via Server Actions
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() && !pendingFile) return;
 
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-    const newMsg: Message = {
-      id: "msg-" + Date.now(),
-      sender: "You",
-      text: inputText.trim(),
-      time: timeStr,
-      isSelf: true,
-      attachment: pendingFile || undefined,
-    };
-
-    setMessages((prev) => ({
-      ...prev,
-      [activeChannelId]: [...(prev[activeChannelId] || []), newMsg],
-    }));
+    const textToSend = inputText.trim();
+    const fileToSend = pendingFile;
 
     setInputText("");
     setPendingFile(null);
+
+    try {
+      await sendChatMessage({
+        channelId: activeChannelId,
+        sender: "You",
+        text: textToSend,
+        fileUrl: fileToSend?.url,
+        fileType: fileToSend?.type,
+      });
+    } catch (error) {
+      console.error("Gagal mengirim pesan:", error);
+    }
   };
 
   // Buat Channel Baru
@@ -428,13 +474,13 @@ export function TeamChatSidebar() {
                 <button
                   type="button"
                   onClick={() => setIsGroupModalOpen(false)}
-                  className="flex-1 py-2 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white"
+                  className="flex-1 py-2 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold"
+                  className="flex-1 py-2 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold cursor-pointer"
                 >
                   Buat
                 </button>

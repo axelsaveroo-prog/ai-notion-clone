@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { 
+  getCalendarEvents, 
+  createCalendarEvent, 
+  updateCalendarEvent, 
+  deleteCalendarEvent 
+} from "@/app/action/action";
 import Link from "next/link";
 import { 
   ChevronLeft, 
@@ -75,67 +81,28 @@ export default function CalendarPage() {
 
   // State Modal (Bisa Buat Baru / Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null); // null = Tambah baru, string = Mode Edit
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("AKASA LAND");
   const [formDate, setFormDate] = useState("2026-09-10");
   const [formTime, setFormTime] = useState("10:00");
   const [formAssignees, setFormAssignees] = useState<string[]>(["You"]);
 
-  // Muat data dari localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("SIKA_CALENDAR_EVENTS");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const normalized: ScheduleEvent[] = parsed.map((item: any) => ({
-          ...item,
-          assignees: Array.isArray(item.assignees) 
-            ? item.assignees 
-            : item.assignee 
-              ? [item.assignee] 
-              : ["You"]
-        }));
-        setEvents(normalized);
-      } catch {
-        setEvents([]);
+  // Ambil data event langsung dari Supabase Database saat komponen dimuat
+  const fetchEventsFromDB = async () => {
+    try {
+      const data = await getCalendarEvents();
+      if (data) {
+        setEvents(data);
       }
-    } else {
-      const initial: ScheduleEvent[] = [
-        {
-          id: "ev-1",
-          title: "Akasa Land Strategy Review",
-          client: "AKASA LAND",
-          date: "2026-09-05",
-          time: "10:00",
-          assignees: ["You", "Team Creative"],
-        },
-        {
-          id: "ev-2",
-          title: "Aperio Brand Asset Audit",
-          client: "APERIO",
-          date: "2026-09-12",
-          time: "14:00",
-          assignees: ["You", "Alex"],
-        },
-        {
-          id: "ev-3",
-          title: "Bali Fine Gallery Final Delivery",
-          client: "BALI FINE GALLERY",
-          date: "2026-09-18",
-          time: "11:30",
-          assignees: ["Sarah", "Bintang", "Editor 1"],
-        },
-      ];
-      setEvents(initial);
-      localStorage.setItem("SIKA_CALENDAR_EVENTS", JSON.stringify(initial));
+    } catch (error) {
+      console.error("Gagal memuat event dari database:", error);
     }
-  }, []);
-
-  const saveEvents = (updated: ScheduleEvent[]) => {
-    setEvents(updated);
-    localStorage.setItem("SIKA_CALENDAR_EVENTS", JSON.stringify(updated));
   };
+
+  useEffect(() => {
+    fetchEventsFromDB();
+  }, []);
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -178,46 +145,48 @@ export default function CalendarPage() {
     );
   };
 
-  const handleSubmitEvent = (e: React.FormEvent) => {
+  // Submit Event Baru / Edit ke Supabase via Server Actions
+  const handleSubmitEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim()) return;
 
-    if (editingId) {
-      // PROSES EDIT / UPDATE
-      const updated = events.map((item) =>
-        item.id === editingId
-          ? {
-              ...item,
-              title: formTitle.trim(),
-              client: formClient,
-              date: formDate,
-              time: formTime,
-              assignees: formAssignees.length > 0 ? formAssignees : ["You"],
-            }
-          : item
-      );
-      saveEvents(updated);
-    } else {
-      // PROSES BUAT EVENT BARU
-      const newEvent: ScheduleEvent = {
-        id: "ev-" + Date.now(),
-        title: formTitle.trim(),
-        client: formClient,
-        date: formDate,
-        time: formTime,
-        assignees: formAssignees.length > 0 ? formAssignees : ["You"],
-      };
-      saveEvents([...events, newEvent]);
-    }
+    try {
+      if (editingId) {
+        await updateCalendarEvent(editingId, {
+          title: formTitle.trim(),
+          client: formClient,
+          date: formDate,
+          time: formTime,
+          assignees: formAssignees.length > 0 ? formAssignees : ["You"],
+        });
+      } else {
+        await createCalendarEvent({
+          title: formTitle.trim(),
+          client: formClient,
+          date: formDate,
+          time: formTime,
+          assignees: formAssignees.length > 0 ? formAssignees : ["You"],
+        });
+      }
 
-    setIsModalOpen(false);
-    setSelectedDate(formDate);
+      await fetchEventsFromDB(); // Reload data terbaru
+      setIsModalOpen(false);
+      setSelectedDate(formDate);
+    } catch (error) {
+      console.error("Gagal menyimpan event:", error);
+    }
   };
 
-  const handleDeleteEvent = (id: string) => {
-    saveEvents(events.filter((e) => e.id !== id));
-    if (editingId === id) {
-      setIsModalOpen(false);
+  // Hapus Event dari Supabase
+  const handleDeleteEvent = async (id: string) => {
+    try {
+      await deleteCalendarEvent(id);
+      await fetchEventsFromDB(); // Reload data
+      if (editingId === id) {
+        setIsModalOpen(false);
+      }
+    } catch (error) {
+      console.error("Gagal menghapus event:", error);
     }
   };
 
@@ -465,8 +434,8 @@ export default function CalendarPage() {
                           <div
                             key={ev.id}
                             onClick={(e) => {
-                              e.stopPropagation(); // Mencegah modal "Add" terbuka
-                              handleOpenEditModal(ev); // Buka modal dalam mode "Edit"
+                              e.stopPropagation();
+                              handleOpenEditModal(ev);
                             }}
                             className={`text-[10px] px-1.5 py-0.5 rounded border truncate font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${theme.badge}`}
                             title={`Klik untuk edit: ${ev.time} - ${ev.title}`}
@@ -613,7 +582,6 @@ export default function CalendarPage() {
                 </div>
 
                 <div className="flex items-center gap-2.5 pt-3">
-                  {/* Tombol Hapus khusus jika sedang dalam mode Edit */}
                   {editingId && (
                     <button
                       type="button"
