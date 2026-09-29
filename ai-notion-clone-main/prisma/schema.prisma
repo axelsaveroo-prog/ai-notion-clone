@@ -26,3 +26,11 @@ model ChatMessage {
   fileType  String?
   createdAt DateTime @default(now())
 }
+
+model User {
+  id        String   @id // ini diisi dari Clerk userId
+  email     String   @unique
+  name      String?
+  imageUrl  String?
+  createdAt DateTime @default(now())
+}
