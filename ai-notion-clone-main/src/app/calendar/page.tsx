@@ -69,11 +69,11 @@ const getClientTheme = (client: string) => {
 };
 
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 1)); // September 2026
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 1));
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("2026-09-02");
   
-  // List User Dinamis dari Database Supabase
+  // List User Terdaftar dari Clerk / Database
   const [dbUsers, setDbUsers] = useState<UserMember[]>([]);
 
   // State Modal
@@ -86,21 +86,23 @@ export default function CalendarPage() {
   const [formAssignees, setFormAssignees] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load Data Event & Data User dari Database (sambil auto-sync user aktif)
   const fetchInitialData = async () => {
     try {
-      // 1. Sync user Clerk yang sedang login saat ini ke database
+      // 1. Sync data user aktif ke DB
       await syncUserAction();
 
-      // 2. Fetch event kalender dan list user yang sudah terdaftar
+      // 2. Ambil data event & list seluruh user
       const [eventsData, usersData] = await Promise.all([
         getCalendarEvents(),
         getUsersAction()
       ]);
+
       if (eventsData) setEvents(eventsData);
-      if (usersData) setDbUsers(usersData);
+      if (usersData && usersData.length > 0) {
+        setDbUsers(usersData);
+      }
     } catch (error) {
-      console.error("Gagal memuat data dari database:", error);
+      console.error("Gagal memuat data:", error);
     }
   };
 
@@ -116,7 +118,6 @@ export default function CalendarPage() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
-  // Modal Handler
   const handleOpenAddModal = (dateStr?: string) => {
     setEditingId(null);
     setFormDate(dateStr || selectedDate);
@@ -190,7 +191,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Helper Grid Kalender
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthNames = [
@@ -505,7 +505,7 @@ export default function CalendarPage() {
                   </select>
                 </div>
 
-                {/* LIST ASSIGNEES DINAMIS DARI USER DATABASE */}
+                {/* LIST ASSIGNEES DINAMIS REALTIME DARI CLERK */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-zinc-400 font-medium flex items-center gap-1">
@@ -524,7 +524,7 @@ export default function CalendarPage() {
 
                   {dbUsers.length === 0 ? (
                     <div className="p-3 bg-[#1c1c1f] border border-zinc-800 rounded-xl text-zinc-500 text-[11px] italic">
-                      Belum ada anggota terdaftar di database.
+                      Memuat anggota terdaftar...
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-1.5 p-2.5 bg-[#1c1c1f] border border-zinc-800 rounded-xl max-h-32 overflow-y-auto">

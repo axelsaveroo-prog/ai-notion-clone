@@ -1,12 +1,16 @@
 // @ts-nocheck
 "use server";
 
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser, createClerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+const clerkClient = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY,
+});
+
 // ==========================================
-// 1. USER SYNCHRONIZATION
+// 1. USER ACTIONS (CLERK & SUPABASE SYNC)
 // ==========================================
 
 export async function syncUserAction() {
@@ -17,7 +21,7 @@ export async function syncUserAction() {
     if (!userId || !user) return null;
 
     const email = user.emailAddresses[0]?.emailAddress || "";
-    const name = `${user.firstName || ""} ${user.lastName || ""}`.trim() || email;
+    const name = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username || email;
     const imageUrl = user.imageUrl || "";
 
     const dbUser = await prisma.user.upsert({
@@ -40,12 +44,28 @@ export async function syncUserAction() {
 
 export async function getUsersAction() {
   try {
-    return await prisma.user.findMany({
-      orderBy: { name: "asc" },
+    // Ambil daftar seluruh user terdaftar langsung dari Clerk SDK
+    const response = await clerkClient.users.getUserList();
+    
+    return response.data.map((u) => {
+      const fullName = `${u.firstName || ""} ${u.lastName || ""}`.trim();
+      const displayName = fullName || u.username || u.emailAddresses[0]?.emailAddress || "Member";
+      return {
+        id: u.id,
+        name: displayName,
+        email: u.emailAddresses[0]?.emailAddress || "",
+      };
     });
   } catch (error) {
-    console.error("Gagal mengambil data users:", error);
-    return [];
+    console.error("Gagal mengambil data users dari Clerk:", error);
+    // Fallback ambil dari database jika Clerk SDK gagal
+    try {
+      return await prisma.user.findMany({
+        orderBy: { name: "asc" },
+      });
+    } catch (dbErr) {
+      return [];
+    }
   }
 }
 
