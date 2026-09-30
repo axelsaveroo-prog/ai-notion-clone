@@ -225,3 +225,48 @@ export async function sendChatMessage(data: {
   const newMsg = await prisma.chatMessage.create({ data });
   return newMsg;
 }
+
+// ==========================================
+// 5. ATTENDANCE / PRESENSI ACTIONS
+// ==========================================
+
+export async function submitAttendanceAction(data: {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  type: "CLOCK_IN" | "CLOCK_OUT";
+  imageUrl?: string;
+  location?: string;
+  note?: string;
+}) {
+  try {
+    const record = await prisma.attendance.create({
+      data: {
+        userId: data.userId,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        type: data.type,
+        imageUrl: data.imageUrl,
+        location: data.location || "Office",
+        note: data.note || "",
+      },
+    });
+    revalidatePath("/admin/attendance");
+    revalidatePath("/");
+    return { success: true, record };
+  } catch (error) {
+    console.error("Gagal menyimpan presensi:", error);
+    return { success: false, error: "Gagal menyimpan presensi" };
+  }
+}
+
+export async function getAllAttendancesAction() {
+  try {
+    return await prisma.attendance.findMany({
+      orderBy: { timestamp: "desc" },
+    });
+  } catch (error) {
+    console.error("Gagal mengambil data presensi:", error);
+    return [];
+  }
+}

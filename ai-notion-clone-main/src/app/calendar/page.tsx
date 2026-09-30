@@ -68,10 +68,20 @@ const getClientTheme = (client: string) => {
   );
 };
 
+// Helper Format Tanggal Hari Ini (YYYY-MM-DD)
+const getTodayFormatted = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 1));
+  // Set default bulan & tanggal sesuai hari ini
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>("2026-09-02");
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayFormatted());
   
   // List User Terdaftar dari Clerk / Database
   const [dbUsers, setDbUsers] = useState<UserMember[]>([]);
@@ -81,17 +91,15 @@ export default function CalendarPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("AKASA LAND");
-  const [formDate, setFormDate] = useState("2026-09-02");
+  const [formDate, setFormDate] = useState(getTodayFormatted());
   const [formTime, setFormTime] = useState("10:00");
   const [formAssignees, setFormAssignees] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchInitialData = async () => {
     try {
-      // 1. Sync data user aktif ke DB
       await syncUserAction();
 
-      // 2. Ambil data event & list seluruh user
       const [eventsData, usersData] = await Promise.all([
         getCalendarEvents(),
         getUsersAction()
@@ -206,14 +214,16 @@ export default function CalendarPage() {
     calendarCells.push(null);
   }
   for (let day = 1; day <= daysInMonth; day++) {
-    const formattedDay = day < 10 ? `0${day}` : `${day}`;
-    const formattedMonth = month + 1 < 10 ? `0${month + 1}` : `${month + 1}`;
+    const formattedDay = String(day).padStart(2, '0');
+    const formattedMonth = String(month + 1).padStart(2, '0');
     calendarCells.push(`${year}-${formattedMonth}-${formattedDay}`);
   }
 
   const sortedEvents = [...events].sort(
     (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
   );
+
+  const todayStr = getTodayFormatted();
 
   return (
     <MobileContainer>
@@ -345,7 +355,10 @@ export default function CalendarPage() {
                   <ChevronLeft size={16} />
                 </button>
                 <button
-                  onClick={() => setCurrentDate(new Date())}
+                  onClick={() => {
+                    setCurrentDate(new Date());
+                    setSelectedDate(getTodayFormatted());
+                  }}
                   className="px-3 h-8 rounded-xl bg-zinc-800/70 hover:bg-zinc-700 text-zinc-300 text-xs font-medium border border-zinc-700 transition cursor-pointer"
                 >
                   Today
@@ -383,6 +396,7 @@ export default function CalendarPage() {
                 const dayNumber = parseInt(dateStr.split("-")[2], 10);
                 const dayEvents = events.filter((e) => e.date === dateStr);
                 const isSelected = selectedDate === dateStr;
+                const isToday = dateStr === todayStr;
 
                 return (
                   <div
@@ -393,14 +407,16 @@ export default function CalendarPage() {
                     }}
                     className={`relative p-2 rounded-xl border flex flex-col justify-between transition-all cursor-pointer group select-none ${
                       isSelected
-                        ? "bg-[#1c1c1f] border-zinc-600 ring-1 ring-zinc-500/30"
+                        ? "bg-[#1c1c1f] border-zinc-500 ring-1 ring-zinc-500/30"
                         : "bg-[#121212] border-zinc-800/70 hover:border-zinc-700 hover:bg-[#181818]"
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span
                         className={`text-xs font-semibold px-1.5 py-0.5 rounded-md ${
-                          isSelected
+                          isToday
+                            ? "bg-blue-600 text-white font-bold"
+                            : isSelected
                             ? "bg-white text-black font-bold"
                             : "text-zinc-300 group-hover:text-white"
                         }`}
@@ -505,7 +521,6 @@ export default function CalendarPage() {
                   </select>
                 </div>
 
-                {/* LIST ASSIGNEES DINAMIS REALTIME DARI CLERK */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-zinc-400 font-medium flex items-center gap-1">

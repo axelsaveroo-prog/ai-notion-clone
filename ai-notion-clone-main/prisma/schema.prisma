@@ -26,3 +26,19 @@ model ChatMessage {
   fileType  String?
   createdAt DateTime @default(now())
 }
+
+model Attendance {
+  id        String   @id @default(cuid())
+  userId    String
+  userName  String
+  userEmail String
+  type      String   // "CLOCK_IN" atau "CLOCK_OUT"
+  timestamp DateTime @default(now())
+  imageUrl  String?  // URL foto presensi dari Supabase Storage / Base64
+  location  String?  // Misal: "Office" / "Remote"
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([timestamp])
+}
