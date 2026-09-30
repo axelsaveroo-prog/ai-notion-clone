@@ -270,3 +270,36 @@ export async function getAllAttendancesAction() {
     return [];
   }
 }
+
+export async function getTodayAttendanceStatusAction(userId: string) {
+  try {
+    // Ambil rentang awal dan akhir hari ini secara lokal
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+    // Cari presensi user yang tercatat KHUSUS HARI INI
+    const todayRecords = await prisma.attendance.findMany({
+      where: {
+        userId: userId,
+        timestamp: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      orderBy: { timestamp: "desc" },
+    });
+
+    const hasClockedIn = todayRecords.some((r) => r.type === "CLOCK_IN");
+    const hasClockedOut = todayRecords.some((r) => r.type === "CLOCK_OUT");
+
+    return {
+      hasClockedIn,
+      hasClockedOut,
+      todayRecords,
+    };
+  } catch (error) {
+    console.error("Gagal mengecek status presensi hari ini:", error);
+    return { hasClockedIn: false, hasClockedOut: false, todayRecords: [] };
+  }
+}

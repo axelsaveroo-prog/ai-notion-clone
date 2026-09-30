@@ -2,18 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { getAllAttendancesAction } from "@/actions/actions";
-import { MobileContainer } from "@/components/MobileContainer";
+import Link from "next/link";
 import { 
   Clock, 
   Calendar, 
   Search, 
-  User, 
   MapPin, 
   Image as ImageIcon, 
   Filter, 
-  CheckCircle2, 
-  LogOut, 
-  LogIn 
+  LogIn, 
+  LogOut,
+  ArrowLeft,
+  RefreshCw
 } from "lucide-react";
 
 interface AttendanceRecord {
@@ -60,52 +60,64 @@ export default function AdminAttendancePage() {
   });
 
   return (
-    <MobileContainer>
-      <div className="flex-1 flex flex-col gap-6 py-6 pb-28 text-zinc-200">
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-200 p-4 sm:p-8 font-sans selection:bg-amber-500/30">
+      <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header Bar Admin */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold uppercase tracking-wider">
-                Admin Panel
-              </span>
+        {/* Top Navbar Admin */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#141414] border border-zinc-800/80 rounded-2xl p-5 shadow-xl">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 border border-zinc-700/60 transition cursor-pointer"
+              title="Kembali ke Dashboard Utama"
+            >
+              <ArrowLeft size={18} />
+            </Link>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold uppercase tracking-wider">
+                  Admin Panel Only
+                </span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-1">
+                Monitoring Presensi Tim
+              </h1>
+              <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
+                Laporan jam kerja, lokasi GPS terkunci, dan swafoto presensi seluruh karyawan.
+              </p>
             </div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-white mt-1">
-              Monitoring Presensi Tim
-            </h1>
-            <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-              Pantau jam kerja, swafoto presensi, dan lokasi masuk/keluar seluruh anggota tim secara real-time.
-            </p>
           </div>
 
           <button
             onClick={fetchRecords}
-            className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold border border-zinc-700 transition cursor-pointer self-start sm:self-auto"
+            disabled={loading}
+            className="px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow self-start sm:self-auto disabled:opacity-50"
           >
-            Refresh Data
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            <span>Refresh Data</span>
           </button>
         </div>
 
         {/* Filter & Search Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2 relative">
-            <Search size={15} className="absolute left-3.5 top-3 text-zinc-500" />
+            <Search size={16} className="absolute left-3.5 top-3.5 text-zinc-500" />
             <input
               type="text"
               placeholder="Cari berdasarkan nama atau email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#141414] border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+              className="w-full bg-[#141414] border border-zinc-800/80 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600 shadow-sm"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <Filter size={15} className="text-zinc-500 shrink-0" />
+            <Filter size={16} className="text-zinc-500 shrink-0" />
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full bg-[#141414] border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-zinc-600 cursor-pointer"
+              className="w-full bg-[#141414] border border-zinc-800/80 rounded-xl px-3 py-3 text-xs text-white focus:outline-none focus:border-zinc-600 cursor-pointer shadow-sm"
             >
               <option value="ALL">Semua Presensi</option>
               <option value="CLOCK_IN">Clock In (Masuk)</option>
@@ -116,16 +128,17 @@ export default function AdminAttendancePage() {
 
         {/* List & Galeri Presensi */}
         {loading ? (
-          <div className="h-64 flex items-center justify-center text-zinc-500 text-xs italic">
-            Memuat data presensi dari database...
+          <div className="h-64 bg-[#141414] border border-zinc-800/80 rounded-2xl flex flex-col items-center justify-center text-zinc-500 text-xs gap-2 italic">
+            <RefreshCw size={20} className="animate-spin text-zinc-500" />
+            <span>Memuat data presensi...</span>
           </div>
         ) : filteredRecords.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-zinc-500 text-xs gap-2 border border-zinc-800/80 rounded-2xl bg-[#141414]">
-            <Clock size={28} className="opacity-30" />
+            <Clock size={32} className="opacity-30" />
             <span>Belum ada data presensi yang tercatat.</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredRecords.map((rec) => {
               const dateObj = new Date(rec.timestamp);
               const formattedDate = dateObj.toLocaleDateString("id-ID", {
@@ -146,22 +159,22 @@ export default function AdminAttendancePage() {
                   key={rec.id}
                   className="bg-[#141414] border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-3 shadow-lg hover:border-zinc-700 transition"
                 >
-                  {/* Info Header User & Status */}
+                  {/* User & Status Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 font-bold text-xs">
+                      <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 font-bold text-xs shrink-0">
                         {rec.userName ? rec.userName.charAt(0).toUpperCase() : "U"}
                       </div>
-                      <div>
-                        <h3 className="text-xs font-bold text-white leading-tight">
+                      <div className="min-w-0">
+                        <h3 className="text-xs font-bold text-white leading-tight truncate">
                           {rec.userName || "Unknown User"}
                         </h3>
-                        <p className="text-[10px] text-zinc-500">{rec.userEmail}</p>
+                        <p className="text-[10px] text-zinc-500 truncate">{rec.userEmail}</p>
                       </div>
                     </div>
 
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border flex items-center gap-1 ${
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border flex items-center gap-1 shrink-0 ${
                         isClockIn
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-rose-500/10 text-rose-400 border-rose-500/20"
@@ -172,8 +185,8 @@ export default function AdminAttendancePage() {
                     </span>
                   </div>
 
-                  {/* Preview Foto Presensi */}
-                  <div className="relative w-full h-44 rounded-xl bg-black/60 border border-zinc-800 overflow-hidden flex items-center justify-center group">
+                  {/* Foto Presensi */}
+                  <div className="relative w-full h-48 rounded-xl bg-black/60 border border-zinc-800 overflow-hidden flex items-center justify-center group">
                     {rec.imageUrl ? (
                       <>
                         <img
@@ -186,18 +199,18 @@ export default function AdminAttendancePage() {
                           className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-medium gap-1.5 cursor-pointer backdrop-blur-xs"
                         >
                           <ImageIcon size={14} />
-                          <span>Lihat Foto Penuh</span>
+                          <span>Perbesar Foto</span>
                         </button>
                       </>
                     ) : (
                       <div className="flex flex-col items-center gap-1.5 text-zinc-600 text-[11px]">
                         <ImageIcon size={20} />
-                        <span>Tanpa Lampiran Foto</span>
+                        <span>Tanpa Swafoto</span>
                       </div>
                     )}
                   </div>
 
-                  {/* Detail Waktu & Lokasi */}
+                  {/* Waktu & Lokasi GPS Terkunci */}
                   <div className="grid grid-cols-2 gap-2 text-[11px] bg-[#181818] p-2.5 rounded-xl border border-zinc-800/80">
                     <div className="flex items-center gap-1.5 text-zinc-300 font-mono">
                       <Clock size={12} className="text-zinc-500" />
@@ -210,9 +223,9 @@ export default function AdminAttendancePage() {
                   </div>
 
                   {rec.location && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 px-1">
+                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 px-1 font-mono">
                       <MapPin size={11} className="text-zinc-500 shrink-0" />
-                      <span className="truncate">{rec.location}</span>
+                      <span className="truncate" title={rec.location}>{rec.location}</span>
                     </div>
                   )}
                 </div>
@@ -227,7 +240,7 @@ export default function AdminAttendancePage() {
             onClick={() => setSelectedPhoto(null)}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 cursor-pointer"
           >
-            <div className="relative max-w-2xl w-full max-h-[85vh] rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl">
+            <div className="relative max-w-3xl w-full max-h-[85vh] rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl">
               <img
                 src={selectedPhoto}
                 alt="Foto Presensi Full"
@@ -240,6 +253,6 @@ export default function AdminAttendancePage() {
           </div>
         )}
       </div>
-    </MobileContainer>
+    </div>
   );
 }
