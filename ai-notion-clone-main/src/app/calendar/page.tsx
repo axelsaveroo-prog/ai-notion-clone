@@ -6,7 +6,8 @@ import {
   createCalendarEvent, 
   updateCalendarEvent, 
   deleteCalendarEvent,
-  getUsersAction
+  getUsersAction,
+  syncUserAction
 } from "@/actions/actions";
 import Link from "next/link";
 import { 
@@ -85,9 +86,13 @@ export default function CalendarPage() {
   const [formAssignees, setFormAssignees] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load Data Event & Data User dari Database
+  // Load Data Event & Data User dari Database (sambil auto-sync user aktif)
   const fetchInitialData = async () => {
     try {
+      // 1. Sync user Clerk yang sedang login saat ini ke database
+      await syncUserAction();
+
+      // 2. Fetch event kalender dan list user yang sudah terdaftar
       const [eventsData, usersData] = await Promise.all([
         getCalendarEvents(),
         getUsersAction()
