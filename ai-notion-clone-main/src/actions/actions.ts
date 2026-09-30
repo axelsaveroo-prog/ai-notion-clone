@@ -303,3 +303,51 @@ export async function getTodayAttendanceStatusAction(userId: string) {
     return { hasClockedIn: false, hasClockedOut: false, todayRecords: [] };
   }
 }
+
+import { revalidatePath } from "next/cache";
+
+export async function submitAttendanceAction(data: {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  type: "CLOCK_IN" | "CLOCK_OUT";
+  imageUrl?: string;
+  location?: string;
+  note?: string;
+}) {
+  try {
+    const record = await prisma.attendance.create({
+      data: {
+        userId: data.userId,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        type: data.type,
+        imageUrl: data.imageUrl || null,
+        location: data.location || "Office",
+        note: data.note || "",
+      },
+    });
+
+    // Refresh cache halaman admin & user
+    revalidatePath("/admin/attendance");
+    revalidatePath("/attendance");
+    revalidatePath("/");
+
+    return { success: true, record };
+  } catch (error) {
+    console.error("Gagal menyimpan presensi:", error);
+    return { success: false, error: "Gagal menyimpan presensi" };
+  }
+}
+
+export async function getAllAttendancesAction() {
+  try {
+    const records = await prisma.attendance.findMany({
+      orderBy: { timestamp: "desc" },
+    });
+    return records;
+  } catch (error) {
+    console.error("Gagal mengambil data presensi admin:", error);
+    return [];
+  }
+}
