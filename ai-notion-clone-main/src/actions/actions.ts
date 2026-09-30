@@ -303,5 +303,3 @@ export async function getTodayAttendanceStatusAction(userId: string) {
     return { hasClockedIn: false, hasClockedOut: false, todayRecords: [] };
   }
 }
-
-import { revalidatePath } from "next/cache";
