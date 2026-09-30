@@ -5,7 +5,8 @@ import {
   getCalendarEvents, 
   createCalendarEvent, 
   updateCalendarEvent, 
-  deleteCalendarEvent 
+  deleteCalendarEvent,
+  getUsersAction
 } from "@/actions/actions";
 import Link from "next/link";
 import { 
@@ -27,12 +28,17 @@ interface ScheduleEvent {
   id: string;
   title: string;
   client: string;
-  date: string; // format: YYYY-MM-DD
-  time: string; // format: HH:mm
+  date: string;
+  time: string;
   assignees: string[];
 }
 
-// Tema warna khusus untuk tiap client
+interface UserMember {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
 const CLIENT_THEMES: Record<string, { badge: string; dot: string }> = {
   "AKASA LAND": {
     badge: "bg-sky-500/15 text-sky-300 border-sky-500/30 hover:bg-sky-500/25",
@@ -61,47 +67,40 @@ const getClientTheme = (client: string) => {
   );
 };
 
-const AVAILABLE_MEMBERS = [
-  "Ben",
-  "Axel",
-  "Shafia",
-  "Bri",
-  "Ivo",
-  "Ate",
-  "Monic",
-  "Keyzia",
-  "Vila",
-  "Jessica"
-];
-
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 1)); // September 2026
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>("2026-09-05");
+  const [selectedDate, setSelectedDate] = useState<string>("2026-09-02");
+  
+  // List User Dinamis dari Database Supabase
+  const [dbUsers, setDbUsers] = useState<UserMember[]>([]);
 
-  // State Modal (Bisa Buat Baru / Edit)
+  // State Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("AKASA LAND");
-  const [formDate, setFormDate] = useState("2026-09-10");
+  const [formDate, setFormDate] = useState("2026-09-02");
   const [formTime, setFormTime] = useState("10:00");
-  const [formAssignees, setFormAssignees] = useState<string[]>(["You"]);
+  const [formAssignees, setFormAssignees] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Ambil data event langsung dari Supabase Database saat komponen dimuat
-  const fetchEventsFromDB = async () => {
+  // Load Data Event & Data User dari Database
+  const fetchInitialData = async () => {
     try {
-      const data = await getCalendarEvents();
-      if (data) {
-        setEvents(data);
-      }
+      const [eventsData, usersData] = await Promise.all([
+        getCalendarEvents(),
+        getUsersAction()
+      ]);
+      if (eventsData) setEvents(eventsData);
+      if (usersData) setDbUsers(usersData);
     } catch (error) {
-      console.error("Gagal memuat event dari database:", error);
+      console.error("Gagal memuat data dari database:", error);
     }
   };
 
   useEffect(() => {
-    fetchEventsFromDB();
+    fetchInitialData();
   }, []);
 
   const handlePrevMonth = () => {
@@ -112,29 +111,24 @@ export default function CalendarPage() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
-  // Buka Modal Tambah Baru
+  // Modal Handler
   const handleOpenAddModal = (dateStr?: string) => {
     setEditingId(null);
-    if (dateStr) {
-      setFormDate(dateStr);
-    } else {
-      setFormDate(selectedDate);
-    }
+    setFormDate(dateStr || selectedDate);
     setFormTitle("");
     setFormClient("AKASA LAND");
     setFormTime("10:00");
-    setFormAssignees(["You"]);
+    setFormAssignees([]);
     setIsModalOpen(true);
   };
 
-  // Buka Modal Edit Event
   const handleOpenEditModal = (ev: ScheduleEvent) => {
     setEditingId(ev.id);
     setFormTitle(ev.title);
     setFormClient(ev.client);
     setFormDate(ev.date);
     setFormTime(ev.time);
-    setFormAssignees(ev.assignees || ["You"]);
+    setFormAssignees(ev.assignees || []);
     setSelectedDate(ev.date);
     setIsModalOpen(true);
   };
@@ -145,11 +139,11 @@ export default function CalendarPage() {
     );
   };
 
-  // Submit Event Baru / Edit ke Supabase via Server Actions
   const handleSubmitEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim()) return;
+    if (!formTitle.trim() || isSubmitting) return;
 
+    setIsSubmitting(true);
     try {
       if (editingId) {
         await updateCalendarEvent(editingId, {
@@ -157,7 +151,7 @@ export default function CalendarPage() {
           client: formClient,
           date: formDate,
           time: formTime,
-          assignees: formAssignees.length > 0 ? formAssignees : ["You"],
+          assignees: formAssignees,
         });
       } else {
         await createCalendarEvent({
@@ -165,23 +159,24 @@ export default function CalendarPage() {
           client: formClient,
           date: formDate,
           time: formTime,
-          assignees: formAssignees.length > 0 ? formAssignees : ["You"],
+          assignees: formAssignees,
         });
       }
 
-      await fetchEventsFromDB();
+      await fetchInitialData();
       setIsModalOpen(false);
       setSelectedDate(formDate);
     } catch (error) {
       console.error("Gagal menyimpan event:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Hapus Event dari Supabase
   const handleDeleteEvent = async (id: string) => {
     try {
       await deleteCalendarEvent(id);
-      await fetchEventsFromDB();
+      await fetchInitialData();
       if (editingId === id) {
         setIsModalOpen(false);
       }
@@ -190,7 +185,7 @@ export default function CalendarPage() {
     }
   };
 
-  // Helper Kalender
+  // Helper Grid Kalender
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthNames = [
@@ -218,6 +213,7 @@ export default function CalendarPage() {
   return (
     <MobileContainer>
       <div className="flex-1 flex flex-col gap-6 py-6 pb-28 text-zinc-200">
+        
         {/* Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -236,10 +232,10 @@ export default function CalendarPage() {
           </button>
         </div>
 
-        {/* Layout 1-Page: 1/4 Kiri (Upcoming List), 3/4 Kanan (Grid Kalender) */}
+        {/* Layout Utama */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           
-          {/* SISI KIRI: UPCOMING LIST */}
+          {/* UPCOMING LIST (KIRI) */}
           <div className="lg:col-span-1 bg-[#141414] border border-zinc-800/80 rounded-2xl p-5 flex flex-col h-[700px] shadow-xl">
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
@@ -283,7 +279,6 @@ export default function CalendarPage() {
                             handleDeleteEvent(ev.id);
                           }}
                           className="text-zinc-500 hover:text-rose-400 transition p-0.5 cursor-pointer"
-                          title="Hapus event"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -298,7 +293,6 @@ export default function CalendarPage() {
                         </span>
                       </div>
 
-                      {/* Tag Assignees */}
                       <div className="flex flex-wrap gap-1 pt-0.5">
                         {ev.assignees.map((person, idx) => (
                           <span
@@ -310,7 +304,6 @@ export default function CalendarPage() {
                         ))}
                       </div>
 
-                      {/* Baris Tanggal & Tombol Shortcut MoM */}
                       <div className="flex items-center justify-between pt-1.5 border-t border-zinc-800/60">
                         <div className="text-[10px] text-zinc-500 font-mono">
                           📅 {ev.date}
@@ -332,9 +325,8 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* SISI KANAN: KALENDER INTERAKTIF */}
+          {/* GRID KALENDER (KANAN) */}
           <div className="lg:col-span-3 bg-[#141414] border border-zinc-800/80 rounded-2xl p-6 flex flex-col h-[700px] shadow-xl">
-            {/* Navigasi Bulan */}
             <div className="flex items-center justify-between pb-5 border-b border-zinc-800">
               <h2 className="text-xl font-bold text-white tracking-tight">
                 {monthNames[month]} {year}
@@ -344,7 +336,6 @@ export default function CalendarPage() {
                 <button
                   onClick={handlePrevMonth}
                   className="w-8 h-8 rounded-xl bg-zinc-800/70 hover:bg-zinc-700 text-zinc-200 flex items-center justify-center border border-zinc-700 transition cursor-pointer"
-                  title="Bulan sebelumnya"
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -363,7 +354,6 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Header Nama Hari */}
             <div className="grid grid-cols-7 gap-1 pt-4 pb-2 text-center text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
               <div>Sun</div>
               <div>Mon</div>
@@ -374,7 +364,6 @@ export default function CalendarPage() {
               <div>Sat</div>
             </div>
 
-            {/* Grid Tanggal Kalender */}
             <div className="grid grid-cols-7 gap-1.5 flex-1 overflow-hidden">
               {calendarCells.map((dateStr, idx) => {
                 if (!dateStr) {
@@ -419,13 +408,11 @@ export default function CalendarPage() {
                           handleOpenAddModal(dateStr);
                         }}
                         className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-white transition p-0.5 cursor-pointer"
-                        title="Tambah event baru di tanggal ini"
                       >
                         <Plus size={13} />
                       </button>
                     </div>
 
-                    {/* EVENT BADGES DI SEL TANGGAL (BISA DIKLIK LANGSUNG UNTUK EDIT) */}
                     <div className="space-y-1 my-1 overflow-y-auto max-h-16 flex-1 pr-0.5">
                       {dayEvents.map((ev) => {
                         const theme = getClientTheme(ev.client);
@@ -438,7 +425,6 @@ export default function CalendarPage() {
                               handleOpenEditModal(ev);
                             }}
                             className={`text-[10px] px-1.5 py-0.5 rounded border truncate font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${theme.badge}`}
-                            title={`Klik untuk edit: ${ev.time} - ${ev.title}`}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${theme.dot}`} />
                             <span className="truncate">{ev.title}</span>
@@ -462,7 +448,7 @@ export default function CalendarPage() {
 
         </div>
 
-        {/* MODAL (ADD & EDIT SCHEDULE ENTRY) */}
+        {/* MODAL SCHEDULE (ADD & EDIT) */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
             <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
@@ -514,7 +500,7 @@ export default function CalendarPage() {
                   </select>
                 </div>
 
-                {/* Multiple Choice Assignees */}
+                {/* LIST ASSIGNEES DINAMIS DARI USER DATABASE */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-zinc-400 font-medium flex items-center gap-1">
@@ -531,26 +517,33 @@ export default function CalendarPage() {
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-[#1c1c1f] border border-zinc-800 rounded-xl max-h-32 overflow-y-auto">
-                    {AVAILABLE_MEMBERS.map((member) => {
-                      const isSelected = formAssignees.includes(member);
-                      return (
-                        <button
-                          key={member}
-                          type="button"
-                          onClick={() => toggleAssignee(member)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${
-                            isSelected
-                              ? "bg-white text-black border-white shadow-sm font-semibold"
-                              : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
-                          }`}
-                        >
-                          <span>{member}</span>
-                          {isSelected && <span className="text-[10px] font-bold">✓</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {dbUsers.length === 0 ? (
+                    <div className="p-3 bg-[#1c1c1f] border border-zinc-800 rounded-xl text-zinc-500 text-[11px] italic">
+                      Belum ada anggota terdaftar di database.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-[#1c1c1f] border border-zinc-800 rounded-xl max-h-32 overflow-y-auto">
+                      {dbUsers.map((u) => {
+                        const displayName = u.name || u.email;
+                        const isSelected = formAssignees.includes(displayName);
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => toggleAssignee(displayName)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${
+                              isSelected
+                                ? "bg-white text-black border-white shadow-sm font-semibold"
+                                : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
+                            }`}
+                          >
+                            <span>{displayName}</span>
+                            {isSelected && <span className="text-[10px] font-bold">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -587,7 +580,6 @@ export default function CalendarPage() {
                       type="button"
                       onClick={() => handleDeleteEvent(editingId)}
                       className="p-2.5 rounded-xl border border-rose-900/60 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
-                      title="Hapus Jadwal Ini"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -603,9 +595,10 @@ export default function CalendarPage() {
 
                   <button
                     type="submit"
-                    className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer"
+                    disabled={isSubmitting}
+                    className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
                   >
-                    {editingId ? "Save Changes" : "Add Event"}
+                    {isSubmitting ? "Saving..." : editingId ? "Save Changes" : "Add Event"}
                   </button>
                 </div>
               </form>

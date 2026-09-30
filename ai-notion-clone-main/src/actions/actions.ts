@@ -1,17 +1,138 @@
 // @ts-nocheck
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 // ==========================================
-// 1. SUPABASE REALTIME & CALENDAR ACTIONS
+// 1. USER SYNCHRONIZATION
+// ==========================================
+
+export async function syncUserAction() {
+  try {
+    const { userId } = await auth();
+    const user = await currentUser();
+
+    if (!userId || !user) return null;
+
+    const email = user.emailAddresses[0]?.emailAddress || "";
+    const name = `${user.firstName || ""} ${user.lastName || ""}`.trim() || email;
+    const imageUrl = user.imageUrl || "";
+
+    const dbUser = await prisma.user.upsert({
+      where: { id: userId },
+      update: { name, email, imageUrl },
+      create: {
+        id: userId,
+        email,
+        name,
+        imageUrl,
+      },
+    });
+
+    return dbUser;
+  } catch (error) {
+    console.error("Gagal sync user:", error);
+    return null;
+  }
+}
+
+export async function getUsersAction() {
+  try {
+    return await prisma.user.findMany({
+      orderBy: { name: "asc" },
+    });
+  } catch (error) {
+    console.error("Gagal mengambil data users:", error);
+    return [];
+  }
+}
+
+// ==========================================
+// 2. DOCUMENT ACTIONS (NOTION CLONE)
+// ==========================================
+
+export async function deleteDocumentAction(docId: string) {
+  try {
+    await prisma.document.delete({ where: { id: docId } });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Gagal menghapus dokumen:", error);
+    return { success: false };
+  }
+}
+
+export async function updateDocumentTitleAction(docId: string, title: string) {
+  try {
+    await prisma.document.update({
+      where: { id: docId },
+      data: { title },
+    });
+    revalidatePath(`/doc/${docId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Gagal memperbarui judul dokumen:", error);
+    return { success: false };
+  }
+}
+
+export async function inviteUserToDocumentAction(docId: string, email: string) {
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return { success: false, message: "User tidak ditemukan" };
+
+    await prisma.usersToDocument.create({
+      data: {
+        documentId: docId,
+        userId: user.id,
+      },
+    });
+    revalidatePath(`/doc/${docId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Gagal mengundang user:", error);
+    return { success: false };
+  }
+}
+
+export async function removeUserFromDocumentAction(docId: string, userId: string) {
+  try {
+    await prisma.usersToDocument.deleteMany({
+      where: {
+        documentId: docId,
+        userId: userId,
+      },
+    });
+    revalidatePath(`/doc/${docId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Gagal menghapus user dari dokumen:", error);
+    return { success: false };
+  }
+}
+
+export async function fetchUsersFromDocument(docId: string) {
+  try {
+    const usersInDoc = await prisma.usersToDocument.findMany({
+      where: { documentId: docId },
+      include: { user: true },
+    });
+    return usersInDoc.map((item) => item.user);
+  } catch (error) {
+    console.error("Gagal mengambil user dokumen:", error);
+    return [];
+  }
+}
+
+// ==========================================
+// 3. CALENDAR & SCHEDULE ACTIONS
 // ==========================================
 
 export async function getCalendarEvents() {
   try {
-    return await prisma.ScheduleEvent.findMany({
+    return await prisma.scheduleEvent.findMany({
       orderBy: { date: "asc" },
     });
   } catch (error) {
@@ -27,7 +148,7 @@ export async function createCalendarEvent(data: {
   time: string;
   assignees: string[];
 }) {
-  const newEvent = await prisma.ScheduleEvent.create({ data });
+  const newEvent = await prisma.scheduleEvent.create({ data });
   revalidatePath("/calendar");
   revalidatePath("/");
   return newEvent;
@@ -43,7 +164,7 @@ export async function updateCalendarEvent(
     assignees: string[];
   }
 ) {
-  const updated = await prisma.ScheduleEvent.update({
+  const updated = await prisma.scheduleEvent.update({
     where: { id },
     data,
   });
@@ -53,18 +174,18 @@ export async function updateCalendarEvent(
 }
 
 export async function deleteCalendarEvent(id: string) {
-  await prisma.ScheduleEvent.delete({ where: { id } });
+  await prisma.scheduleEvent.delete({ where: { id } });
   revalidatePath("/calendar");
   revalidatePath("/");
 }
 
 // ==========================================
-// 2. CHATBOX REALTIME ACTIONS
+// 4. CHATBOX ACTIONS
 // ==========================================
 
 export async function getChatMessages(channelId: string) {
   try {
-    return await prisma.ChatMessage.findMany({
+    return await prisma.chatMessage.findMany({
       where: { channelId },
       orderBy: { createdAt: "asc" },
     });
@@ -81,46 +202,6 @@ export async function sendChatMessage(data: {
   fileUrl?: string;
   fileType?: string;
 }) {
-  const newMsg = await prisma.ChatMessage.create({ data });
+  const newMsg = await prisma.chatMessage.create({ data });
   return newMsg;
-}
-
-// ==========================================
-// 3. DOCUMENT ACTIONS (STUB FOR COMPONENT COMPATIBILITY)
-// ==========================================
-
-export async function createNewDocumentAction() {
-  return { success: true, docId: "doc-" + Date.now() };
-}
-
-export async function createNewDocument() {
-  return createNewDocumentAction();
-}
-
-export async function deleteDocumentAction(docId: string) {
-  revalidatePath("/");
-  return { success: true };
-}
-
-export async function updateDocumentTitleAction(docId: string, title: string) {
-  revalidatePath(`/doc/${docId}`);
-  return { success: true };
-}
-
-export async function inviteUserToDocumentAction(docId: string, email: string) {
-  revalidatePath(`/doc/${docId}`);
-  return { success: true };
-}
-
-export async function removeUserFromDocumentAction(docId: string, email: string) {
-  revalidatePath(`/doc/${docId}`);
-  return { success: true };
-}
-
-export async function fetchUsersFromDocument(docId: string) {
-  return { docs: [], error: null };
-}
-
-export async function fetchDocumentsFromUser() {
-  return { docs: [], error: null };
 }
