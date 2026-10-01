@@ -265,6 +265,7 @@ export async function createCalendarEvent(data: {
   try {
     const event = await prisma.calendarEvent.create({
       data: {
+        id: crypto.randomUUID(), // Menjamin ID terisi otomatis
         title: data.title,
         client: data.client,
         date: data.date,
@@ -277,7 +278,7 @@ export async function createCalendarEvent(data: {
     return event;
   } catch (error) {
     console.error("Gagal membuat event kalender:", error);
-    throw new Error("Gagal menyimpan jadwal.");
+    throw new Error("Gagal menyimpan jadwal ke database.");
   }
 }
 
