@@ -254,7 +254,6 @@ export async function getTodayAttendanceStatusAction(userId: string) {
 // CALENDAR ACTIONS
 // ==========================================
 
-// Action untuk Membuat Event Baru
 export async function createCalendarEvent(data: {
   title: string;
   client: string;
@@ -265,7 +264,7 @@ export async function createCalendarEvent(data: {
   try {
     const event = await prisma.calendarEvent.create({
       data: {
-        id: crypto.randomUUID(), // Menjamin ID terisi otomatis
+        id: crypto.randomUUID(),
         title: data.title,
         client: data.client,
         date: data.date,
@@ -276,12 +275,12 @@ export async function createCalendarEvent(data: {
 
     revalidatePath("/calendar");
     return event;
-  } catch (error) {
-    console.error("Gagal membuat event kalender:", error);
-    throw new Error("Gagal menyimpan jadwal ke database.");
+  } catch (error: any) {
+    console.error("Gagal createCalendarEvent:", error);
+    // Lempar pesan error asli agar terbaca di client
+    throw new Error(error?.message || "Gagal menyimpan ke Prisma/Database");
   }
 }
-
 // Action untuk Mengubah Event
 export async function updateCalendarEvent(
   id: string,

@@ -153,7 +153,7 @@ export default function CalendarPage() {
     );
   };
 
-  const handleSubmitEvent = async (e: React.FormEvent) => {
+const handleSubmitEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim() || isSubmitting) return;
 
@@ -180,8 +180,12 @@ export default function CalendarPage() {
       await fetchInitialData();
       setIsModalOpen(false);
       setSelectedDate(formDate);
-    } catch (error) {
-      console.error("Gagal menyimpan event:", error);
+      alert("Jadwal berhasil disimpan!");
+    } catch (error: any) {
+      console.error("Detail Error:", error);
+      // Tampilkan error message asli dari Prisma/Server Action
+      const msg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+      alert("Detail Error Server: " + msg);
     } finally {
       setIsSubmitting(false);
     }
