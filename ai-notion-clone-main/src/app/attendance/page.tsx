@@ -29,18 +29,20 @@ export default function AttendancePage() {
 
   // State Kamera & Foto
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const [streamInstance, setStreamInstance] = useState<MediaStream | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
   // State GPS Terkunci
   const [gettingGPS, setGettingGPS] = useState(false);
 
-  // 1. Matikan Kamera Secara Sempurna (Cleanup)
+  // 1. Matikan Kamera Secara Total
   const stopCamera = () => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
+    if (streamInstance) {
+      streamInstance.getTracks().forEach((track) => {
+        track.stop();
+      });
+      setStreamInstance(null);
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -48,14 +50,13 @@ export default function AttendancePage() {
     setIsCameraActive(false);
   };
 
-  // Matikan kamera jika user berpindah halaman
   useEffect(() => {
     return () => {
       stopCamera();
     };
-  }, []);
+  }, [streamInstance]);
 
-  // 2. Cek Status Presensi Hari Ini (Reset Otomatis Harian)
+  // 2. Cek Status Presensi Hari Ini
   const checkTodayStatus = async () => {
     if (!user) return;
     setLoading(true);
@@ -79,13 +80,13 @@ export default function AttendancePage() {
   // 3. Buka Kamera
   const startCamera = async () => {
     try {
-      stopCamera(); // Pastikan kamera lama dimatikan dulu
+      stopCamera();
       setIsCameraActive(true);
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } },
         audio: false,
       });
-      mediaStreamRef.current = stream;
+      setStreamInstance(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
@@ -96,28 +97,33 @@ export default function AttendancePage() {
     }
   };
 
-  // 4. Ambil Foto & LANGSUNG MATIKAN KAMERA
+  // 4. Ambil Foto & LANGSUNG STOP KAMERA
   const takePhoto = () => {
     if (!videoRef.current) return;
     const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
+    canvas.width = 480;
+    canvas.height = 360;
     const ctx = canvas.getContext("2d");
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const photoData = canvas.toDataURL("image/jpeg", 0.7);
+      // Kompresi kualitas foto ke 0.5 agar payload ringan dan cepat tersimpan ke DB
+      const photoData = canvas.toDataURL("image/jpeg", 0.5);
       setCapturedPhoto(photoData);
       
-      // KAMERA LANGSUNG DIMATIKAN SETELAH FOTO DIAMBIL
-      stopCamera();
+      // KAMERA LANGSUNG DIMATIKAN
+      if (streamInstance) {
+        streamInstance.getTracks().forEach((track) => track.stop());
+        setStreamInstance(null);
+      }
+      setIsCameraActive(false);
     }
   };
 
-  // 5. LOCK GPS & KAN KAN DATA PRESENSI
+  // 5. LOCK GPS & SUBMIT PRESENSI
   const handleAttendanceSubmit = async (type: "CLOCK_IN" | "CLOCK_OUT") => {
     if (!user) return;
     if (!capturedPhoto) {
-      alert("Harap ambil foto presensi terlebih dahulu!");
+      alert("Harap ambil swafoto presensi terlebih dahulu!");
       return;
     }
 
@@ -129,7 +135,7 @@ export default function AttendancePage() {
     setSubmitting(true);
     setGettingGPS(true);
 
-    // KUNCI LOKASI GPS TEPAT SAAT TOMBOL DIKLIK
+    // Dapatkan & Kunci Lokasi GPS Terbaru
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const lat = position.coords.latitude;
@@ -141,36 +147,41 @@ export default function AttendancePage() {
         const userName = user.fullName || user.username || "Karyawan";
         const userEmail = user.primaryEmailAddress?.emailAddress || "";
 
-        // Kirim ke server
-        const result = await submitAttendanceAction({
-          userId: user.id,
-          userName,
-          userEmail,
-          type,
-          imageUrl: capturedPhoto,
-          location: lockedGpsString, // Lokasi terkunci
-        });
+        try {
+          const result = await submitAttendanceAction({
+            userId: user.id,
+            userName,
+            userEmail,
+            type,
+            imageUrl: capturedPhoto,
+            location: lockedGpsString,
+          });
 
-        if (result.success) {
-          alert(`Presensi ${type === "CLOCK_IN" ? "Masuk" : "Keluar"} Berhasil Terrekam!`);
-          setCapturedPhoto(null);
-          stopCamera(); // Pastikan kamera mati total
-          await checkTodayStatus();
-        } else {
-          alert("Gagal menyimpan presensi. Silakan coba lagi.");
+          if (result.success) {
+            alert(`Presensi ${type === "CLOCK_IN" ? "Masuk" : "Keluar"} Berhasil Terrekam!`);
+            setCapturedPhoto(null);
+            stopCamera();
+            await checkTodayStatus();
+          } else {
+            alert("Gagal menyimpan data presensi. Silakan coba lagi.");
+          }
+        } catch (error) {
+          console.error("Error submit presensi:", error);
+          alert("Terjadi kesalahan jaringan/server saat menyimpan presensi.");
+        } finally {
+          setSubmitting(false);
         }
-        setSubmitting(false);
       },
       (error) => {
         console.error("Gagal mengunci GPS:", error);
-        alert("Harap izinkan & aktifkan GPS lokasi di HP/Browser Anda.");
+        alert("Gagal mengambil GPS. Harap izinkan akses Lokasi/GPS di browser HP/Laptop Anda.");
         setGettingGPS(false);
         setSubmitting(false);
       },
       { 
         enableHighAccuracy: true, 
-        timeout: 15000, 
-        maximumAge: 0 // Wajib mengambil posisi terbaru, bukan cache
+        timeout: 10000, 
+        maximumAge: 0 
       }
     );
   };
@@ -188,7 +199,7 @@ export default function AttendancePage() {
 
   return (
     <MobileContainer>
-      {/* CSS Override untuk Menyembunyikan Floating Chatbox yang Mengganggu di Mobile */}
+      {/* Sembunyikan Floating Chat Widget yang Mengganggu */}
       <style jsx global>{`
         #chat-widget-container, 
         .floating-chat-button, 

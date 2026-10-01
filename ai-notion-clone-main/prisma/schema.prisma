@@ -42,3 +42,17 @@ model Attendance {
   @@index([userId])
   @@index([timestamp])
 }
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  userId      String
+  userName    String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([startDate])
+}

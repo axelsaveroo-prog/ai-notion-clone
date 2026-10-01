@@ -303,3 +303,65 @@ export async function getTodayAttendanceStatusAction(userId: string) {
     return { hasClockedIn: false, hasClockedOut: false, todayRecords: [] };
   }
 }
+
+// ==========================================
+// CALENDAR ACTIONS
+// ==========================================
+
+export async function createCalendarEventAction(data: {
+  title: string;
+  description?: string;
+  startDate: Date | string;
+  endDate?: Date | string;
+  userId: string;
+  userName?: string;
+}) {
+  try {
+    const newEvent = await prisma.calendarEvent.create({
+      data: {
+        title: data.title,
+        description: data.description || "",
+        startDate: new Date(data.startDate),
+        endDate: data.endDate ? new Date(data.endDate) : new Date(data.startDate),
+        userId: data.userId,
+        userName: data.userName || "",
+      },
+    });
+
+    revalidatePath("/calendar");
+    revalidatePath("/");
+
+    return { success: true, event: newEvent };
+  } catch (error) {
+    console.error("Gagal menyimpan event kalender:", error);
+    return { success: false, error: "Gagal menyimpan jadwal ke database." };
+  }
+}
+
+export async function getCalendarEventsAction() {
+  try {
+    const events = await prisma.calendarEvent.findMany({
+      orderBy: { startDate: "asc" },
+    });
+    return events;
+  } catch (error) {
+    console.error("Gagal mengambil daftar event kalender:", error);
+    return [];
+  }
+}
+
+export async function deleteCalendarEventAction(eventId: string) {
+  try {
+    await prisma.calendarEvent.delete({
+      where: { id: eventId },
+    });
+
+    revalidatePath("/calendar");
+    revalidatePath("/");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Gagal menghapus event kalender:", error);
+    return { success: false, error: "Gagal menghapus jadwal." };
+  }
+}
