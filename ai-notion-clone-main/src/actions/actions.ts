@@ -308,60 +308,90 @@ export async function getTodayAttendanceStatusAction(userId: string) {
 // CALENDAR ACTIONS
 // ==========================================
 
-export async function createCalendarEventAction(data: {
+import { revalidatePath } from "next/cache";
+
+// Action untuk Membuat Event Baru
+export async function createCalendarEvent(data: {
   title: string;
-  description?: string;
-  startDate: Date | string;
-  endDate?: Date | string;
-  userId: string;
-  userName?: string;
+  client: string;
+  date: string;
+  time: string;
+  assignees: string[];
 }) {
   try {
-    const newEvent = await prisma.calendarEvent.create({
+    const event = await prisma.calendarEvent.create({
       data: {
         title: data.title,
-        description: data.description || "",
-        startDate: new Date(data.startDate),
-        endDate: data.endDate ? new Date(data.endDate) : new Date(data.startDate),
-        userId: data.userId,
-        userName: data.userName || "",
+        client: data.client,
+        date: data.date,
+        time: data.time,
+        assignees: data.assignees,
       },
     });
 
     revalidatePath("/calendar");
-    revalidatePath("/");
-
-    return { success: true, event: newEvent };
+    return event;
   } catch (error) {
-    console.error("Gagal menyimpan event kalender:", error);
-    return { success: false, error: "Gagal menyimpan jadwal ke database." };
+    console.error("Gagal membuat event kalender:", error);
+    throw new Error("Gagal menyimpan jadwal.");
   }
 }
 
-export async function getCalendarEventsAction() {
+// Action untuk Mengubah Event
+export async function updateCalendarEvent(
+  id: string,
+  data: {
+    title: string;
+    client: string;
+    date: string;
+    time: string;
+    assignees: string[];
+  }
+) {
+  try {
+    const updated = await prisma.calendarEvent.update({
+      where: { id },
+      data: {
+        title: data.title,
+        client: data.client,
+        date: data.date,
+        time: data.time,
+        assignees: data.assignees,
+      },
+    });
+
+    revalidatePath("/calendar");
+    return updated;
+  } catch (error) {
+    console.error("Gagal mengupdate event kalender:", error);
+    throw new Error("Gagal memperbarui jadwal.");
+  }
+}
+
+// Action untuk Mengambil Semua Event
+export async function getCalendarEvents() {
   try {
     const events = await prisma.calendarEvent.findMany({
-      orderBy: { startDate: "asc" },
+      orderBy: [{ date: "asc" }, { time: "asc" }],
     });
     return events;
   } catch (error) {
-    console.error("Gagal mengambil daftar event kalender:", error);
+    console.error("Gagal mengambil event kalender:", error);
     return [];
   }
 }
 
-export async function deleteCalendarEventAction(eventId: string) {
+// Action untuk Menghapus Event
+export async function deleteCalendarEvent(id: string) {
   try {
     await prisma.calendarEvent.delete({
-      where: { id: eventId },
+      where: { id },
     });
 
     revalidatePath("/calendar");
-    revalidatePath("/");
-
     return { success: true };
   } catch (error) {
     console.error("Gagal menghapus event kalender:", error);
-    return { success: false, error: "Gagal menghapus jadwal." };
+    throw new Error("Gagal menghapus jadwal.");
   }
 }
