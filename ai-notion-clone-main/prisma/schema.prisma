@@ -44,15 +44,11 @@ model Attendance {
 }
 
 model CalendarEvent {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  startDate   DateTime
-  endDate     DateTime?
-  userId      String
-  userName    String?
-  createdAt   DateTime @default(now())
-
-  @@index([userId])
-  @@index([startDate])
+  id        String   @id @default(cuid())
+  title     String
+  client    String
+  date      String
+  time      String
+  assignees String[]
+  createdAt DateTime @default(now())
 }
