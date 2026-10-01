@@ -153,14 +153,16 @@ export default function CalendarPage() {
     );
   };
 
-const handleSubmitEvent = async (e: React.FormEvent) => {
+  const handleSubmitEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
+      let res: { success: boolean; error?: string };
+
       if (editingId) {
-        await updateCalendarEvent(editingId, {
+        res = await updateCalendarEvent(editingId, {
           title: formTitle.trim(),
           client: formClient,
           date: formDate,
@@ -168,7 +170,7 @@ const handleSubmitEvent = async (e: React.FormEvent) => {
           assignees: formAssignees,
         });
       } else {
-        await createCalendarEvent({
+        res = await createCalendarEvent({
           title: formTitle.trim(),
           client: formClient,
           date: formDate,
@@ -177,15 +179,16 @@ const handleSubmitEvent = async (e: React.FormEvent) => {
         });
       }
 
-      await fetchInitialData();
-      setIsModalOpen(false);
-      setSelectedDate(formDate);
-      alert("Jadwal berhasil disimpan!");
+      if (res && res.success) {
+        await fetchInitialData();
+        setIsModalOpen(false);
+        setSelectedDate(formDate);
+      } else {
+        alert("Pesan Error Server: " + (res?.error || "Gagal menyimpan jadwal"));
+      }
     } catch (error: any) {
-      console.error("Detail Error:", error);
-      // Tampilkan error message asli dari Prisma/Server Action
-      const msg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
-      alert("Detail Error Server: " + msg);
+      console.error("Gagal menyimpan event:", error);
+      alert("Error Client: " + (error?.message || "Terjadi kesalahan jaringan/server"));
     } finally {
       setIsSubmitting(false);
     }
@@ -193,10 +196,14 @@ const handleSubmitEvent = async (e: React.FormEvent) => {
 
   const handleDeleteEvent = async (id: string) => {
     try {
-      await deleteCalendarEvent(id);
-      await fetchInitialData();
-      if (editingId === id) {
-        setIsModalOpen(false);
+      const res = await deleteCalendarEvent(id);
+      if (res && res.success) {
+        await fetchInitialData();
+        if (editingId === id) {
+          setIsModalOpen(false);
+        }
+      } else {
+        alert("Gagal menghapus jadwal.");
       }
     } catch (error) {
       console.error("Gagal menghapus event:", error);
@@ -622,7 +629,7 @@ const handleSubmitEvent = async (e: React.FormEvent) => {
                     disabled={isSubmitting}
                     className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
                   >
-                    {isSubmitting ? "Saving..." : editingId ? "Save Changes" : "Add Event"}
+                    {isSubmitting ? "Saving..." : editingId ? "Save Changes" : "Save Schedule"}
                   </button>
                 </div>
               </form>

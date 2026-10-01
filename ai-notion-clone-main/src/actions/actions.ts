@@ -145,8 +145,9 @@ export async function fetchUsersFromDocument(docId: string) {
     return [];
   }
 }
+
 // ==========================================
-// 4. CHATBOX ACTIONS
+// 3. CHATBOX ACTIONS
 // ==========================================
 
 export async function getChatMessages(channelId: string) {
@@ -173,7 +174,7 @@ export async function sendChatMessage(data: {
 }
 
 // ==========================================
-// 5. ATTENDANCE / PRESENSI ACTIONS
+// 4. ATTENDANCE / PRESENSI ACTIONS
 // ==========================================
 
 export async function submitAttendanceAction(data: {
@@ -219,12 +220,10 @@ export async function getAllAttendancesAction() {
 
 export async function getTodayAttendanceStatusAction(userId: string) {
   try {
-    // Ambil rentang awal dan akhir hari ini secara lokal
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
-    // Cari presensi user yang tercatat KHUSUS HARI INI
     const todayRecords = await prisma.attendance.findMany({
       where: {
         userId: userId,
@@ -251,7 +250,7 @@ export async function getTodayAttendanceStatusAction(userId: string) {
 }
 
 // ==========================================
-// CALENDAR ACTIONS
+// 5. CALENDAR ACTIONS
 // ==========================================
 
 export async function createCalendarEvent(data: {
@@ -274,14 +273,16 @@ export async function createCalendarEvent(data: {
     });
 
     revalidatePath("/calendar");
-    return event;
+    return { success: true, event };
   } catch (error: any) {
     console.error("Gagal createCalendarEvent:", error);
-    // Lempar pesan error asli agar terbaca di client
-    throw new Error(error?.message || "Gagal menyimpan ke Prisma/Database");
+    return { 
+      success: false, 
+      error: error?.message || "Gagal menyimpan jadwal ke database Supabase." 
+    };
   }
 }
-// Action untuk Mengubah Event
+
 export async function updateCalendarEvent(
   id: string,
   data: {
@@ -305,14 +306,16 @@ export async function updateCalendarEvent(
     });
 
     revalidatePath("/calendar");
-    return updated;
-  } catch (error) {
-    console.error("Gagal mengupdate event kalender:", error);
-    throw new Error("Gagal memperbarui jadwal.");
+    return { success: true, updated };
+  } catch (error: any) {
+    console.error("Gagal updateCalendarEvent:", error);
+    return { 
+      success: false, 
+      error: error?.message || "Gagal mengupdate jadwal di database." 
+    };
   }
 }
 
-// Action untuk Mengambil Semua Event
 export async function getCalendarEvents() {
   try {
     const events = await prisma.calendarEvent.findMany({
@@ -325,7 +328,6 @@ export async function getCalendarEvents() {
   }
 }
 
-// Action untuk Menghapus Event
 export async function deleteCalendarEvent(id: string) {
   try {
     await prisma.calendarEvent.delete({
@@ -336,6 +338,6 @@ export async function deleteCalendarEvent(id: string) {
     return { success: true };
   } catch (error) {
     console.error("Gagal menghapus event kalender:", error);
-    throw new Error("Gagal menghapus jadwal.");
+    return { success: false, error: "Gagal menghapus jadwal." };
   }
 }
