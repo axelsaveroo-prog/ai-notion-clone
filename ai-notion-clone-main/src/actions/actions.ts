@@ -145,60 +145,6 @@ export async function fetchUsersFromDocument(docId: string) {
     return [];
   }
 }
-
-// ==========================================
-// 3. CALENDAR & SCHEDULE ACTIONS
-// ==========================================
-
-export async function getCalendarEvents() {
-  try {
-    return await prisma.scheduleEvent.findMany({
-      orderBy: { date: "asc" },
-    });
-  } catch (error) {
-    console.error("Gagal mengambil event kalender:", error);
-    return [];
-  }
-}
-
-export async function createCalendarEvent(data: {
-  title: string;
-  client: string;
-  date: string;
-  time: string;
-  assignees: string[];
-}) {
-  const newEvent = await prisma.scheduleEvent.create({ data });
-  revalidatePath("/calendar");
-  revalidatePath("/");
-  return newEvent;
-}
-
-export async function updateCalendarEvent(
-  id: string,
-  data: {
-    title: string;
-    client: string;
-    date: string;
-    time: string;
-    assignees: string[];
-  }
-) {
-  const updated = await prisma.scheduleEvent.update({
-    where: { id },
-    data,
-  });
-  revalidatePath("/calendar");
-  revalidatePath("/");
-  return updated;
-}
-
-export async function deleteCalendarEvent(id: string) {
-  await prisma.scheduleEvent.delete({ where: { id } });
-  revalidatePath("/calendar");
-  revalidatePath("/");
-}
-
 // ==========================================
 // 4. CHATBOX ACTIONS
 // ==========================================
