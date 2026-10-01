@@ -308,8 +308,6 @@ export async function getTodayAttendanceStatusAction(userId: string) {
 // CALENDAR ACTIONS
 // ==========================================
 
-import { revalidatePath } from "next/cache";
-
 // Action untuk Membuat Event Baru
 export async function createCalendarEvent(data: {
   title: string;
