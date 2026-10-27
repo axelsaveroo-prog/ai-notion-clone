@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, CheckSquare, Sparkles, Calendar, User, X } from "lucide-react";
+import { Home, CheckSquare, Search, Calendar, User, X } from "lucide-react";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -23,37 +23,46 @@ export function BottomNav() {
             onSubmit={(e) => { e.preventDefault(); setPrompt(""); setIsAiOpen(false); }} 
             className="flex items-center gap-3 w-full"
           >
-            <Sparkles className="w-5 h-5 text-gray-400 shrink-0" />
+            <Search className="w-4 h-4 text-zinc-400 shrink-0" />
             <input
               type="text"
               autoFocus
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Ask AI command center..."
-              className="w-full bg-transparent text-sm sm:text-base text-white placeholder:text-gray-500 focus:outline-none px-1 py-1"
+              placeholder="Cari atau ketik perintah..."
+              className="w-full bg-transparent text-sm sm:text-base text-white placeholder:text-zinc-500 focus:outline-none px-1 py-1"
             />
-            <button type="submit" className="bg-white text-black font-semibold px-4 py-1.5 rounded-full text-xs shrink-0 hover:bg-gray-200 transition-colors">
-              Run
+            <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-medium px-3.5 py-1.5 rounded-full text-xs shrink-0 transition-colors">
+              Cari
             </button>
-            <button type="button" onClick={() => setIsAiOpen(false)} className="text-gray-400 hover:text-white p-1.5">
+            <button type="button" onClick={() => setIsAiOpen(false)} className="text-zinc-400 hover:text-white p-1.5">
               <X className="w-5 h-5" />
             </button>
           </form>
         ) : (
           <>
-            <Link href="/" className={`p-3 rounded-full transition-colors ${pathname === "/" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
+            <Link href="/" className={`p-3 rounded-full transition-colors ${pathname === "/" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Beranda">
               <Home className="w-5 h-5" />
             </Link>
-            <Link href="/tasks" className={`p-3 rounded-full transition-colors ${pathname === "/tasks" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
+            <Link href="/tasks" className={`p-3 rounded-full transition-colors ${pathname === "/tasks" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Tasks">
               <CheckSquare className="w-5 h-5" />
             </Link>
-            <button type="button" onClick={() => setIsAiOpen(true)} className="p-3.5 rounded-full shadow-lg bg-white text-black hover:bg-gray-200 transition-transform active:scale-95">
-              <Sparkles className="w-6 h-6" />
+            <button 
+              type="button" 
+              onClick={() => setIsAiOpen(true)} 
+              className="p-2.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
+              title="Sika Studio Command"
+            >
+              <img 
+                src="/touch icon sika-04.png" 
+                alt="Sika" 
+                className="w-6 h-6 object-contain rounded-md select-none" 
+              />
             </button>
-            <Link href="/calendar" className={`p-3 rounded-full transition-colors ${pathname === "/calendar" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
+            <Link href="/calendar" className={`p-3 rounded-full transition-colors ${pathname === "/calendar" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Kalender">
               <Calendar className="w-5 h-5" />
             </Link>
-            <Link href="/user" className={`p-3 rounded-full transition-colors ${pathname === "/user" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`}>
+            <Link href="/user" className={`p-3 rounded-full transition-colors ${pathname === "/user" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Profil / Absensi">
               <User className="w-5 h-5" />
             </Link>
           </>

@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useUser } from "@clerk/nextjs";
+import { 
+  submitAttendanceAction, 
+  getTodayAttendanceStatusAction 
+} from "@/actions/actions";
 import { 
   MapPin, 
   Camera, 
@@ -11,8 +16,10 @@ import {
   Navigation, 
   RefreshCw, 
   ExternalLink, 
-  ImageIcon 
+  ImageIcon,
+  Loader2
 } from "lucide-react";
+import { toast } from "sonner";
 
 // Titik acuan alamat kantor (Jalan Rambutan Raya No 2B, Semarang)
 const OFFICE_COORDINATES = {
@@ -39,13 +46,15 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export function AttendanceTracker() {
+  const { user, isLoaded } = useUser();
+
   // State Live GPS Preview
   const [liveLocation, setLiveLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [liveAddress, setLiveAddress] = useState<string>("Mendeteksi lokasi...");
   const [isGettingGps, setIsGettingGps] = useState<boolean>(true);
   const [liveDistance, setLiveDistance] = useState<number | null>(null);
 
-  // State Riwayat Presensi yang Terkunci
+  // State Riwayat Presensi Realtime dari Database
   const [attendanceState, setAttendanceState] = useState<"checked_out" | "checked_in">("checked_out");
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
@@ -53,18 +62,61 @@ export function AttendanceTracker() {
   const [checkOutPhoto, setCheckOutPhoto] = useState<string | null>(null);
   const [recordedGpsIn, setRecordedGpsIn] = useState<string | null>(null);
   const [recordedGpsOut, setRecordedGpsOut] = useState<string | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(true);
 
   // State Modal Kamera & Preview Snapshot
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [pendingAction, setPendingAction] = useState<"check_in" | "check_out" | null>(null);
   const [tempPhoto, setTempPhoto] = useState<string | null>(null);
-  const [isCapturingLocation, setIsCapturingLocation] = useState<boolean>(false);
+  const [isSubmittingAttendance, setIsSubmittingAttendance] = useState<boolean>(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Fungsi menghentikan total semua track webcam hardware
+  const stopCameraHardware = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      if (videoRef.current.srcObject) {
+        const s = videoRef.current.srcObject as MediaStream;
+        s.getTracks().forEach((t) => {
+          t.stop();
+          t.enabled = false;
+        });
+      }
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  // Membuka kamera webcam
+  const startCamera = useCallback(async () => {
+    stopCameraHardware();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    } catch (err) {
+      console.error("Gagal membuka kamera:", err);
+      toast.error("Akses kamera dibutuhkan untuk bukti foto presensi. Mohon izinkan kamera.");
+      setIsCameraOpen(false);
+    }
+  }, [stopCameraHardware]);
 
   // Baca GPS saat ini
-  const fetchCurrentLocation = () => {
+  const fetchCurrentLocation = useCallback(() => {
     setIsGettingGps(true);
     if (!navigator.geolocation) {
       setLiveAddress("Browser tidak mendukung GPS");
@@ -88,10 +140,10 @@ export function AttendanceTracker() {
           );
           const data = await res.json();
           const cityOrDistrict = 
-            data.address.city || 
-            data.address.town || 
-            data.address.county || 
-            data.address.suburb || 
+            data.address?.city || 
+            data.address?.town || 
+            data.address?.county || 
+            data.address?.suburb || 
             "Kota Semarang";
           setLiveAddress(`${cityOrDistrict} (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
         } catch {
@@ -106,66 +158,86 @@ export function AttendanceTracker() {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  };
+  }, []);
 
-  // Muat data tersimpan
+  // Muat status presensi hari ini langsung dari Database Supabase (Auto reset saat ganti hari)
+  const loadTodayStatus = useCallback(async () => {
+    const targetUserId = user?.id || "guest-user";
+    setIsLoadingStatus(true);
+    try {
+      const status = await getTodayAttendanceStatusAction(targetUserId);
+      const records = status?.todayRecords || [];
+
+      const clockInRecord = records.find((r) => r.type === "CLOCK_IN");
+      const clockOutRecord = records.find((r) => r.type === "CLOCK_OUT");
+
+      if (clockInRecord) {
+        const inDate = new Date(clockInRecord.timestamp);
+        setCheckInTime(inDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
+        setCheckInPhoto(clockInRecord.imageUrl || null);
+        setRecordedGpsIn(clockInRecord.location || null);
+      } else {
+        setCheckInTime(null);
+        setCheckInPhoto(null);
+        setRecordedGpsIn(null);
+      }
+
+      if (clockOutRecord) {
+        const outDate = new Date(clockOutRecord.timestamp);
+        setCheckOutTime(outDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
+        setCheckOutPhoto(clockOutRecord.imageUrl || null);
+        setRecordedGpsOut(clockOutRecord.location || null);
+        setAttendanceState("checked_out");
+      } else if (clockInRecord) {
+        setCheckOutTime(null);
+        setCheckOutPhoto(null);
+        setRecordedGpsOut(null);
+        setAttendanceState("checked_in");
+      } else {
+        // Belum presensi hari ini
+        setAttendanceState("checked_out");
+      }
+    } catch (err) {
+      console.error("Gagal mengambil status presensi hari ini:", err);
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  }, [user]);
+
+  // Efek inisialisasi
   useEffect(() => {
     fetchCurrentLocation();
-
-    const savedIn = localStorage.getItem("TODAY_CHECK_IN");
-    const savedOut = localStorage.getItem("TODAY_CHECK_OUT");
-    const savedPhotoIn = localStorage.getItem("TODAY_PHOTO_IN");
-    const savedPhotoOut = localStorage.getItem("TODAY_PHOTO_OUT");
-    const savedGpsIn = localStorage.getItem("TODAY_GPS_IN");
-    const savedGpsOut = localStorage.getItem("TODAY_GPS_OUT");
-
-    if (savedIn && !savedOut) {
-      setAttendanceState("checked_in");
-      setCheckInTime(savedIn);
-      setCheckInPhoto(savedPhotoIn);
-      setRecordedGpsIn(savedGpsIn);
-    } else if (savedIn && savedOut) {
-      setAttendanceState("checked_out");
-      setCheckInTime(savedIn);
-      setCheckOutTime(savedOut);
-      setCheckInPhoto(savedPhotoIn);
-      setCheckOutPhoto(savedPhotoOut);
-      setRecordedGpsIn(savedGpsIn);
-      setRecordedGpsOut(savedGpsOut);
+    if (isLoaded) {
+      loadTodayStatus();
     }
-  }, []);
+  }, [fetchCurrentLocation, isLoaded, loadTodayStatus]);
+
+  // Bersihkan hardware kamera saat unmount
+  useEffect(() => {
+    return () => {
+      stopCameraHardware();
+    };
+  }, [stopCameraHardware]);
 
   // Buka Modal Kamera (Wajib Foto)
   const openAttendanceModal = async (action: "check_in" | "check_out") => {
     setPendingAction(action);
     setTempPhoto(null);
     setIsCameraOpen(true);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch {
-      alert("Akses kamera dibutuhkan untuk bukti foto presensi. Mohon izinkan kamera.");
-      setIsCameraOpen(false);
-    }
+    // Jalankan stream kamera
+    setTimeout(() => {
+      startCamera();
+    }, 50);
   };
 
   const closeAttendanceModal = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
-      videoRef.current.srcObject = null;
-    }
+    stopCameraHardware();
     setIsCameraOpen(false);
     setPendingAction(null);
     setTempPhoto(null);
   };
 
-  // Step 1: Ambil Jepretan Foto Sementara
+  // Step 1: Ambil Jepretan Foto Sementara & LANGSUNG MATIKAN KAMERA
   const snapPhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
@@ -179,83 +251,88 @@ export function AttendanceTracker() {
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg");
+      // Kompresi JPEG 0.6 agar ukuran data ringan dan cepat masuk ke database
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
       setTempPhoto(dataUrl);
+
+      // SANGAT PENTING: Langsung matikan kamera setelah jepret foto agar lampu kamera tidak nyala terus
+      stopCameraHardware();
     }
   };
 
+  // Ulangi Foto: Buka kembali kamera
   const retakePhoto = () => {
     setTempPhoto(null);
+    startCamera();
   };
 
-  // Step 2: Konfirmasi Presensi (Kunci GPS Saat Ini + Foto Bersama)
+  // Step 2: Konfirmasi Presensi & Simpan ke Database
   const submitAttendance = () => {
     if (!tempPhoto) {
-      alert("Wajib mengambil foto selfie terlebih dahulu sebelum presensi!");
+      toast.error("Wajib mengambil foto selfie terlebih dahulu sebelum presensi!");
       return;
     }
 
-    setIsCapturingLocation(true);
+    setIsSubmittingAttendance(true);
 
-    // Dapatkan GPS real-time tepat saat tombol konfirmasi ditekan
-    const finalizeRecord = (lat: number, lng: number) => {
+    const finalizeAndSave = async (lat: number, lng: number) => {
       const dist = calculateDistance(lat, lng, OFFICE_COORDINATES.lat, OFFICE_COORDINATES.lng);
       const isOffice = dist <= OFFICE_COORDINATES.radiusMeters;
       const locationLabel = isOffice ? "Kantor" : "Luar Kantor";
       const gpsRecord = `${locationLabel} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+      const targetType = pendingAction === "check_in" ? "CLOCK_IN" : "CLOCK_OUT";
+      const targetUserId = user?.id || "guest-user";
+      const targetUserName = user?.fullName || user?.username || "Karyawan";
+      const targetUserEmail = user?.primaryEmailAddress?.emailAddress || "";
 
-      if (pendingAction === "check_in") {
-        setAttendanceState("checked_in");
-        setCheckInTime(timeStr);
-        setCheckInPhoto(tempPhoto);
-        setRecordedGpsIn(gpsRecord);
+      try {
+        const res = await submitAttendanceAction({
+          userId: targetUserId,
+          userName: targetUserName,
+          userEmail: targetUserEmail,
+          type: targetType,
+          imageUrl: tempPhoto,
+          location: gpsRecord,
+          note: isOffice ? "Presensi di radius kantor" : `Presensi di luar kantor (${dist}m)`,
+        });
 
-        // Reset data out bila presensi hari baru
-        setCheckOutTime(null);
-        setCheckOutPhoto(null);
-        setRecordedGpsOut(null);
-
-        localStorage.setItem("TODAY_CHECK_IN", timeStr);
-        localStorage.setItem("TODAY_PHOTO_IN", tempPhoto);
-        localStorage.setItem("TODAY_GPS_IN", gpsRecord);
-        localStorage.removeItem("TODAY_CHECK_OUT");
-        localStorage.removeItem("TODAY_PHOTO_OUT");
-        localStorage.removeItem("TODAY_GPS_OUT");
-      } else if (pendingAction === "check_out") {
-        setAttendanceState("checked_out");
-        setCheckOutTime(timeStr);
-        setCheckOutPhoto(tempPhoto);
-        setRecordedGpsOut(gpsRecord);
-
-        localStorage.setItem("TODAY_CHECK_OUT", timeStr);
-        localStorage.setItem("TODAY_PHOTO_OUT", tempPhoto);
-        localStorage.setItem("TODAY_GPS_OUT", gpsRecord);
+        if (res && res.success) {
+          toast.success(
+            pendingAction === "check_in"
+              ? "Presensi Masuk berhasil disimpan ke database!"
+              : "Presensi Pulang berhasil disimpan ke database!"
+          );
+          // Muat ulang data presensi terbaru
+          await loadTodayStatus();
+          closeAttendanceModal();
+        } else {
+          toast.error(res?.error || "Gagal menyimpan presensi ke database.");
+        }
+      } catch (err) {
+        console.error("Gagal submit presensi:", err);
+        toast.error("Terjadi kesalahan saat menyimpan presensi ke database.");
+      } finally {
+        setIsSubmittingAttendance(false);
       }
-
-      setIsCapturingLocation(false);
-      closeAttendanceModal();
     };
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          finalizeRecord(pos.coords.latitude, pos.coords.longitude);
+          finalizeAndSave(pos.coords.latitude, pos.coords.longitude);
         },
         () => {
-          // Fallback ke posisi terakhir jika gagal
           const lat = liveLocation?.lat ?? OFFICE_COORDINATES.lat;
           const lng = liveLocation?.lng ?? OFFICE_COORDINATES.lng;
-          finalizeRecord(lat, lng);
+          finalizeAndSave(lat, lng);
         },
         { enableHighAccuracy: true, timeout: 5000 }
       );
     } else {
       const lat = liveLocation?.lat ?? OFFICE_COORDINATES.lat;
       const lng = liveLocation?.lng ?? OFFICE_COORDINATES.lng;
-      finalizeRecord(lat, lng);
+      finalizeAndSave(lat, lng);
     }
   };
 
@@ -332,10 +409,12 @@ export function AttendanceTracker() {
               </div>
               <div>
                 <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">JAM MASUK (IN)</div>
-                <div className="text-sm font-bold text-white mt-0.5 font-mono">{checkInTime || "--:--"}</div>
+                <div className="text-sm font-bold text-white mt-0.5 font-mono">
+                  {isLoadingStatus ? "--:--" : checkInTime || "--:--"}
+                </div>
               </div>
             </div>
-            {checkInTime && <CheckCircle2 size={15} className="text-zinc-300" />}
+            {checkInTime && <CheckCircle2 size={15} className="text-emerald-400" />}
           </div>
 
           <div className="border-t border-[#27272a] pt-2.5">
@@ -367,10 +446,12 @@ export function AttendanceTracker() {
               </div>
               <div>
                 <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">JAM PULANG (OUT)</div>
-                <div className="text-sm font-bold text-white mt-0.5 font-mono">{checkOutTime || "--:--"}</div>
+                <div className="text-sm font-bold text-white mt-0.5 font-mono">
+                  {isLoadingStatus ? "--:--" : checkOutTime || "--:--"}
+                </div>
               </div>
             </div>
-            {checkOutTime && <CheckCircle2 size={15} className="text-zinc-300" />}
+            {checkOutTime && <CheckCircle2 size={15} className="text-emerald-400" />}
           </div>
 
           <div className="border-t border-[#27272a] pt-2.5">
@@ -398,7 +479,7 @@ export function AttendanceTracker() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-1 gap-3">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            attendanceState === "checked_in" ? "bg-zinc-200" : "bg-zinc-500"
+            attendanceState === "checked_in" ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
           }`} />
           <span className="text-xs text-zinc-300">
             Status: {attendanceState === "checked_in" ? "Checked In (Aktif Bekerja)" : "Checked Out"}
@@ -435,7 +516,10 @@ export function AttendanceTracker() {
                   {pendingAction === "check_in" ? "Verifikasi Presensi Masuk" : "Verifikasi Presensi Pulang"}
                 </h3>
               </div>
-              <button onClick={closeAttendanceModal} className="text-zinc-400 hover:text-white transition cursor-pointer">
+              <button 
+                onClick={closeAttendanceModal} 
+                className="text-zinc-400 hover:text-white transition cursor-pointer p-1"
+              >
                 <X size={16} />
               </button>
             </div>
@@ -461,12 +545,14 @@ export function AttendanceTracker() {
             {!tempPhoto ? (
               <div className="flex gap-2.5">
                 <button
+                  type="button"
                   onClick={closeAttendanceModal}
                   className="flex-1 py-2.5 rounded-xl border border-[#27272a] text-xs font-medium text-zinc-300 hover:bg-[#27272a] transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
+                  type="button"
                   onClick={snapPhoto}
                   className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
                 >
@@ -476,22 +562,25 @@ export function AttendanceTracker() {
             ) : (
               <div className="flex gap-2.5">
                 <button
+                  type="button"
                   onClick={retakePhoto}
-                  className="flex-1 py-2.5 rounded-xl border border-[#27272a] text-xs font-medium text-zinc-300 hover:bg-[#27272a] transition cursor-pointer"
+                  disabled={isSubmittingAttendance}
+                  className="flex-1 py-2.5 rounded-xl border border-[#27272a] text-xs font-medium text-zinc-300 hover:bg-[#27272a] transition cursor-pointer disabled:opacity-50"
                 >
                   Ulangi Foto
                 </button>
                 <button
+                  type="button"
                   onClick={submitAttendance}
-                  disabled={isCapturingLocation}
-                  className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  disabled={isSubmittingAttendance}
+                  className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  {isCapturingLocation ? (
-                    <RefreshCw size={13} className="animate-spin" />
+                  {isSubmittingAttendance ? (
+                    <Loader2 size={13} className="animate-spin" />
                   ) : (
                     <CheckCircle2 size={13} />
                   )}
-                  {isCapturingLocation ? "Mengunci..." : "Kirim Presensi"}
+                  {isSubmittingAttendance ? "Menyimpan ke DB..." : "Kirim Presensi"}
                 </button>
               </div>
             )}

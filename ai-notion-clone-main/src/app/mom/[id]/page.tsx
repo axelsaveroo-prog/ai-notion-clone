@@ -18,64 +18,83 @@ import {
   ExternalLink
 } from "lucide-react";
 
+import { 
+  getMomNoteAction, 
+  saveMomNoteAction, 
+  getCalendarEvents 
+} from "@/actions/actions";
+
 function MomContent({ eventId }: { eventId: string }) {
   const searchParams = useSearchParams();
   const isPublicView = searchParams.get("view") === "public";
 
   const [title, setTitle] = useState("Minutes of Meeting (MoM)");
   const [client, setClient] = useState("APERIO");
-  const [date, setDate] = useState("2026-09-15");
-  const [time, setTime] = useState("10:00");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
   const [content, setContent] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // State Share Modal
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    // Ambil data schedule terkait
-    const savedEvents = localStorage.getItem("SIKA_CALENDAR_EVENTS");
-    if (savedEvents) {
+    async function loadData() {
+      setIsLoading(true);
       try {
-        const events = JSON.parse(savedEvents);
-        const match = events.find((e: any) => e.id === eventId);
-        if (match) {
-          setTitle(`MoM: ${match.title}`);
-          setClient(match.client || "General");
-          setDate(match.date || "2026-09-15");
-          setTime(match.time || "10:00");
+        // Ambil data event dari database
+        const events = await getCalendarEvents();
+        if (events && Array.isArray(events)) {
+          const match = events.find((e: any) => e.id === eventId);
+          if (match) {
+            setTitle(`MoM: ${match.title}`);
+            setClient(match.client || "General");
+            setDate(match.date || "");
+            setTime(match.time || "");
+          }
         }
-      } catch (e) {
-        console.error(e);
+
+        // Ambil realtime MoM note dari Supabase
+        const momData = await getMomNoteAction(eventId);
+        if (momData && momData.content) {
+          setContent(momData.content);
+          if (momData.title) setTitle(momData.title);
+        } else {
+          // Kosongkan agar murni inputan riil user, tanpa teks dummy
+          setContent("");
+        }
+      } catch (err) {
+        console.error("Gagal memuat MoM dari database:", err);
+      } finally {
+        setIsLoading(false);
       }
     }
 
-    // Ambil konten MoM
-    const savedMom = localStorage.getItem(`MOM_NOTES_${eventId}`);
-    if (savedMom) {
-      setContent(savedMom);
-    } else {
-      setContent(`## Agenda Pembahasan
-1. Evaluasi deliverables dan progress campaign client
-2. Review final timeline dan assets delivery
-
-## Keputusan & Kesepakatan Rapat
-• Draft asset disetujui dengan penyesuaian minor
-• Timeline penyerahan final disepakati sesuai jadwal
-
-## Action Items / PIC
-• [@Team Creative] Export master file hi-res
-• [@Client Approval] Konfirmasi preview asset revisi`);
-    }
+    loadData();
   }, [eventId]);
 
-  const handleSaveContent = (val: string) => {
+  const handleSaveContent = async (val: string) => {
     if (isPublicView) return;
     setContent(val);
-    localStorage.setItem(`MOM_NOTES_${eventId}`, val);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 1500);
+    try {
+      await saveMomNoteAction(eventId, val, title);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    } catch (e) {
+      console.error("Gagal menyimpan realtime MoM:", e);
+    }
+  };
+
+  const handleSaveTitle = async (newTitle: string) => {
+    if (isPublicView) return;
+    setTitle(newTitle);
+    try {
+      await saveMomNoteAction(eventId, content, newTitle);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    } catch (e) {}
   };
 
   // URL share khusus klien (dengan parameter ?view=public)
@@ -206,7 +225,7 @@ function MomContent({ eventId }: { eventId: string }) {
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => handleSaveTitle(e.target.value)}
                 className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-white tracking-tight focus:outline-none border-b border-transparent focus:border-zinc-700 pb-1 print:hidden"
                 placeholder="Judul Rapat / MoM..."
               />
@@ -224,14 +243,14 @@ function MomContent({ eventId }: { eventId: string }) {
             <span className="flex items-center gap-2 text-zinc-400 font-medium print:text-zinc-600">
               <CalendarIcon size={14} /> Date:
             </span>
-            <span className="text-zinc-200 font-mono print:text-black">{date}</span>
+            <span className="text-zinc-200 font-mono print:text-black">{date || "-"}</span>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-2 text-zinc-400 font-medium print:text-zinc-600">
               <Clock size={14} /> Time:
             </span>
-            <span className="text-zinc-200 font-mono print:text-black">{time} WIB</span>
+            <span className="text-zinc-200 font-mono print:text-black">{time ? `${time} WIB` : "-"}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -251,14 +270,14 @@ function MomContent({ eventId }: { eventId: string }) {
               Notulen & Hasil Rapat
             </h3>
             <span className="text-[11px] text-zinc-500 font-mono print:text-zinc-500">
-              Verified Studio Notes
+              {isSaved ? "Tersimpan ke Cloud" : "Realtime Studio Notes"}
             </span>
           </div>
 
           {isPublicView ? (
             /* Tampilan Read-Only Bersih */
             <div className="w-full bg-[#18181a]/50 border border-zinc-800/60 rounded-2xl p-6 text-zinc-200 font-mono text-sm leading-relaxed whitespace-pre-wrap print:bg-transparent print:border-none print:p-0 print:text-black print:text-xs">
-              {content}
+              {content || "Belum ada notulen rapat yang ditambahkan."}
             </div>
           ) : (
             <>

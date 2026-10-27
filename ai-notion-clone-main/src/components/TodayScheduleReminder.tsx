@@ -1,17 +1,24 @@
-"use client";
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 import { 
   Clock, 
   Video, 
   FileText, 
   Users, 
-  Sparkles,
-  ExternalLink
+  ExternalLink,
+  MapPin,
+  CheckCircle2,
+  Calendar as CalendarIcon,
+  Check,
+  X as XIcon,
+  HelpCircle
 } from "lucide-react";
+import { getCalendarEvents, respondCalendarEventApprovalAction } from "@/actions/actions";
+import { getGoogleCalendarUrl } from "@/lib/utils";
+import { toast } from "sonner";
 
-interface ScheduleEvent {
+export interface ScheduleEvent {
   id: string;
   title: string;
   client: string;
@@ -19,101 +26,318 @@ interface ScheduleEvent {
   time: string;
   assignees?: string[];
   assignee?: string;
-  meetLink?: string;
+  eventType?: "online" | "offline" | string | null;
+  meetLink?: string | null;
+  location?: string | null;
+  creatorName?: string | null;
+  approvals?: Record<string, string> | any;
 }
 
 export function TodayScheduleReminder() {
+  const { user } = useUser();
   const [todayEvents, setTodayEvents] = useState<ScheduleEvent[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Ambil tanggal lokal hari ini dalam format YYYY-MM-DD
+  // Ambil tanggal lokal hari ini dalam format YYYY-MM-DD
+  const getTodayStr = () => {
     const now = new Date();
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const dd = String(now.getDate()).padStart(2, "0");
-    const todayStr = `${yyyy}-${mm}-${dd}`;
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
-    const saved = localStorage.getItem("SIKA_CALENDAR_EVENTS");
-    if (saved) {
-      try {
-        const events: ScheduleEvent[] = JSON.parse(saved);
-        const filtered = events.filter((ev) => ev.date === todayStr);
-        setTodayEvents(filtered);
-      } catch {
-        setTodayEvents([]);
+  const todayStr = getTodayStr();
+
+  // Load dismissed items from localStorage for today
+  useEffect(() => {
+    try {
+      const savedDismissed = localStorage.getItem(`SIKA_DISMISSED_REMINDERS_${todayStr}`);
+      if (savedDismissed) {
+        setDismissedIds(JSON.parse(savedDismissed));
       }
+    } catch {
+      setDismissedIds([]);
     }
-  }, []);
+  }, [todayStr]);
 
-  // Jika tidak ada agenda di hari ini, komponen tidak merender apa-apa
-  if (todayEvents.length === 0) {
+  // Fetch real events from database
+  const loadEvents = useCallback(async () => {
+    try {
+      const events: any = await getCalendarEvents();
+      if (events && Array.isArray(events)) {
+        const filtered = events.filter((ev: ScheduleEvent) => ev.date === todayStr);
+        setTodayEvents(filtered);
+
+        // Sync ke localStorage agar komponen offline/MoM tetap sinkron
+        try {
+          localStorage.setItem("SIKA_CALENDAR_EVENTS", JSON.stringify(events));
+        } catch {}
+      }
+    } catch (err) {
+      console.error("Gagal memuat jadwal hari ini dari database:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [todayStr]);
+
+  useEffect(() => {
+    loadEvents();
+
+    const handleRefresh = () => loadEvents();
+    window.addEventListener("sika_schedule_updated", handleRefresh);
+    window.addEventListener("storage", handleRefresh);
+
+    return () => {
+      window.removeEventListener("sika_schedule_updated", handleRefresh);
+      window.removeEventListener("storage", handleRefresh);
+    };
+  }, [loadEvents]);
+
+  // Filter jadwal sesuai user yang sedang login atau Team
+  const isEventForCurrentUser = (ev: ScheduleEvent) => {
+    if (!user) return true;
+    if (!ev.assignees || ev.assignees.length === 0) return true;
+
+    const userIdentifiers = [
+      user.fullName?.toLowerCase(),
+      user.firstName?.toLowerCase(),
+      user.username?.toLowerCase(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase(),
+      "you",
+      "team",
+      "all",
+      "entire team",
+      "you & team",
+    ].filter(Boolean) as string[];
+
+    return ev.assignees.some((assignee) => {
+      const a = assignee.toLowerCase().trim();
+      return userIdentifiers.some((idStr) => a === idStr || a.includes(idStr) || idStr.includes(a));
+    });
+  };
+
+  // Response Persetujuan Jadwal oleh Assignee
+  const handleApprovalResponse = async (ev: ScheduleEvent, status: "accepted" | "rejected") => {
+    const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "Member";
+    const res = await respondCalendarEventApprovalAction(ev.id, currentUserName, status);
+    if (res && res.success) {
+      if (status === "accepted") {
+        toast.success(`Jadwal "${ev.title}" berhasil Anda setujui!`);
+        // Otomatis buka Google Calendar untuk user yang menyetujui
+        const gCalUrl = getGoogleCalendarUrl({
+          title: ev.title,
+          date: ev.date,
+          time: ev.time,
+          client: ev.client,
+          assignees: ev.assignees,
+          eventType: ev.eventType,
+          meetLink: ev.meetLink,
+          location: ev.location,
+        });
+        window.open(gCalUrl, "_blank");
+      } else {
+        toast.info(`Anda menolak jadwal "${ev.title}".`);
+      }
+      await loadEvents();
+      window.dispatchEvent(new Event("sika_schedule_updated"));
+    } else {
+      toast.error("Gagal memperbarui status persetujuan.");
+    }
+  };
+
+  // Tandai selesai (menghilangkan reminder)
+  const handleMarkDone = (id: string, title: string) => {
+    const updated = [...dismissedIds, id];
+    setDismissedIds(updated);
+    try {
+      localStorage.setItem(`SIKA_DISMISSED_REMINDERS_${todayStr}`, JSON.stringify(updated));
+    } catch {}
+    toast.success(`Jadwal "${title}" ditandai selesai!`);
+  };
+
+  // Filter out event yang bukan untuk user ini atau sudah ditandai Done
+  const visibleEvents = todayEvents
+    .filter(isEventForCurrentUser)
+    .filter((ev) => !dismissedIds.includes(ev.id));
+
+  // Jika tidak ada agenda yang perlu ditampilkan, sembunyikan bar reminder
+  if (isLoading || visibleEvents.length === 0) {
     return null;
   }
 
   return (
-    <div className="space-y-3">
-      {todayEvents.map((ev) => {
-        const assigneesList = ev.assignees || (ev.assignee ? [ev.assignee] : ["Team"]);
-        const meetUrl = ev.meetLink || "https://meet.google.com/new";
+    <div className="space-y-3 animate-in fade-in duration-300">
+      {visibleEvents.map((ev) => {
+        const assigneesList = ev.assignees && ev.assignees.length > 0 
+          ? ev.assignees 
+          : (ev.assignee ? [ev.assignee] : ["Team"]);
+        
+        const isOnline = ev.eventType !== "offline";
+        const meetUrl = ev.meetLink && ev.meetLink.trim() !== "" 
+          ? ev.meetLink 
+          : "https://meet.google.com/new";
+
+        const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
+        const isCreator = ev.creatorName && (
+          ev.creatorName.toLowerCase() === currentUserName.toLowerCase() ||
+          (user?.fullName && ev.creatorName.toLowerCase() === user.fullName.toLowerCase()) ||
+          (user?.primaryEmailAddress?.emailAddress && ev.creatorName.toLowerCase() === user.primaryEmailAddress.emailAddress.toLowerCase())
+        );
+
+        // Ambil status persetujuan user saat ini
+        const approvalsMap = (ev.approvals as Record<string, string>) || {};
+        const userApprovalStatus = approvalsMap[currentUserName] || (isCreator ? "accepted" : "pending");
+        const needsApproval = !isCreator && userApprovalStatus === "pending";
 
         return (
           <div
             key={ev.id}
-            className="bg-[#141416] border border-amber-500/20 bg-gradient-to-r from-amber-500/[0.04] via-transparent to-transparent p-4 rounded-2xl shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all"
+            className={`group relative bg-[#141416] p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
+              needsApproval
+                ? "border border-amber-600/30 bg-[#161513]"
+                : "border border-zinc-800/80 hover:border-zinc-700 bg-[#141416]"
+            }`}
           >
             {/* Info Jadwal Hari Ini */}
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
-                <Sparkles size={18} />
+            <div className="flex items-start gap-3.5 flex-1 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-zinc-800/80 border border-zinc-700/60 text-zinc-300 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                <CalendarIcon size={18} className="text-zinc-300" />
               </div>
-              <div>
+
+              <div className="space-y-1.5 flex-1 min-w-0">
+                {/* Baris Atas: HANYA Badge Jadwal, Status Online/Offline, dan Status Persetujuan */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  <span className="text-[10px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded bg-[#22201d] text-[#ded2be] border border-[#383329]">
                     Schedule Hari Ini
                   </span>
-                  <span className="text-xs text-zinc-400 font-mono flex items-center gap-1">
-                    <Clock size={12} /> {ev.time} WIB
-                  </span>
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-                    {ev.client}
-                  </span>
+                  
+                  {isOnline ? (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#1c1e22] text-[#c5c9d1] border border-[#2c3038] flex items-center gap-1">
+                      <Video size={11} /> Online Meeting
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#1d221f] text-[#c4d2c8] border border-[#2b352e] flex items-center gap-1">
+                      <MapPin size={11} /> Offline Meeting
+                    </span>
+                  )}
+
+                  {/* Badge Persetujuan Assignee */}
+                  {needsApproval ? (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#24211c] text-[#ded0b6] border border-[#3d3426] flex items-center gap-1">
+                      <HelpCircle size={11} /> Menunggu Persetujuan Anda
+                    </span>
+                  ) : userApprovalStatus === "accepted" ? (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#1d221f] text-[#c4d2c8] border border-[#2b352e] flex items-center gap-1">
+                      <Check size={11} /> Disetujui
+                    </span>
+                  ) : userApprovalStatus === "rejected" ? (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#241e1e] text-[#d9c4c4] border border-[#3a2c2c] flex items-center gap-1">
+                      <XIcon size={11} /> Ditolak
+                    </span>
+                  ) : null}
                 </div>
 
-                <h3 className="text-sm font-semibold text-white mt-1">
+                {/* Judul Jadwal */}
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight break-words">
                   {ev.title}
                 </h3>
 
-                <div className="flex items-center gap-2 mt-1 text-[11px] text-zinc-400">
-                  <Users size={12} />
-                  <span>Tag: {assigneesList.join(", ")}</span>
+                {/* Informasi Schedule DI BAWAH JUDUL */}
+                <div className="flex items-center gap-2.5 text-[11px] text-zinc-400 flex-wrap pt-0.5">
+                  <span className="text-xs text-zinc-200 font-mono flex items-center gap-1 bg-zinc-800/80 px-2 py-0.5 rounded border border-zinc-700/60">
+                    <Clock size={12} className="text-amber-400" /> {ev.time} WIB
+                  </span>
+
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700">
+                    {ev.client}
+                  </span>
+
+                  <span className="flex items-center gap-1 text-zinc-400">
+                    <Users size={12} className="text-zinc-500" />
+                    <span>Tag: {assigneesList.join(", ")}</span>
+                  </span>
+
+                  {!isOnline && ev.location && (
+                    <span className="flex items-center gap-1 text-zinc-300 font-medium">
+                      <MapPin size={12} className="text-emerald-400" />
+                      <span>{ev.location}</span>
+                    </span>
+                  )}
+
+                  {ev.creatorName && (
+                    <span className="text-[10px] text-zinc-500">
+                      (Dibuat oleh: {ev.creatorName})
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Tombol Aksi MoM Page & GMeet */}
-            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            {/* Tombol Aksi: Persetujuan (jika perlu), MoM, GMeet, dan Selesai */}
+            <div className="flex items-center gap-2 shrink-0 self-end md:self-center flex-wrap">
+              {/* Tombol Persetujuan Khusus Assignee yang Di-tag */}
+              {needsApproval && (
+                <div className="flex items-center gap-1.5 bg-zinc-900/90 p-1 rounded-xl border border-amber-500/40">
+                  <button
+                    type="button"
+                    onClick={() => handleApprovalResponse(ev, "accepted")}
+                    className="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1 transition shadow cursor-pointer active:scale-95"
+                    title="Setujui jadwal ini dan sync ke Google Calendar Anda"
+                  >
+                    <Check size={12} />
+                    <span>Terima Jadwal</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApprovalResponse(ev, "rejected")}
+                    className="h-7 px-2 rounded-lg bg-zinc-800 hover:bg-rose-950/80 hover:text-rose-300 text-zinc-400 text-xs flex items-center gap-1 transition cursor-pointer active:scale-95"
+                    title="Tolak jadwal ini"
+                  >
+                    <XIcon size={12} />
+                    <span>Tolak</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Tombol Notulen MoM */}
               <Link
                 href={`/mom/${ev.id}`}
-                className="h-8 px-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                className="h-8 px-3 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
               >
                 <FileText size={13} className="text-zinc-300" />
                 <span>Notulen (MoM)</span>
               </Link>
 
-              <a
-                href={meetUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="h-8 px-3 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              {/* Tombol Join GMeet - HANYA TAMPIL JIKA ONLINE */}
+              {isOnline && (
+                <a
+                  href={meetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 px-3.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+                >
+                  <Video size={13} className="text-black" />
+                  <span>Join GMeet</span>
+                  <ExternalLink size={11} className="opacity-60" />
+                </a>
+              )}
+
+              {/* Tombol Centang / Done untuk Menghilangkan Reminder */}
+              <button
+                type="button"
+                onClick={() => handleMarkDone(ev.id, ev.title)}
+                title="Tandai Selesai (Hilangkan reminder ini)"
+                className="h-8 px-3 rounded-xl bg-zinc-900/90 hover:bg-emerald-950/60 hover:text-emerald-300 hover:border-emerald-700/60 text-zinc-400 border border-zinc-800 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
               >
-                <Video size={13} />
-                <span>Join GMeet</span>
-                <ExternalLink size={11} className="opacity-60" />
-              </a>
+                <CheckCircle2 size={13} className="text-emerald-500" />
+                <span>Done</span>
+              </button>
             </div>
           </div>
         );
       })}
     </div>
   );
-}
+}

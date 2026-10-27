@@ -44,34 +44,88 @@ export async function syncUserAction() {
 
 export async function getUsersAction() {
   try {
-    // Ambil daftar seluruh user terdaftar langsung dari Clerk SDK
-    const response = await clerkClient.users.getUserList();
-    
-    return response.data.map((u) => {
-      const fullName = `${u.firstName || ""} ${u.lastName || ""}`.trim();
-      const displayName = fullName || u.username || u.emailAddresses[0]?.emailAddress || "Member";
-      return {
-        id: u.id,
-        name: displayName,
-        email: u.emailAddresses[0]?.emailAddress || "",
-      };
+    // 1. Ambil user terdaftar dari database Supabase
+    const dbUsers = await prisma.user.findMany({
+      orderBy: { name: "asc" },
     });
-  } catch (error) {
-    console.error("Gagal mengambil data users dari Clerk:", error);
-    // Fallback ambil dari database jika Clerk SDK gagal
+
+    const userMap = new Map<string, { id: string; name: string; email: string }>();
+
+    // Masukkan data dari database
+    dbUsers.forEach((u) => {
+      if (u.name) {
+        userMap.set(u.id, {
+          id: u.id,
+          name: u.name,
+          email: u.email || "",
+        });
+      }
+    });
+
+    // 2. Tambahkan/lengkapi dari Clerk SDK jika tersedia
     try {
-      return await prisma.user.findMany({
-        orderBy: { name: "asc" },
+      const response = await clerkClient.users.getUserList();
+      response.data.forEach((u) => {
+        const fullName = `${u.firstName || ""} ${u.lastName || ""}`.trim();
+        const displayName = fullName || u.username || u.emailAddresses[0]?.emailAddress || "Member";
+        userMap.set(u.id, {
+          id: u.id,
+          name: displayName,
+          email: u.emailAddresses[0]?.emailAddress || "",
+        });
       });
-    } catch (dbErr) {
-      return [];
+    } catch (clerkErr) {
+      console.warn("Clerk getUserList warning:", clerkErr);
     }
+
+    return Array.from(userMap.values());
+  } catch (error) {
+    console.error("Gagal mengambil data users:", error);
+    return [];
   }
 }
 
 // ==========================================
 // 2. DOCUMENT ACTIONS (NOTION CLONE)
 // ==========================================
+
+export async function createNewDocumentAction() {
+  try {
+    const { userId } = await auth();
+    if (!userId) return null;
+
+    const doc = await prisma.document.create({
+      data: {
+        title: "Untitled Document",
+        usersToDocuments: {
+          create: {
+            userId,
+            role: "owner",
+          },
+        },
+      },
+    });
+
+    revalidatePath("/");
+    return doc.id;
+  } catch (error) {
+    console.error("Gagal membuat dokumen baru:", error);
+    return null;
+  }
+}
+
+export async function fetchDocumentsFromUser(userId: string) {
+  try {
+    const userDocs = await prisma.usersToDocument.findMany({
+      where: { userId },
+      include: { document: true },
+    });
+    return userDocs.map((item) => item.document);
+  } catch (error) {
+    console.error("Gagal mengambil dokumen user:", error);
+    return [];
+  }
+}
 
 export async function deleteDocumentAction(docId: string) {
   try {
@@ -147,8 +201,109 @@ export async function fetchUsersFromDocument(docId: string) {
 }
 
 // ==========================================
-// 3. CHATBOX ACTIONS
+// 3. CHATBOX ACTIONS (REAL GROUPS & DIRECT MESSAGES)
 // ==========================================
+
+export async function getChatChannelsAction(currentUserId?: string) {
+  try {
+    let channels = await prisma.chatChannel.findMany({
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Jika belum ada channel sama sekali, seed channel #general sebagai default
+    if (channels.length === 0) {
+      const defaultGeneral = await prisma.chatChannel.create({
+        data: {
+          id: "general",
+          name: "general",
+          type: "group",
+          description: "Saluran utama tim Sika Creative",
+          members: [],
+        },
+      });
+      channels = [defaultGeneral];
+    }
+
+    return channels;
+  } catch (error) {
+    console.error("Gagal mengambil saluran chat:", error);
+    return [];
+  }
+}
+
+export async function createChatGroupAction(data: {
+  name: string;
+  description?: string;
+  members: string[];
+  createdById?: string;
+}) {
+  try {
+    const formattedName = data.name.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!formattedName) return { success: false, error: "Nama grup tidak boleh kosong" };
+
+    const newChannel = await prisma.chatChannel.create({
+      data: {
+        id: "group_" + crypto.randomUUID(),
+        name: formattedName,
+        type: "group",
+        description: data.description || "",
+        members: data.members || [],
+        createdById: data.createdById || null,
+      },
+    });
+
+    return { success: true, channel: newChannel };
+  } catch (error: any) {
+    console.error("Gagal membuat grup chat:", error);
+    return { success: false, error: error?.message || "Gagal membuat grup chat" };
+  }
+}
+
+export async function getOrCreateDirectChannelAction(
+  user1Id: string,
+  user1Name: string,
+  user2Id: string,
+  user2Name: string
+) {
+  try {
+    const sortedIds = [user1Id, user2Id].sort();
+    const channelId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
+
+    let channel = await prisma.chatChannel.findUnique({
+      where: { id: channelId },
+    });
+
+    if (!channel) {
+      channel = await prisma.chatChannel.create({
+        data: {
+          id: channelId,
+          name: `${user1Name} & ${user2Name}`,
+          type: "direct",
+          members: [user1Id, user2Id],
+        },
+      });
+    }
+
+    return { success: true, channel };
+  } catch (error: any) {
+    console.error("Gagal membuat/mengambil DM channel:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+export async function deleteChatChannelAction(channelId: string) {
+  try {
+    if (channelId === "general") {
+      return { success: false, error: "Channel default tidak dapat dihapus" };
+    }
+    await prisma.chatMessage.deleteMany({ where: { channelId } });
+    await prisma.chatChannel.delete({ where: { id: channelId } });
+    return { success: true };
+  } catch (error: any) {
+    console.error("Gagal menghapus channel:", error);
+    return { success: false, error: error?.message };
+  }
+}
 
 export async function getChatMessages(channelId: string) {
   try {
@@ -165,13 +320,31 @@ export async function getChatMessages(channelId: string) {
 export async function sendChatMessage(data: {
   channelId: string;
   sender: string;
+  senderId?: string;
+  senderImage?: string;
   text?: string;
   fileUrl?: string;
   fileType?: string;
 }) {
-  const newMsg = await prisma.chatMessage.create({ data });
-  return newMsg;
+  try {
+    const newMsg = await prisma.chatMessage.create({
+      data: {
+        channelId: data.channelId,
+        sender: data.sender,
+        senderId: data.senderId || null,
+        senderImage: data.senderImage || null,
+        text: data.text || null,
+        fileUrl: data.fileUrl || null,
+        fileType: data.fileType || null,
+      },
+    });
+    return { success: true, message: newMsg };
+  } catch (error: any) {
+    console.error("Gagal menyimpan chat:", error);
+    return { success: false, error: error?.message };
+  }
 }
+
 
 // ==========================================
 // 4. ATTENDANCE / PRESENSI ACTIONS
@@ -259,8 +432,23 @@ export async function createCalendarEvent(data: {
   date: string;
   time: string;
   assignees: string[];
+  eventType?: "online" | "offline" | string | null;
+  meetLink?: string | null;
+  location?: string | null;
+  creatorName?: string | null;
 }) {
   try {
+    // Siapkan initial approval status
+    const initialApprovals: Record<string, string> = {};
+    if (data.creatorName) {
+      initialApprovals[data.creatorName] = "accepted";
+    }
+    data.assignees.forEach((assignee) => {
+      if (assignee !== data.creatorName && assignee !== "You") {
+        initialApprovals[assignee] = "pending";
+      }
+    });
+
     const event = await prisma.calendarEvent.create({
       data: {
         id: crypto.randomUUID(),
@@ -269,10 +457,16 @@ export async function createCalendarEvent(data: {
         date: data.date,
         time: data.time,
         assignees: data.assignees,
+        eventType: data.eventType || "online",
+        meetLink: data.meetLink || null,
+        location: data.location || null,
+        creatorName: data.creatorName || null,
+        approvals: initialApprovals,
       },
     });
 
     revalidatePath("/calendar");
+    revalidatePath("/");
     return { success: true, event };
   } catch (error: any) {
     console.error("Gagal createCalendarEvent:", error);
@@ -291,6 +485,10 @@ export async function updateCalendarEvent(
     date: string;
     time: string;
     assignees: string[];
+    eventType?: "online" | "offline" | string | null;
+    meetLink?: string | null;
+    location?: string | null;
+    creatorName?: string | null;
   }
 ) {
   try {
@@ -302,10 +500,15 @@ export async function updateCalendarEvent(
         date: data.date,
         time: data.time,
         assignees: data.assignees,
+        eventType: data.eventType || "online",
+        meetLink: data.meetLink || null,
+        location: data.location || null,
+        ...(data.creatorName ? { creatorName: data.creatorName } : {}),
       },
     });
 
     revalidatePath("/calendar");
+    revalidatePath("/");
     return { success: true, updated };
   } catch (error: any) {
     console.error("Gagal updateCalendarEvent:", error);
@@ -313,6 +516,34 @@ export async function updateCalendarEvent(
       success: false, 
       error: error?.message || "Gagal mengupdate jadwal di database." 
     };
+  }
+}
+
+export async function respondCalendarEventApprovalAction(
+  eventId: string,
+  userName: string,
+  status: "accepted" | "rejected"
+) {
+  try {
+    const ev = await prisma.calendarEvent.findUnique({
+      where: { id: eventId },
+    });
+    if (!ev) return { success: false, error: "Jadwal tidak ditemukan" };
+
+    const currentApprovals = ((ev.approvals as Record<string, string>) || {});
+    currentApprovals[userName] = status;
+
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: { approvals: currentApprovals },
+    });
+
+    revalidatePath("/calendar");
+    revalidatePath("/");
+    return { success: true, status };
+  } catch (error: any) {
+    console.error("Gagal update persetujuan jadwal:", error);
+    return { success: false, error: error?.message };
   }
 }
 
@@ -335,9 +566,287 @@ export async function deleteCalendarEvent(id: string) {
     });
 
     revalidatePath("/calendar");
+    revalidatePath("/");
     return { success: true };
   } catch (error) {
     console.error("Gagal menghapus event kalender:", error);
     return { success: false, error: "Gagal menghapus jadwal." };
+  }
+}
+
+// ==========================================
+// 6. REALTIME TASK & BRIEF ACTIONS
+// ==========================================
+
+export async function getTasksAction() {
+  try {
+    const tasks = await prisma.task.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    return tasks;
+  } catch (error) {
+    console.error("Gagal mengambil tasks dari database:", error);
+    return [];
+  }
+}
+
+export async function getTaskByIdAction(id: string) {
+  try {
+    const task = await prisma.task.findUnique({
+      where: { id },
+    });
+    return task;
+  } catch (error) {
+    console.error("Gagal mengambil task by id:", error);
+    return null;
+  }
+}
+
+export async function createTaskAction(data?: {
+  title?: string;
+  client?: string;
+  type?: string;
+  status?: string;
+  assignee?: string;
+  assignedBy?: string;
+  dueDate?: string;
+  brief?: string;
+}) {
+  try {
+    const newTask = await prisma.task.create({
+      data: {
+        id: crypto.randomUUID(),
+        title: data?.title?.trim() || "Untitled Task",
+        client: data?.client || "General",
+        type: data?.type || "Feeds",
+        status: data?.status || "todo",
+        assignee: data?.assignee || "Member",
+        assignedBy: data?.assignedBy || null,
+        dueDate: data?.dueDate || null,
+        brief: data?.brief || "",
+      },
+    });
+
+    revalidatePath("/tasks");
+    revalidatePath("/");
+    return { success: true, task: newTask };
+  } catch (error: any) {
+    console.error("Gagal membuat task baru:", error);
+    return { success: false, error: error?.message || "Gagal membuat task." };
+  }
+}
+
+export async function updateTaskStatusAction(id: string, status: "todo" | "in_progress" | "done") {
+  try {
+    const updated = await prisma.task.update({
+      where: { id },
+      data: { status },
+    });
+
+    revalidatePath("/tasks");
+    revalidatePath("/");
+    return { success: true, task: updated };
+  } catch (error: any) {
+    console.error("Gagal update status task:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+export async function updateTaskAction(
+  id: string,
+  data: {
+    title?: string;
+    client?: string;
+    type?: string;
+    status?: string;
+    assignee?: string;
+    dueDate?: string;
+    brief?: string;
+  }
+) {
+  try {
+    const updated = await prisma.task.update({
+      where: { id },
+      data: {
+        ...(data.title ? { title: data.title } : {}),
+        ...(data.client ? { client: data.client } : {}),
+        ...(data.type ? { type: data.type } : {}),
+        ...(data.status ? { status: data.status } : {}),
+        ...(data.assignee ? { assignee: data.assignee } : {}),
+        ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
+        ...(data.brief !== undefined ? { brief: data.brief } : {}),
+      },
+    });
+
+    revalidatePath("/tasks");
+    return { success: true, task: updated };
+  } catch (error: any) {
+    console.error("Gagal update task:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+export async function deleteTaskAction(id: string) {
+  try {
+    await prisma.task.delete({ where: { id } });
+    revalidatePath("/tasks");
+    revalidatePath("/");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Gagal delete task:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+// ==========================================
+// 7. REALTIME NOTULEN MOM (MINUTES OF MEETING)
+// ==========================================
+
+export async function getMomNoteAction(eventId: string) {
+  try {
+    const note = await prisma.momNote.findUnique({
+      where: { eventId },
+    });
+    return note;
+  } catch (error) {
+    console.error("Gagal mengambil notulen MoM:", error);
+    return null;
+  }
+}
+
+export async function saveMomNoteAction(eventId: string, content: string, title?: string) {
+  try {
+    const note = await prisma.momNote.upsert({
+      where: { eventId },
+      update: {
+        content,
+        ...(title ? { title } : {}),
+      },
+      create: {
+        id: crypto.randomUUID(),
+        eventId,
+        title: title || "Minutes of Meeting",
+        content,
+      },
+    });
+
+    revalidatePath(`/mom/${eventId}`);
+    return { success: true, note };
+  } catch (error: any) {
+    console.error("Gagal menyimpan notulen MoM:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+// ==========================================
+// 8. CLIENT ACTIONS
+// ==========================================
+
+export async function getClientsAction() {
+  try {
+    let clients = await prisma.client.findMany({
+      orderBy: { name: "asc" },
+    });
+
+    // Seed default clients jika database masih kosong
+    if (clients.length === 0) {
+      const defaults = [
+        { name: "AKASA LAND", color: "sky" },
+        { name: "APERIO", color: "indigo" },
+        { name: "BALI FINE GALLERY", color: "teal" },
+        { name: "WEARLUCA", color: "sage" },
+        { name: "General", color: "slate" },
+      ];
+      for (const d of defaults) {
+        await prisma.client.upsert({
+          where: { name: d.name },
+          update: {},
+          create: { id: crypto.randomUUID(), name: d.name, color: d.color },
+        });
+      }
+      clients = await prisma.client.findMany({ orderBy: { name: "asc" } });
+    }
+
+    return clients;
+  } catch (error) {
+    console.error("Gagal mengambil data clients:", error);
+    return [];
+  }
+}
+
+export async function createClientAction(data: { name: string; color?: string }) {
+  try {
+    const trimmedName = data.name.trim();
+    if (!trimmedName) return { success: false, error: "Nama client tidak boleh kosong" };
+
+    const client = await prisma.client.upsert({
+      where: { name: trimmedName },
+      update: {
+        ...(data.color ? { color: data.color } : {}),
+      },
+      create: {
+        id: crypto.randomUUID(),
+        name: trimmedName,
+        color: data.color || "slate",
+      },
+    });
+
+    revalidatePath("/tasks");
+    revalidatePath("/calendar");
+    return { success: true, client };
+  } catch (error: any) {
+    console.error("Gagal membuat/update client:", error);
+    return { success: false, error: error?.message || "Gagal menyimpan client." };
+  }
+}
+
+export async function updateClientAction(id: string, data: { name: string; color: string }) {
+  try {
+    const trimmedName = data.name.trim();
+    if (!trimmedName) return { success: false, error: "Nama client tidak boleh kosong" };
+
+    const existing = await prisma.client.findUnique({ where: { id } });
+    if (!existing) return { success: false, error: "Client tidak ditemukan" };
+
+    const oldName = existing.name;
+
+    const updated = await prisma.client.update({
+      where: { id },
+      data: {
+        name: trimmedName,
+        color: data.color,
+      },
+    });
+
+    // Perbarui nama client di semua task dan jadwal kalender terkait jika nama berubah
+    if (oldName !== trimmedName) {
+      await prisma.task.updateMany({
+        where: { client: oldName },
+        data: { client: trimmedName },
+      });
+      await prisma.calendarEvent.updateMany({
+        where: { client: oldName },
+        data: { client: trimmedName },
+      });
+    }
+
+    revalidatePath("/tasks");
+    revalidatePath("/calendar");
+    return { success: true, client: updated };
+  } catch (error: any) {
+    console.error("Gagal update client:", error);
+    return { success: false, error: error?.message || "Gagal mengupdate client." };
+  }
+}
+
+export async function deleteClientAction(id: string) {
+  try {
+    await prisma.client.delete({ where: { id } });
+    revalidatePath("/tasks");
+    revalidatePath("/calendar");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Gagal menghapus client:", error);
+    return { success: false, error: error?.message };
   }
 }

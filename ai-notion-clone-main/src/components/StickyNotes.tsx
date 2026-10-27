@@ -38,7 +38,7 @@ export function StickyNotes() {
       setNotes([
         {
           id: "default-note-1",
-          text: "📌 Reminder: Review draft video reels Wearluca sebelum jam 4 sore.",
+          text: "Reminder: Review draft video reels Wearluca sebelum jam 4 sore.",
           x: 40,
           y: 120,
           color: "bg-[#272015] border-amber-900/60",

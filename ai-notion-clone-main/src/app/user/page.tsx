@@ -1,6 +1,7 @@
 import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import { AttendanceTracker } from "@/components/AttendanceTracker";
 import { MobileContainer } from "@/components/MobileContainer";
+import { MapPin } from "lucide-react";
 
 export default function UserPage() {
   return (
@@ -20,7 +21,7 @@ export default function UserPage() {
           <div>
             <SignedOut>
               <SignInButton mode="modal">
-                <button className="bg-[#f97316] text-black font-semibold px-4 py-2 rounded-xl text-xs hover:bg-orange-600 transition-colors">
+                <button className="bg-zinc-800 text-white border border-zinc-700 font-semibold px-4 py-2 rounded-xl text-xs hover:bg-zinc-700 transition-colors">
                   Sign In
                 </button>
               </SignInButton>
@@ -33,7 +34,10 @@ export default function UserPage() {
 
         {/* Attendance Tracker Card */}
         <div className="bg-[#161618] border border-[#27272a] p-6 rounded-3xl shadow-xl">
-          <h3 className="font-bold text-lg text-white mb-3">📍 Live GPS Attendance</h3>
+          <div className="flex items-center gap-2 mb-3">
+            <MapPin size={18} className="text-zinc-400" />
+            <h3 className="font-bold text-lg text-white">Live GPS Attendance</h3>
+          </div>
           <AttendanceTracker />
         </div>
       </div>

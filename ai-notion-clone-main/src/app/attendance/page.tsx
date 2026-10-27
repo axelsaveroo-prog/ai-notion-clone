@@ -111,8 +111,19 @@ export default function AttendancePage() {
       setCapturedPhoto(photoData);
       
       // KAMERA LANGSUNG DIMATIKAN
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+        videoRef.current.srcObject = null;
+      }
       if (streamInstance) {
-        streamInstance.getTracks().forEach((track) => track.stop());
+        streamInstance.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
         setStreamInstance(null);
       }
       setIsCameraActive(false);

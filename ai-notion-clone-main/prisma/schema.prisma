@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model ScheduleEvent {
@@ -18,14 +19,30 @@ model ScheduleEvent {
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
-  channelId String
-  sender    String
-  text      String?
-  fileUrl   String?
-  fileType  String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  channelId   String
+  sender      String
+  senderId    String?
+  senderImage String?
+  text        String?
+  fileUrl     String?
+  fileType    String?
+  createdAt   DateTime @default(now())
+
+  @@index([channelId])
+  @@index([createdAt])
 }
+
+model ChatChannel {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   @default("group") // "group" | "direct"
+  description String?
+  members     String[] // User IDs or names
+  createdById String?
+  createdAt   DateTime @default(now())
+}
+
 
 model Attendance {
   id        String   @id @default(cuid())
@@ -44,11 +61,75 @@ model Attendance {
 }
 
 model CalendarEvent {
+  id          String   @id @default(cuid())
+  title       String
+  client      String
+  date        String
+  time        String
+  assignees   String[]
+  eventType   String?  @default("online")
+  meetLink    String?
+  location    String?
+  creatorName String?
+  approvals   Json?    // Menyimpan status persetujuan assignee: { [userName]: "pending" | "accepted" | "rejected" }
+  createdAt   DateTime @default(now())
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  client      String   @default("General")
+  type        String?  @default("Feeds")
+  status      String   @default("todo") // "todo" | "in_progress" | "done"
+  assignee    String?  @default("You")
+  assignedBy  String?
+  dueDate     String?
+  brief       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MomNote {
   id        String   @id @default(cuid())
-  title     String
-  client    String
-  date      String
-  time      String
-  assignees String[]
+  eventId   String   @unique
+  title     String?
+  content   String   @db.Text
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("slate")
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id               String            @id
+  email            String            @unique
+  name             String
+  imageUrl         String?
+  createdAt        DateTime          @default(now())
+  usersToDocuments UsersToDocument[]
+}
+
+model Document {
+  id               String            @id @default(uuid())
+  title            String            @default("New Doc")
+  createdAt        DateTime          @default(now())
+  usersToDocuments UsersToDocument[]
+}
+
+model UsersToDocument {
+  id         String   @id @default(cuid())
+  documentId String
+  userId     String
+  role       String   @default("editor")
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
 }
