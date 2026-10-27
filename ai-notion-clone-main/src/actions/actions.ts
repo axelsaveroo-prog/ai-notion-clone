@@ -4,6 +4,7 @@
 import { auth, currentUser, createClerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { ensureDatabaseTables } from "@/lib/ensure-db";
 
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
@@ -15,6 +16,7 @@ const clerkClient = createClerkClient({
 
 export async function syncUserAction() {
   try {
+    await ensureDatabaseTables();
     const { userId } = await auth();
     const user = await currentUser();
 
@@ -44,38 +46,68 @@ export async function syncUserAction() {
 
 export async function getUsersAction() {
   try {
-    // 1. Ambil user terdaftar dari database Supabase
-    const dbUsers = await prisma.user.findMany({
-      orderBy: { name: "asc" },
-    });
+    await ensureDatabaseTables();
 
-    const userMap = new Map<string, { id: string; name: string; email: string }>();
+    const userMap = new Map<string, { id: string; name: string; email: string; imageUrl?: string }>();
 
-    // Masukkan data dari database
-    dbUsers.forEach((u) => {
-      if (u.name) {
-        userMap.set(u.id, {
-          id: u.id,
-          name: u.name,
-          email: u.email || "",
+    // 1. Sinkronkan seluruh user dari Clerk REST API jika CLERK_SECRET_KEY ada
+    if (process.env.CLERK_SECRET_KEY) {
+      try {
+        const res = await fetch("https://api.clerk.com/v1/users?limit=100", {
+          headers: {
+            Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
+          },
+          cache: "no-store",
         });
+
+        if (res.ok) {
+          const clerkData = await res.json();
+          if (Array.isArray(clerkData)) {
+            for (const u of clerkData) {
+              const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+              const displayName = fullName || u.username || u.email_addresses?.[0]?.email_address || "Member";
+              const email = u.email_addresses?.[0]?.email_address || "";
+              const imageUrl = u.image_url || "";
+
+              userMap.set(u.id, {
+                id: u.id,
+                name: displayName,
+                email,
+                imageUrl,
+              });
+
+              // Upsert otomatis ke database Postgres
+              prisma.user.upsert({
+                where: { id: u.id },
+                update: { name: displayName, email, imageUrl },
+                create: { id: u.id, name: displayName, email, imageUrl },
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch (clerkErr) {
+        console.warn("Clerk REST API warning:", clerkErr);
       }
-    });
+    }
 
-    // 2. Tambahkan/lengkapi dari Clerk SDK jika tersedia
+    // 2. Ambil seluruh user terdaftar dari database Supabase / Postgres
     try {
-      const response = await clerkClient.users.getUserList();
-      response.data.forEach((u) => {
-        const fullName = `${u.firstName || ""} ${u.lastName || ""}`.trim();
-        const displayName = fullName || u.username || u.emailAddresses[0]?.emailAddress || "Member";
-        userMap.set(u.id, {
-          id: u.id,
-          name: displayName,
-          email: u.emailAddresses[0]?.emailAddress || "",
-        });
+      const dbUsers = await prisma.user.findMany({
+        orderBy: { name: "asc" },
       });
-    } catch (clerkErr) {
-      console.warn("Clerk getUserList warning:", clerkErr);
+
+      dbUsers.forEach((u) => {
+        if (u.id && !userMap.has(u.id)) {
+          userMap.set(u.id, {
+            id: u.id,
+            name: u.name || u.email || "Member",
+            email: u.email || "",
+            imageUrl: u.imageUrl || "",
+          });
+        }
+      });
+    } catch (dbErr) {
+      console.warn("Prisma user.findMany warning:", dbErr);
     }
 
     return Array.from(userMap.values());
@@ -206,6 +238,7 @@ export async function fetchUsersFromDocument(docId: string) {
 
 export async function getChatChannelsAction(currentUserId?: string) {
   try {
+    await ensureDatabaseTables();
     let channels = await prisma.chatChannel.findMany({
       orderBy: { createdAt: "asc" },
     });
@@ -327,6 +360,7 @@ export async function sendChatMessage(data: {
   fileType?: string;
 }) {
   try {
+    await ensureDatabaseTables();
     const newMsg = await prisma.chatMessage.create({
       data: {
         channelId: data.channelId,
@@ -580,6 +614,7 @@ export async function deleteCalendarEvent(id: string) {
 
 export async function getTasksAction() {
   try {
+    await ensureDatabaseTables();
     const tasks = await prisma.task.findMany({
       orderBy: { createdAt: "desc" },
     });
@@ -613,6 +648,7 @@ export async function createTaskAction(data?: {
   brief?: string;
 }) {
   try {
+    await ensureDatabaseTables();
     const newTask = await prisma.task.create({
       data: {
         id: crypto.randomUUID(),

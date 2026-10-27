@@ -10,7 +10,8 @@ import {
   createChatGroupAction, 
   getOrCreateDirectChannelAction,
   deleteChatChannelAction,
-  getUsersAction 
+  getUsersAction,
+  syncUserAction
 } from "@/actions/actions";
 import { 
   MessageSquare, 
@@ -102,6 +103,7 @@ export function TeamChatSidebar() {
   // 1. Fetch real channels & registered users dari DB
   const loadInitialChatData = async () => {
     try {
+      await syncUserAction();
       const [fetchedChannels, fetchedUsers] = await Promise.all([
         getChatChannelsAction(currentUserId),
         getUsersAction(),
@@ -125,6 +127,16 @@ export function TeamChatSidebar() {
   useEffect(() => {
     loadInitialChatData();
   }, [currentUserId]);
+
+  // Refresh saat sidebar dibuka
+  useEffect(() => {
+    if (isOpen) {
+      loadInitialChatData();
+      if (activeChannelId) {
+        loadMessages(activeChannelId);
+      }
+    }
+  }, [isOpen]);
 
   // Set default selected member saat modal dibuka (termasuk user sendiri)
   useEffect(() => {
@@ -198,18 +210,26 @@ export function TeamChatSidebar() {
       console.warn("Supabase realtime tidak aktif, menggunakan fallback polling.");
     }
 
-    // Polling fallback setiap 4 detik saat sidebar terbuka agar obrolan antar user real-time
+    // Polling cepat setiap 2.5 detik saat sidebar terbuka agar obrolan antar user real-time
     const interval = setInterval(() => {
       if (isOpen && activeChannelId) {
         loadMessages(activeChannelId);
       }
-    }, 4000);
+    }, 2500);
+
+    // Refresh daftar user / grup baru setiap 6 detik
+    const usersInterval = setInterval(() => {
+      if (isOpen) {
+        loadInitialChatData();
+      }
+    }, 6000);
 
     return () => {
       if (channelSubscription) {
         try { supabase.removeChannel(channelSubscription); } catch (e) {}
       }
       clearInterval(interval);
+      clearInterval(usersInterval);
     };
   }, [activeChannelId, currentUserId, currentUserName, isOpen]);
 
@@ -307,9 +327,13 @@ export function TeamChatSidebar() {
 
       if (!res.success) {
         console.error("Gagal mengirim pesan:", res.error);
+        alert("Gagal mengirim pesan: " + (res.error || "Gagal menyimpan pesan ke database"));
+      } else {
+        loadMessages(activeChannelId);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gagal mengirim pesan:", error);
+      alert("Gagal mengirim pesan: " + (error?.message || "Koneksi terputus"));
     } finally {
       setIsSending(false);
     }
