@@ -90,6 +90,7 @@ const DDL_STATEMENTS = [
     "email" TEXT NOT NULL UNIQUE,
     "name" TEXT NOT NULL,
     "imageUrl" TEXT,
+    "lastActiveAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS "Document" (
@@ -107,10 +108,9 @@ const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "ChatMessage_channelId_idx" ON "ChatMessage"("channelId")`,
   `CREATE INDEX IF NOT EXISTS "ChatMessage_createdAt_idx" ON "ChatMessage"("createdAt")`,
   `CREATE INDEX IF NOT EXISTS "Attendance_userId_idx" ON "Attendance"("userId")`,
-  `CREATE INDEX IF NOT EXISTS "Attendance_timestamp_idx" ON "Attendance"("timestamp")`
+  `CREATE INDEX IF NOT EXISTS "Attendance_timestamp_idx" ON "Attendance"("timestamp")`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastActiveAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP`
 ];
-
-let isDbInitialized = true; // Tabel sudah dibuat saat build lewat prisma db push!
 
 export async function ensureDatabaseTables(force = false) {
   if (isDbInitialized && !force) return;

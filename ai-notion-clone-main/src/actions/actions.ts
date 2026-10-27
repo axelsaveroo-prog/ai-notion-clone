@@ -28,12 +28,13 @@ export async function syncUserAction() {
 
     const dbUser = await prisma.user.upsert({
       where: { id: userId },
-      update: { name, email, imageUrl },
+      update: { name, email, imageUrl, lastActiveAt: new Date() },
       create: {
         id: userId,
         email,
         name,
         imageUrl,
+        lastActiveAt: new Date(),
       },
     });
 
@@ -41,6 +42,20 @@ export async function syncUserAction() {
   } catch (error) {
     console.error("Gagal sync user:", error);
     return null;
+  }
+}
+
+export async function heartbeatAction() {
+  try {
+    const { userId } = await auth();
+    if (!userId) return false;
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastActiveAt: new Date() },
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -54,7 +69,7 @@ export async function getUsersAction() {
       orderBy: { name: "asc" },
     });
 
-    const userMap = new Map<string, { id: string; name: string; email: string; imageUrl?: string }>();
+    const userMap = new Map<string, { id: string; name: string; email: string; imageUrl?: string; lastActiveAt?: string | null }>();
     dbUsers.forEach((u) => {
       if (u.id) {
         userMap.set(u.id, {
@@ -62,6 +77,7 @@ export async function getUsersAction() {
           name: u.name || u.email || "Member",
           email: u.email || "",
           imageUrl: u.imageUrl || "",
+          lastActiveAt: u.lastActiveAt ? u.lastActiveAt.toISOString() : null,
         });
       }
     });
@@ -88,7 +104,7 @@ export async function getUsersAction() {
               prisma.user.upsert({
                 where: { id: u.id },
                 update: { name: displayName, email, imageUrl },
-                create: { id: u.id, name: displayName, email, imageUrl },
+                create: { id: u.id, name: displayName, email, imageUrl, lastActiveAt: new Date() },
               }).catch(() => {});
             }
           }

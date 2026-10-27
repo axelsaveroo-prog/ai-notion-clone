@@ -11,7 +11,8 @@ import {
   getOrCreateDirectChannelAction,
   deleteChatChannelAction,
   getUsersAction,
-  syncUserAction
+  syncUserAction,
+  heartbeatAction
 } from "@/actions/actions";
 import { 
   MessageSquare, 
@@ -66,6 +67,7 @@ interface TeamMember {
   name: string | null;
   email: string;
   imageUrl?: string;
+  lastActiveAt?: string | null;
 }
 
 export function TeamChatSidebar() {
@@ -127,6 +129,32 @@ export function TeamChatSidebar() {
   useEffect(() => {
     loadInitialChatData();
   }, [currentUserId]);
+
+  // Periodic heartbeat agar user terdeteksi online
+  useEffect(() => {
+    if (!user?.id) return;
+    heartbeatAction().catch(() => {});
+    const interval = setInterval(() => {
+      heartbeatAction().catch(() => {});
+    }, 25000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
+  // Refresh user presence secara berkala
+  useEffect(() => {
+    const refreshPresence = () => {
+      getUsersAction()
+        .then((fetchedUsers) => {
+          if (fetchedUsers && fetchedUsers.length > 0) {
+            setTeamMembers(fetchedUsers as TeamMember[]);
+          }
+        })
+        .catch(() => {});
+    };
+
+    const interval = setInterval(refreshPresence, isOpen ? 5000 : 25000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   // Refresh saat sidebar dibuka
   useEffect(() => {
@@ -240,6 +268,27 @@ export function TeamChatSidebar() {
     }
   }, [messages, activeChannelId, isOpen]);
 
+  // Cek apakah user sedang online (aktif dalam 90 detik terakhir)
+  const isUserOnline = (member: TeamMember) => {
+    if (member.id === currentUserId) return true;
+    if (!member.lastActiveAt) return false;
+    const lastActive = new Date(member.lastActiveAt).getTime();
+    if (isNaN(lastActive)) return false;
+    return Date.now() - lastActive < 90 * 1000;
+  };
+
+  // Nama Tampilan Saluran
+  const getChannelDisplayName = (channel: Channel) => {
+    if (channel.type === "direct") {
+      const parts = channel.name.split(" & ");
+      if (parts.length === 2) {
+        return parts[0] === currentUserName ? parts[1] : parts[0];
+      }
+      return channel.name;
+    }
+    return `#${channel.name}`;
+  };
+
   // Identifikasi channel aktif
   const activeChannel = useMemo(() => {
     return channels.find((c) => c.id === activeChannelId) || {
@@ -249,6 +298,19 @@ export function TeamChatSidebar() {
       members: [],
     };
   }, [channels, activeChannelId]);
+
+  // Info rekan chat direct jika sedang membuka DM
+  const activeDmPartner = useMemo(() => {
+    if (activeChannel.type !== "direct") return null;
+    const otherId = activeChannel.members?.find((id) => id !== currentUserId);
+    if (otherId) {
+      return teamMembers.find((m) => m.id === otherId) || null;
+    }
+    const displayName = getChannelDisplayName(activeChannel);
+    return teamMembers.find((m) => (m.name || m.email) === displayName) || null;
+  }, [activeChannel, teamMembers, currentUserId, currentUserName]);
+
+  const isDmPartnerOnline = activeDmPartner ? isUserOnline(activeDmPartner) : false;
 
   const activeMessages = messages[activeChannelId] || [];
 
@@ -418,19 +480,6 @@ export function TeamChatSidebar() {
     }
   };
 
-  // Nama Tampilan Saluran
-  const getChannelDisplayName = (channel: Channel) => {
-    if (channel.type === "direct") {
-      // Hilangkan nama user sendiri dari judul DM jika ada
-      const parts = channel.name.split(" & ");
-      if (parts.length === 2) {
-        return parts[0] === currentUserName ? parts[1] : parts[0];
-      }
-      return channel.name;
-    }
-    return `#${channel.name}`;
-  };
-
   return (
     <>
       {/* SIDEBAR CONTAINER DI SISI KIRI LAYAR */}
@@ -508,21 +557,6 @@ export function TeamChatSidebar() {
               <Hash size={15} />
             </button>
 
-            {/* Quick Team Members (Avatars) */}
-            {teamMembers.slice(0, 5).map((member) => (
-              <button
-                key={member.id}
-                onClick={() => handleOpenDirectChat(member)}
-                className="w-9 h-9 rounded-xl relative bg-zinc-900 border border-zinc-800/90 hover:border-zinc-700 flex items-center justify-center text-[11px] font-semibold text-zinc-300 hover:text-white transition cursor-pointer overflow-hidden"
-                title={`Chat dengan ${member.name || member.email}`}
-              >
-                {member.imageUrl ? (
-                  <img src={member.imageUrl} alt={member.name || "Member"} className="w-full h-full object-cover" />
-                ) : (
-                  <span>{(member.name || member.email || "M").slice(0, 2).toUpperCase()}</span>
-                )}
-              </button>
-            ))}
           </div>
         )}
 
@@ -587,16 +621,25 @@ export function TeamChatSidebar() {
                     </button>
                   ))
                 ) : (
-                  filteredMembers.map((member) => (
-                    <button
-                      key={member.id}
-                      onClick={() => handleOpenDirectChat(member)}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 bg-zinc-900 text-zinc-300 border border-zinc-800 hover:text-white hover:border-zinc-700"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      <span>{member.name || member.email}</span>
-                    </button>
-                  ))
+                  filteredMembers.map((member) => {
+                    const online = isUserOnline(member);
+                    return (
+                      <button
+                        key={member.id}
+                        onClick={() => handleOpenDirectChat(member)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 bg-zinc-900 text-zinc-300 border border-zinc-800 hover:text-white hover:border-zinc-700"
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                            online
+                              ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                              : "bg-zinc-500"
+                          }`}
+                        />
+                        <span>{member.name || member.email}</span>
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -608,12 +651,28 @@ export function TeamChatSidebar() {
                   {activeChannel.type === "direct" ? <UserIcon size={12} /> : <Hash size={12} />}
                 </span>
                 <div className="truncate">
-                  <h4 className="text-xs font-semibold text-white leading-tight truncate">
-                    {getChannelDisplayName(activeChannel)}
-                  </h4>
-                  {activeChannel.description && (
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-xs font-semibold text-white leading-tight truncate">
+                      {getChannelDisplayName(activeChannel)}
+                    </h4>
+                    {activeChannel.type === "direct" && (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                          isDmPartnerOnline
+                            ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                            : "bg-zinc-500"
+                        }`}
+                        title={isDmPartnerOnline ? "Online" : "Offline"}
+                      />
+                    )}
+                  </div>
+                  {activeChannel.type === "direct" ? (
+                    <p className={`text-[10px] truncate ${isDmPartnerOnline ? "text-emerald-400/80" : "text-zinc-500"}`}>
+                      {isDmPartnerOnline ? "Online" : "Offline"}
+                    </p>
+                  ) : activeChannel.description ? (
                     <p className="text-[10px] text-zinc-500 truncate">{activeChannel.description}</p>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -816,6 +875,7 @@ export function TeamChatSidebar() {
                   ) : (
                     teamMembers.map((member) => {
                       const isSelected = selectedMembers.includes(member.id);
+                      const online = isUserOnline(member);
                       return (
                         <button
                           key={member.id}
@@ -828,9 +888,16 @@ export function TeamChatSidebar() {
                           }`}
                         >
                           <div className="flex items-center gap-2 truncate">
-                            <span className="w-5 h-5 rounded-full bg-zinc-700/60 text-[9px] flex items-center justify-center font-bold text-zinc-200">
-                              {(member.name || member.email).slice(0, 1).toUpperCase()}
-                            </span>
+                            <div className="relative shrink-0">
+                              <span className="w-5 h-5 rounded-full bg-zinc-700/60 text-[9px] flex items-center justify-center font-bold text-zinc-200">
+                                {(member.name || member.email).slice(0, 1).toUpperCase()}
+                              </span>
+                              <span
+                                className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border border-[#1b1b1f] ${
+                                  online ? "bg-emerald-400" : "bg-zinc-500"
+                                }`}
+                              />
+                            </div>
                             <span className="truncate">{member.name || member.email}</span>
                           </div>
                           {isSelected && <Check size={12} className="text-white shrink-0" />}

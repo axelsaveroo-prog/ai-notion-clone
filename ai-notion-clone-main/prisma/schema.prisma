@@ -110,6 +110,7 @@ model User {
   email            String            @unique
   name             String
   imageUrl         String?
+  lastActiveAt     DateTime?         @default(now())
   createdAt        DateTime          @default(now())
   usersToDocuments UsersToDocument[]
 }
