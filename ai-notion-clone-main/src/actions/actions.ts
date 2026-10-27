@@ -44,24 +44,40 @@ export async function syncUserAction() {
   }
 }
 
+let lastClerkSyncTime = 0;
+const CLERK_SYNC_INTERVAL = 60 * 1000; // Sinkronisasi Clerk maksimal 1 menit sekali
+
 export async function getUsersAction() {
   try {
-    await ensureDatabaseTables();
+    // 1. Ambil dari database Supabase / Postgres terlebih dahulu (super cepat ~30-50ms)
+    const dbUsers = await prisma.user.findMany({
+      orderBy: { name: "asc" },
+    });
 
     const userMap = new Map<string, { id: string; name: string; email: string; imageUrl?: string }>();
-
-    // 1. Sinkronkan seluruh user dari Clerk REST API jika CLERK_SECRET_KEY ada
-    if (process.env.CLERK_SECRET_KEY) {
-      try {
-        const res = await fetch("https://api.clerk.com/v1/users?limit=100", {
-          headers: {
-            Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
-          },
-          cache: "no-store",
+    dbUsers.forEach((u) => {
+      if (u.id) {
+        userMap.set(u.id, {
+          id: u.id,
+          name: u.name || u.email || "Member",
+          email: u.email || "",
+          imageUrl: u.imageUrl || "",
         });
+      }
+    });
 
-        if (res.ok) {
-          const clerkData = await res.json();
+    // 2. Sinkronkan ke Clerk API secara non-blocking di background (tidak menahan response user)
+    const now = Date.now();
+    if (process.env.CLERK_SECRET_KEY && (dbUsers.length === 0 || now - lastClerkSyncTime > CLERK_SYNC_INTERVAL)) {
+      lastClerkSyncTime = now;
+      fetch("https://api.clerk.com/v1/users?limit=100", {
+        headers: {
+          Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
+        },
+        cache: "no-store",
+      })
+        .then((res) => (res.ok ? res.json() : []))
+        .then((clerkData) => {
           if (Array.isArray(clerkData)) {
             for (const u of clerkData) {
               const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
@@ -69,14 +85,6 @@ export async function getUsersAction() {
               const email = u.email_addresses?.[0]?.email_address || "";
               const imageUrl = u.image_url || "";
 
-              userMap.set(u.id, {
-                id: u.id,
-                name: displayName,
-                email,
-                imageUrl,
-              });
-
-              // Upsert otomatis ke database Postgres
               prisma.user.upsert({
                 where: { id: u.id },
                 update: { name: displayName, email, imageUrl },
@@ -84,30 +92,10 @@ export async function getUsersAction() {
               }).catch(() => {});
             }
           }
-        }
-      } catch (clerkErr) {
-        console.warn("Clerk REST API warning:", clerkErr);
-      }
-    }
-
-    // 2. Ambil seluruh user terdaftar dari database Supabase / Postgres
-    try {
-      const dbUsers = await prisma.user.findMany({
-        orderBy: { name: "asc" },
-      });
-
-      dbUsers.forEach((u) => {
-        if (u.id && !userMap.has(u.id)) {
-          userMap.set(u.id, {
-            id: u.id,
-            name: u.name || u.email || "Member",
-            email: u.email || "",
-            imageUrl: u.imageUrl || "",
-          });
-        }
-      });
-    } catch (dbErr) {
-      console.warn("Prisma user.findMany warning:", dbErr);
+        })
+        .catch((err) => {
+          console.warn("Background Clerk sync warning:", err);
+        });
     }
 
     return Array.from(userMap.values());

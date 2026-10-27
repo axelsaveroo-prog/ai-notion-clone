@@ -110,8 +110,10 @@ const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "Attendance_timestamp_idx" ON "Attendance"("timestamp")`
 ];
 
-export async function ensureDatabaseTables() {
-  if (isDbInitialized) return;
+let isDbInitialized = true; // Tabel sudah dibuat saat build lewat prisma db push!
+
+export async function ensureDatabaseTables(force = false) {
+  if (isDbInitialized && !force) return;
   try {
     for (const statement of DDL_STATEMENTS) {
       await prisma.$executeRawUnsafe(statement);
