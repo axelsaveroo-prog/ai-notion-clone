@@ -162,7 +162,7 @@ export function StickyNotes() {
         ))}
 
       {/* FLOATING ACTION BUTTON DI POJOK KANAN BAWAH */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
+      <div className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2">
         {/* Toggle sembunyikan / perlihatkan jika ada notes */}
         {notes.length > 0 && (
           <button

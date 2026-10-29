@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, memo, type ChangeEvent, type RefObject, type ClipboardEvent } from "react";
 import { useUser } from "@clerk/nextjs";
 import { 
   getChatMessages, 
@@ -227,6 +227,212 @@ const playNotificationChime = () => {
 };
 
 // ==========================================
+// SUB-COMPONENT: Memoized ChatInputBar (High Performance Mobile Keystrokes)
+// ==========================================
+interface ChatInputBarProps {
+  onSendMessage: (text: string) => Promise<void> | void;
+  isSending: boolean;
+  editingMessage: { id: string; text: string } | null;
+  onCancelEdit: () => void;
+  replyingMessage: Message | null;
+  onCancelReply: () => void;
+  pendingFile: Attachment | null;
+  onClearPendingFile: () => void;
+  onFileSelect: (e: ChangeEvent<HTMLInputElement>) => void;
+  onOpenCamera: () => void;
+  onPasteImage: (file: File) => void;
+  activeChannelId: string;
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  cameraInputRef: RefObject<HTMLInputElement | null>;
+}
+
+const ChatInputBar = memo(function ChatInputBar({
+  onSendMessage,
+  isSending,
+  editingMessage,
+  onCancelEdit,
+  replyingMessage,
+  onCancelReply,
+  pendingFile,
+  onClearPendingFile,
+  onFileSelect,
+  onOpenCamera,
+  onPasteImage,
+  activeChannelId,
+  fileInputRef,
+  cameraInputRef,
+}: ChatInputBarProps) {
+  const [inputText, setInputText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingMessage) {
+      setInputText(editingMessage.text);
+      inputRef.current?.focus();
+    } else {
+      setInputText("");
+    }
+  }, [editingMessage]);
+
+  useEffect(() => {
+    setInputText("");
+  }, [activeChannelId]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if ((!inputText.trim() && !pendingFile) || isSending) return;
+    const txt = inputText.trim();
+    setInputText("");
+    onSendMessage(txt);
+  };
+
+  const handleInputPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          onPasteImage(file);
+          break;
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="p-2 sm:p-2.5 bg-[#18181c] border-t border-zinc-800 shrink-0">
+      {/* Replying Banner */}
+      {replyingMessage && (
+        <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-[#C65921] flex items-center justify-between text-xs">
+          <div className="truncate min-w-0 flex-1 mr-2">
+            <span className="text-[10px] text-[#C65921] font-semibold block">
+              Replying to {replyingMessage.sender}:
+            </span>
+            <span className="text-zinc-300 truncate block text-[11px]">
+              {replyingMessage.text || "[Attachment]"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Editing Banner */}
+      {editingMessage && (
+        <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-amber-400 flex items-center justify-between text-xs">
+          <div className="truncate min-w-0 flex-1 mr-2">
+            <span className="text-[10px] text-amber-400 font-semibold block">
+              Editing Message:
+            </span>
+            <span className="text-zinc-300 truncate block text-[11px]">
+              "{editingMessage.text}"
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Pending File Banner */}
+      {pendingFile && (
+        <div className="mb-2 p-2 rounded-xl bg-[#202024] border border-zinc-800 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 truncate min-w-0 flex-1 mr-2">
+            {pendingFile.type === "image" ? (
+              <ImageIcon size={16} className="text-[#C65921] shrink-0" />
+            ) : (
+              <FileText size={16} className="text-[#C65921] shrink-0" />
+            )}
+            <span className="text-zinc-200 truncate text-[11px] font-medium">{pendingFile.name}</span>
+            <span className="text-[9px] text-zinc-500 font-mono shrink-0">({pendingFile.size})</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClearPendingFile}
+            className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Input Form */}
+      <form onSubmit={handleSubmit} className="flex items-center gap-1.5 sm:gap-2">
+        <input
+          type="file"
+          ref={fileInputRef as any}
+          onChange={onFileSelect}
+          className="hidden"
+        />
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          ref={cameraInputRef as any}
+          onChange={onFileSelect}
+          className="hidden"
+        />
+
+        {/* Attach File Button */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+          title="Attach file or photo"
+        >
+          <Paperclip size={18} />
+        </button>
+
+        {/* Camera Button */}
+        <button
+          type="button"
+          onClick={onOpenCamera}
+          className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+          title="Take photo"
+        >
+          <Camera size={18} />
+        </button>
+
+        {/* Text Input (Dedicated local state to avoid latency drops on fast mobile typing) */}
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputText}
+          onPaste={handleInputPaste}
+          onChange={(e) => setInputText(e.target.value)}
+          placeholder={editingMessage ? "Type new message..." : "Type a message..."}
+          autoComplete="off"
+          autoCorrect="off"
+          className="min-w-0 flex-1 bg-[#1f1f23] text-zinc-200 placeholder:text-zinc-500 text-xs rounded-full px-3.5 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:border-[#C65921] border border-zinc-700/60"
+        />
+
+        {/* Send Button */}
+        <button
+          type="submit"
+          disabled={(!inputText.trim() && !pendingFile) || isSending}
+          className="p-2 sm:p-2.5 rounded-full bg-[#C65921] hover:bg-[#b04d1c] text-white disabled:opacity-40 transition cursor-pointer shadow active:scale-95 shrink-0"
+          title={editingMessage ? "Update Message" : "Send Message"}
+        >
+          {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} className="fill-current" />}
+        </button>
+      </form>
+    </div>
+  );
+});
+
+// ==========================================
 // MAIN COMPONENT: TeamChatSidebar (Soft Terracotta #C65921 Edition)
 // ==========================================
 export function TeamChatSidebar() {
@@ -248,7 +454,6 @@ export function TeamChatSidebar() {
   const [searchQuery, setSearchQuery] = useState("");
 
   // Input & Upload State
-  const [inputText, setInputText] = useState("");
   const [pendingFile, setPendingFile] = useState<Attachment | null>(null);
   const [isSending, setIsSending] = useState(false);
 
@@ -310,8 +515,31 @@ export function TeamChatSidebar() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevActiveMsgCountRef = useRef<number>(0);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
+
+  const channelsRef = useRef(channels);
+  channelsRef.current = channels;
+  const activeChannelIdRef = useRef(activeChannelId);
+  activeChannelIdRef.current = activeChannelId;
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+
+  // Kunci scroll halaman belakang pada layar mobile ketika chat terbuka
+  useEffect(() => {
+    if (isOpen) {
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+      if (isMobile) {
+        const origOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+          document.body.style.overflow = origOverflow;
+        };
+      }
+    }
+  }, [isOpen]);
 
   // Load lastRead from localStorage
   useEffect(() => {
@@ -578,10 +806,10 @@ export function TeamChatSidebar() {
 
       // Notifikasi suara & popup jika ada pesan baru dari orang lain
       if (hasNewIncoming && lastIncomingMsg) {
-        const isCurrentActive = isOpen && activeChannelId === lastIncomingMsg.channelId;
+        const isCurrentActive = isOpenRef.current && activeChannelIdRef.current === lastIncomingMsg.channelId;
         if (!isCurrentActive) {
           playNotificationChime();
-          const targetCh = channels.find((c) => c.id === lastIncomingMsg.channelId);
+          const targetCh = channelsRef.current.find((c) => c.id === lastIncomingMsg.channelId);
           const targetName = targetCh ? getChannelDisplayName(targetCh) : lastIncomingMsg.sender || "Team Chat";
 
           setUnreadNotification({
@@ -595,15 +823,11 @@ export function TeamChatSidebar() {
           });
         } else {
           // Jika channel yang aktif sedang dibuka, langsung tandai telah dibaca
-          updateLastRead(activeChannelId);
+          updateLastRead(activeChannelIdRef.current);
         }
       }
-
-      if (activeChannelId && activeChannelId !== "general") {
-        loadMessages(activeChannelId);
-      }
     } catch {}
-  }, [activeChannelId, channels, currentUserId, currentUserName, isOpen]);
+  }, [currentUserId, currentUserName]);
 
   // Interval polling: 1500ms saat chat terbuka, 2500ms saat chat tertutup
   useEffect(() => {
@@ -629,12 +853,26 @@ export function TeamChatSidebar() {
     return () => clearTimeout(timer);
   }, [unreadNotification]);
 
-  // Scroll otomatis ke bawah
-  useEffect(() => {
-    if (isOpen) {
-      chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Helper fungsi untuk scroll ke bawah HANYA pada container pesan langsung (TIDAK menggerakkan / kedut window browser)
+  const scrollToBottom = useCallback((smooth = false) => {
+    if (messagesContainerRef.current) {
+      const el = messagesContainerRef.current;
+      if (smooth) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
     }
-  }, [messages, activeChannelId, isOpen, showMobileChat]);
+  }, []);
+
+  // Scroll instan saat membuka chat, memilih saluran, atau berpindah tampilan di mobile
+  useEffect(() => {
+    if (isOpen && activeChannelId) {
+      scrollToBottom(false);
+      const timer = setTimeout(() => scrollToBottom(false), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [activeChannelId, isOpen, showMobileChat, scrollToBottom]);
 
   // Cek apakah user sedang online
   const isUserOnline = (member: TeamMember) => {
@@ -703,6 +941,25 @@ export function TeamChatSidebar() {
   const isDmPartnerOnline = activeDmPartner ? isUserOnline(activeDmPartner) : false;
 
   const activeMessages = activeChannelId && activeChannelId !== "general" ? (messages[activeChannelId] || []) : [];
+
+  // Scroll otomatis jika ada pesan baru bertambah di saluran aktif (tanpa kedut / jitter)
+  useEffect(() => {
+    if (!isOpen || !activeChannelId) return;
+    const currentCount = activeMessages.length;
+    const prevCount = prevActiveMsgCountRef.current;
+    prevActiveMsgCountRef.current = currentCount;
+
+    if (currentCount > prevCount) {
+      const el = messagesContainerRef.current;
+      if (el) {
+        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 250;
+        const lastMsg = activeMessages[activeMessages.length - 1];
+        if (lastMsg?.isSelf || isNearBottom) {
+          scrollToBottom(false);
+        }
+      }
+    }
+  }, [activeMessages.length, activeChannelId, isOpen, scrollToBottom]);
 
   // Hitung status Unread per channel & total
   const unreadCounts = useMemo(() => {
@@ -909,6 +1166,17 @@ export function TeamChatSidebar() {
     e.target.value = "";
   };
 
+  // Handler Paste Gambar dari Clipboard / File
+  const handlePasteImage = useCallback(async (file: File) => {
+    const { dataUrl, sizeFormatted } = await compressImage(file);
+    setPendingFile({
+      name: `screenshot-${new Date().toLocaleTimeString().replace(/:/g, "-")}.jpg`,
+      size: sizeFormatted,
+      type: "image",
+      url: dataUrl,
+    });
+  }, []);
+
   // Handler Paste Screenshot (Ctrl + V)
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
@@ -919,13 +1187,7 @@ export function TeamChatSidebar() {
         const file = items[i].getAsFile();
         if (file) {
           e.preventDefault();
-          const { dataUrl, sizeFormatted } = await compressImage(file);
-          setPendingFile({
-            name: `screenshot-${new Date().toLocaleTimeString().replace(/:/g, "-")}.jpg`,
-            size: sizeFormatted,
-            type: "image",
-            url: dataUrl,
-          });
+          await handlePasteImage(file);
           break;
         }
       }
@@ -997,20 +1259,18 @@ export function TeamChatSidebar() {
   };
 
   // Kirim Pesan Real ke Database
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = useCallback(async (textToSend: string) => {
     if (!activeChannelId || activeChannelId === "general") {
       alert("Please select a channel or conversation first.");
       return;
     }
-    if ((!inputText.trim() && !pendingFile) || isSending) return;
+    if ((!textToSend.trim() && !pendingFile) || isSending) return;
 
     // Jika sedang dalam mode edit pesan
     if (editingMessage) {
-      const newText = inputText.trim();
+      const newText = textToSend.trim();
       const msgId = editingMessage.id;
       setEditingMessage(null);
-      setInputText("");
 
       setMessages((prev) => {
         const currentList = prev[activeChannelId] || [];
@@ -1026,12 +1286,10 @@ export function TeamChatSidebar() {
       return;
     }
 
-    const textToSend = inputText.trim();
     const fileToSend = pendingFile;
     const replySender = replyingMessage?.sender || undefined;
     const replyText = replyingMessage?.text || (replyingMessage?.attachment ? `[${replyingMessage.attachment.type}]` : undefined);
 
-    setInputText("");
     setPendingFile(null);
     setReplyingMessage(null);
     setIsSending(true);
@@ -1042,8 +1300,9 @@ export function TeamChatSidebar() {
       sender: currentUserName,
       senderId: currentUserId,
       senderImage: currentUserImage,
-      text: textToSend,
+      text: textToSend.trim(),
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      createdAtRaw: new Date().toISOString(),
       isSelf: true,
       attachment: fileToSend || undefined,
       replyToSender: replySender,
@@ -1055,13 +1314,15 @@ export function TeamChatSidebar() {
       [activeChannelId]: [...(prev[activeChannelId] || []), optimisticMsg],
     }));
 
+    setTimeout(() => scrollToBottom(false), 20);
+
     try {
       const res = await sendChatMessage({
         channelId: activeChannelId,
         sender: currentUserName,
         senderId: currentUserId,
         senderImage: currentUserImage,
-        text: textToSend,
+        text: textToSend.trim(),
         fileUrl: fileToSend?.url,
         fileType: fileToSend?.type,
         replyToSender: replySender,
@@ -1080,14 +1341,27 @@ export function TeamChatSidebar() {
     } finally {
       setIsSending(false);
     }
-  };
+  }, [
+    activeChannelId,
+    currentUserId,
+    currentUserName,
+    currentUserImage,
+    editingMessage,
+    isSending,
+    pendingFile,
+    replyingMessage,
+    scrollToBottom,
+  ]);
 
   // Mulai Edit Pesan
   const handleStartEditMessage = (msg: Message) => {
     setEditingMessage({ id: msg.id, text: msg.text });
-    setInputText(msg.text);
     setContextMenuMsg(null);
   };
+
+  const handleCancelEdit = useCallback(() => setEditingMessage(null), []);
+  const handleCancelReply = useCallback(() => setReplyingMessage(null), []);
+  const handleClearPendingFile = useCallback(() => setPendingFile(null), []);
 
   // Delete Message
   const handleDeleteMessage = async (msgId: string) => {
@@ -1469,7 +1743,7 @@ export function TeamChatSidebar() {
       {/* 1. NOTIFIKASI POPUP MINIMALIS DI POJOK KIRI BAWAH         */}
       {/* ========================================================= */}
       {unreadNotification && !isOpen && (
-        <div className="fixed bottom-20 left-5 z-50 max-w-sm w-auto animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="fixed bottom-36 left-4 sm:bottom-20 sm:left-5 z-50 max-w-sm w-auto animate-in slide-in-from-bottom-5 fade-in duration-300">
           <div
             onClick={() => handleOpenFromNotification(unreadNotification.channelId)}
             className="bg-[#18181b] border border-zinc-800 text-white p-3.5 rounded-2xl shadow-xl flex items-start gap-3 cursor-pointer transition hover:border-[#C65921]"
@@ -1531,7 +1805,7 @@ export function TeamChatSidebar() {
       {/* ========================================================= */}
       {/* 3. FLOATING LOGO CHAT BUTTON (MATTE TERRACOTTA #C65921)   */}
       {/* ========================================================= */}
-      <div className="fixed bottom-5 left-5 z-[56]">
+      <div className="fixed bottom-24 left-4 sm:bottom-5 sm:left-5 z-[56]">
         <button
           type="button"
           onClick={() => {
@@ -1564,7 +1838,7 @@ export function TeamChatSidebar() {
       {/* 4. KOTAK CHATBOX ALA WHATSAPP DESKTOP (MATTE #C65921)     */}
       {/* ========================================================= */}
       <div
-        className={`fixed bottom-20 left-2.5 sm:left-5 z-[60] w-[calc(100vw-20px)] sm:w-[440px] md:w-[780px] h-[580px] sm:h-[600px] max-h-[85vh] bg-[#141416] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col origin-bottom-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`fixed inset-0 sm:inset-auto sm:bottom-20 sm:left-5 z-[60] w-full sm:w-[440px] md:w-[780px] h-[100dvh] sm:h-[600px] sm:max-h-[85vh] bg-[#141416] sm:border sm:border-zinc-800 sm:rounded-3xl rounded-none shadow-2xl overflow-hidden flex flex-col origin-bottom-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isOpen
             ? "scale-100 opacity-100 translate-y-0 pointer-events-auto"
             : "scale-90 opacity-0 translate-y-4 pointer-events-none"
@@ -2085,8 +2359,9 @@ export function TeamChatSidebar() {
 
                 {/* Area Pesan Chat Realtime */}
                 <div
+                  ref={messagesContainerRef}
                   onPaste={handlePaste}
-                  className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0 bg-[#0e0e11]"
+                  className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0 bg-[#0e0e11] overscroll-contain"
                 >
                   {activeMessages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-xs gap-2 text-center px-6">
@@ -2315,136 +2590,22 @@ export function TeamChatSidebar() {
                 </div>
 
                 {/* Input Bar */}
-                <div className="p-2 sm:p-2.5 bg-[#18181c] border-t border-zinc-800 shrink-0">
-                  {/* Replying Banner */}
-                  {replyingMessage && (
-                    <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-[#C65921] flex items-center justify-between text-xs">
-                      <div className="truncate min-w-0 flex-1 mr-2">
-                        <span className="text-[10px] text-[#C65921] font-semibold block">
-                          Replying to {replyingMessage.sender}:
-                        </span>
-                        <span className="text-zinc-300 truncate block text-[11px]">
-                          {replyingMessage.text || "[Attachment]"}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setReplyingMessage(null)}
-                        className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Editing Banner */}
-                  {editingMessage && (
-                    <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-amber-400 flex items-center justify-between text-xs">
-                      <div className="truncate min-w-0 flex-1 mr-2">
-                        <span className="text-[10px] text-amber-400 font-semibold block">
-                          Editing Message:
-                        </span>
-                        <span className="text-zinc-300 truncate block text-[11px]">
-                          "{editingMessage.text}"
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingMessage(null);
-                          setInputText("");
-                        }}
-                        className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Pending File Banner */}
-                  {pendingFile && (
-                    <div className="mb-2 p-2 rounded-xl bg-[#202024] border border-zinc-800 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 truncate min-w-0 flex-1 mr-2">
-                        {pendingFile.type === "image" ? (
-                          <ImageIcon size={16} className="text-[#C65921] shrink-0" />
-                        ) : (
-                          <FileText size={16} className="text-[#C65921] shrink-0" />
-                        )}
-                        <span className="text-zinc-200 truncate text-[11px] font-medium">{pendingFile.name}</span>
-                        <span className="text-[9px] text-zinc-500 font-mono shrink-0">({pendingFile.size})</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPendingFile(null)}
-                        className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Input Form */}
-                  <form onSubmit={handleSendMessage} className="flex items-center gap-1.5 sm:gap-2">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      ref={cameraInputRef}
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-
-                    {/* Attach File Button */}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
-                      title="Attach file or photo"
-                    >
-                      <Paperclip size={18} />
-                    </button>
-
-                    {/* Camera Button */}
-                    <button
-                      type="button"
-                      onClick={openCamera}
-                      className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
-                      title="Take photo"
-                    >
-                      <Camera size={18} />
-                    </button>
-
-                    {/* Text Input */}
-                    <input
-                      type="text"
-                      value={inputText}
-                      onPaste={handlePaste}
-                      onChange={(e) => setInputText(e.target.value)}
-                      placeholder={
-                        editingMessage
-                          ? "Type new message..."
-                          : "Type a message..."
-                      }
-                      className="min-w-0 flex-1 bg-[#1f1f23] text-zinc-200 placeholder:text-zinc-500 text-xs rounded-full px-3.5 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:border-[#C65921] border border-zinc-700/60"
-                    />
-
-                    {/* Send Button */}
-                    <button
-                      type="submit"
-                      disabled={(!inputText.trim() && !pendingFile) || isSending}
-                      className="p-2 sm:p-2.5 rounded-full bg-[#C65921] hover:bg-[#b04d1c] text-white disabled:opacity-40 transition cursor-pointer shadow active:scale-95 shrink-0"
-                      title={editingMessage ? "Update Message" : "Send Message"}
-                    >
-                      {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} className="fill-current" />}
-                    </button>
-                  </form>
-                </div>
+                <ChatInputBar
+                  onSendMessage={handleSendMessage}
+                  isSending={isSending}
+                  editingMessage={editingMessage}
+                  onCancelEdit={handleCancelEdit}
+                  replyingMessage={replyingMessage}
+                  onCancelReply={handleCancelReply}
+                  pendingFile={pendingFile}
+                  onClearPendingFile={handleClearPendingFile}
+                  onFileSelect={handleFileSelect}
+                  onOpenCamera={openCamera}
+                  onPasteImage={handlePasteImage}
+                  activeChannelId={activeChannelId}
+                  fileInputRef={fileInputRef}
+                  cameraInputRef={cameraInputRef}
+                />
               </>
             )) : (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-500 space-y-3">
