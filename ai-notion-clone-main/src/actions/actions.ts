@@ -302,6 +302,7 @@ export async function editChatMessageAction(
   currentUserId: string
 ) {
   try {
+    await ensureDatabaseTables();
     const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
     if (!msg) return { success: false, error: "Pesan tidak ditemukan" };
     if (msg.senderId && msg.senderId !== currentUserId) {
@@ -310,17 +311,27 @@ export async function editChatMessageAction(
 
     const updated = await prisma.chatMessage.update({
       where: { id: messageId },
-      data: { text: newText },
+      data: { text: newText, isEdited: true },
     });
     return { success: true, message: updated };
   } catch (error: any) {
-    console.error("Gagal edit pesan chat:", error);
-    return { success: false, error: error?.message || "Gagal mengedit pesan" };
+    try {
+      await prisma.$executeRawUnsafe(
+        'UPDATE "ChatMessage" SET "text" = $1, "isEdited" = true WHERE "id" = $2',
+        newText,
+        messageId
+      );
+      return { success: true };
+    } catch (rawErr: any) {
+      console.error("Gagal edit pesan chat:", error, rawErr);
+      return { success: false, error: error?.message || rawErr?.message || "Gagal mengedit pesan" };
+    }
   }
 }
 
 export async function deleteChatMessageAction(messageId: string, currentUserId: string) {
   try {
+    await ensureDatabaseTables();
     const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
     if (!msg) return { success: false, error: "Pesan tidak ditemukan" };
     if (msg.senderId && msg.senderId !== currentUserId) {
@@ -330,8 +341,13 @@ export async function deleteChatMessageAction(messageId: string, currentUserId: 
     await prisma.chatMessage.delete({ where: { id: messageId } });
     return { success: true };
   } catch (error: any) {
-    console.error("Gagal hapus pesan chat:", error);
-    return { success: false, error: error?.message || "Gagal menghapus pesan" };
+    try {
+      await prisma.$executeRawUnsafe('DELETE FROM "ChatMessage" WHERE "id" = $1', messageId);
+      return { success: true };
+    } catch (rawErr: any) {
+      console.error("Gagal hapus pesan chat:", error, rawErr);
+      return { success: false, error: error?.message || rawErr?.message || "Gagal menghapus pesan" };
+    }
   }
 }
 
@@ -423,6 +439,9 @@ export async function sendChatMessage(data: {
   text?: string;
   fileUrl?: string;
   fileType?: string;
+  isForwarded?: boolean;
+  replyToSender?: string;
+  replyToText?: string;
 }) {
   try {
     await ensureDatabaseTables();
@@ -435,18 +454,24 @@ export async function sendChatMessage(data: {
         text: data.text || null,
         fileUrl: data.fileUrl || null,
         fileType: data.fileType || null,
+        isForwarded: data.isForwarded || false,
+        replyToSender: data.replyToSender || null,
+        replyToText: data.replyToText || null,
       },
     });
     return { success: true, message: newMsg };
   } catch (error: any) {
     console.warn("Gagal menyimpan chat dengan create(), mencoba self-healing tabel & retry:", error);
     try {
-      // Pastikan kolom-kolom ChatMessage ada di PostgreSQL
-      await prisma.$executeRawUnsafe(`ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "senderId" TEXT;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "senderImage" TEXT;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "text" TEXT;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "fileUrl" TEXT;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "fileType" TEXT;`);
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "senderId" TEXT;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "senderImage" TEXT;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "text" TEXT;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "fileUrl" TEXT;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "fileType" TEXT;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "isEdited" BOOLEAN DEFAULT false;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "isForwarded" BOOLEAN DEFAULT false;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToSender" TEXT;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToText" TEXT;');
 
       const retryMsg = await prisma.chatMessage.create({
         data: {
@@ -457,6 +482,9 @@ export async function sendChatMessage(data: {
           text: data.text || null,
           fileUrl: data.fileUrl || null,
           fileType: data.fileType || null,
+          isForwarded: data.isForwarded || false,
+          replyToSender: data.replyToSender || null,
+          replyToText: data.replyToText || null,
         },
       });
       return { success: true, message: retryMsg };
@@ -465,8 +493,7 @@ export async function sendChatMessage(data: {
       try {
         const id = "msg_" + Math.random().toString(36).substring(2, 11);
         await prisma.$executeRawUnsafe(
-          `INSERT INTO "ChatMessage" ("id", "channelId", "sender", "senderId", "senderImage", "text", "fileUrl", "fileType", "createdAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+          'INSERT INTO "ChatMessage" ("id", "channelId", "sender", "senderId", "senderImage", "text", "fileUrl", "fileType", "isForwarded", "replyToSender", "replyToText", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())',
           id,
           data.channelId,
           data.sender,
@@ -474,7 +501,10 @@ export async function sendChatMessage(data: {
           data.senderImage || null,
           data.text || null,
           data.fileUrl || null,
-          data.fileType || null
+          data.fileType || null,
+          data.isForwarded || false,
+          data.replyToSender || null,
+          data.replyToText || null
         );
         return {
           success: true,
@@ -487,46 +517,18 @@ export async function sendChatMessage(data: {
             text: data.text || null,
             fileUrl: data.fileUrl || null,
             fileType: data.fileType || null,
+            isForwarded: data.isForwarded || false,
+            replyToSender: data.replyToSender || null,
+            replyToText: data.replyToText || null,
             createdAt: new Date().toISOString(),
           },
         };
       } catch (rawError: any) {
-        // Fallback paling aman: simpan dengan kolom dasar jika senderId ditolak oleh DB
-        try {
-          const id = "msg_" + Math.random().toString(36).substring(2, 11);
-          await prisma.$executeRawUnsafe(
-            `INSERT INTO "ChatMessage" ("id", "channelId", "sender", "text", "fileUrl", "fileType", "createdAt")
-             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-            id,
-            data.channelId,
-            data.sender,
-            data.text || null,
-            data.fileUrl || null,
-            data.fileType || null
-          );
-          return {
-            success: true,
-            message: {
-              id,
-              channelId: data.channelId,
-              sender: data.sender,
-              senderId: data.senderId || null,
-              senderImage: data.senderImage || null,
-              text: data.text || null,
-              fileUrl: data.fileUrl || null,
-              fileType: data.fileType || null,
-              createdAt: new Date().toISOString(),
-            },
-          };
-        } catch (finalError: any) {
-          console.error("Gagal total kirim pesan:", finalError);
-          return { success: false, error: error?.message || finalError?.message };
-        }
+        return { success: false, error: error?.message || rawError?.message };
       }
     }
   }
 }
-
 
 // ==========================================
 // 4. ATTENDANCE / PRESENSI ACTIONS

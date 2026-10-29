@@ -19,15 +19,19 @@ model ScheduleEvent {
 }
 
 model ChatMessage {
-  id          String   @id @default(cuid())
-  channelId   String
-  sender      String
-  senderId    String?
-  senderImage String?
-  text        String?
-  fileUrl     String?
-  fileType    String?
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  channelId     String
+  sender        String
+  senderId      String?
+  senderImage   String?
+  text          String?
+  fileUrl       String?
+  fileType      String?
+  isEdited      Boolean? @default(false)
+  isForwarded   Boolean? @default(false)
+  replyToSender String?
+  replyToText   String?
+  createdAt     DateTime @default(now())
 
   @@index([channelId])
   @@index([createdAt])

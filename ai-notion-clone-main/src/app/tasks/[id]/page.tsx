@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useRef, useEffect, useCallback } from "react";
+import { use, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { 
   ArrowLeft, 
@@ -348,9 +348,26 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const assigneeNames = Array.from(
     new Set([
       ...members.map((m) => m.name),
-      assignee,
+      user?.fullName || user?.username || "You",
     ].filter(Boolean))
-  );
+  ) as string[];
+
+  const selectedAssignees = useMemo(() => {
+    if (!assignee) return [];
+    return assignee.split(",").map((s) => s.trim()).filter(Boolean);
+  }, [assignee]);
+
+  const toggleAssignee = (name: string) => {
+    let updated: string[];
+    if (selectedAssignees.includes(name)) {
+      updated = selectedAssignees.filter((n) => n !== name);
+    } else {
+      updated = [...selectedAssignees, name];
+    }
+    const val = updated.length > 0 ? updated.join(", ") : "Unassigned";
+    setAssignee(val);
+    saveChanges({ assignee: val });
+  };
 
   if (isLoading) {
     return (
@@ -750,43 +767,63 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             )}
           </div>
 
-          {/* PROPERTY: ASSIGNEE */}
+          {/* PROPERTY: ASSIGNEE (MULTIPLE) */}
           <div className="flex items-center relative">
             <span className="flex items-center gap-2 text-zinc-400 w-32 font-medium">
               <UserIcon size={15} /> Assignee
             </span>
             <button
+              type="button"
               onClick={() => setOpenDropdown(openDropdown === "assignee" ? null : "assignee")}
-              className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 text-xs font-medium border border-zinc-700/60 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 text-xs font-medium border border-zinc-700/60 transition-colors cursor-pointer max-w-[300px]"
             >
-              <div className="w-4 h-4 rounded-full bg-zinc-700 text-[10px] flex items-center justify-center font-bold">
-                {assignee ? assignee[0] : "Y"}
-              </div>
-              {assignee}
-              <ChevronDown size={13} className="text-zinc-400" />
+              {selectedAssignees.length === 0 ? (
+                <span className="text-zinc-500">Pilih Assignee...</span>
+              ) : (
+                <div className="flex items-center gap-1 overflow-hidden truncate">
+                  {selectedAssignees.slice(0, 2).map((a, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-700/80 text-[11px] text-zinc-200">
+                      <span className="w-3.5 h-3.5 rounded-full bg-zinc-600 flex items-center justify-center text-[9px] font-bold">
+                        {a[0]?.toUpperCase()}
+                      </span>
+                      <span className="truncate max-w-[80px]">{a}</span>
+                    </span>
+                  ))}
+                  {selectedAssignees.length > 2 && (
+                    <span className="text-[10px] text-zinc-400 font-mono">+{selectedAssignees.length - 2}</span>
+                  )}
+                </div>
+              )}
+              <ChevronDown size={13} className="text-zinc-400 shrink-0 ml-1" />
             </button>
 
             {openDropdown === "assignee" && (
-              <div className="absolute left-32 top-8 z-50 w-56 max-h-60 overflow-y-auto bg-[#1F1F1F] border border-zinc-800 rounded-lg p-1 shadow-2xl space-y-0.5">
-                {assigneeNames.map((name) => (
-                  <button
-                    key={name}
-                    onClick={() => {
-                      setAssignee(name);
-                      setOpenDropdown(null);
-                      saveChanges({ assignee: name });
-                    }}
-                    className="w-full flex items-center justify-between px-2.5 py-2 rounded text-xs text-left text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded-full bg-zinc-700 text-[10px] flex items-center justify-center font-bold">
-                        {name[0]}
+              <div className="absolute left-32 top-8 z-50 w-64 max-h-64 overflow-y-auto bg-[#1F1F1F] border border-zinc-800 rounded-xl p-1.5 shadow-2xl space-y-1">
+                <div className="px-2 py-1 text-[11px] font-semibold text-zinc-400 border-b border-zinc-800/60 flex items-center justify-between">
+                  <span>Pilih Assignee</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">{selectedAssignees.length} dipilih</span>
+                </div>
+                {assigneeNames.map((name) => {
+                  const isSelected = selectedAssignees.includes(name);
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => toggleAssignee(name)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-left transition cursor-pointer ${
+                        isSelected ? "bg-zinc-800 text-white font-medium" : "text-zinc-300 hover:bg-zinc-800/60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <div className="w-5 h-5 rounded-full bg-zinc-700 text-[10px] flex items-center justify-center font-bold text-zinc-200 shrink-0">
+                          {name[0]?.toUpperCase()}
+                        </div>
+                        <span className="truncate">{name}</span>
                       </div>
-                      <span className="truncate">{name}</span>
-                    </div>
-                    {assignee === name && <Check size={14} className="text-zinc-400 shrink-0" />}
-                  </button>
-                ))}
+                      {isSelected && <Check size={14} className="text-emerald-400 shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

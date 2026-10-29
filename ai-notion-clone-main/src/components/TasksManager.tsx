@@ -346,9 +346,17 @@ export function TasksManager() {
                         {/* Assignee & Due Date */}
                         <div className="flex flex-col gap-1 pt-2 border-t border-[#222226] text-[10px] text-gray-400">
                           {task.assignee && (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1 flex-wrap">
                               <span className="text-zinc-500">Assignee:</span>
-                              <span className="text-zinc-200 font-medium">@{task.assignee}</span>
+                              {task.assignee.split(",").map((a, idx) => {
+                                const clean = a.trim();
+                                if (!clean) return null;
+                                return (
+                                  <span key={idx} className="bg-zinc-800/80 text-zinc-200 font-medium px-1.5 py-0.5 rounded text-[10px]">
+                                    @{clean}
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
                           {task.dueDate && (

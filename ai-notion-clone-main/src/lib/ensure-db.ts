@@ -127,7 +127,10 @@ const DDL_STATEMENTS = [
   `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "assignedBy" TEXT`,
   `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "dueDate" TEXT`,
   `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "brief" TEXT`,
-  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "isEdited" BOOLEAN DEFAULT false`
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "isEdited" BOOLEAN DEFAULT false`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "isForwarded" BOOLEAN DEFAULT false`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToSender" TEXT`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToText" TEXT`
 ];
 
 export async function ensureDatabaseTables(force = false) {
