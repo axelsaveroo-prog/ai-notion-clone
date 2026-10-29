@@ -286,7 +286,14 @@ export async function getChatChannelsAction(currentUserId?: string) {
         // Hanya tampilkan jika sudah pernah chat (ada pesan)
         return channelMsgs.length > 0;
       }
-      // Untuk grup
+      if (c.type === "group") {
+        if (!currentUserId) return false;
+        // Hanya tampilkan grup jika user terdaftar sebagai anggota atau sebagai pembuat
+        const isMember =
+          (Array.isArray(c.members) && c.members.includes(currentUserId)) ||
+          c.createdById === currentUserId;
+        return isMember;
+      }
       return true;
     });
 
@@ -342,8 +349,8 @@ export async function createChatGroupAction(data: {
 
     return { success: true, channel: newChannel };
   } catch (error: any) {
-    console.error("Gagal membuat grup chat:", error);
-    return { success: false, error: error?.message || "Gagal membuat grup chat" };
+    console.error("Failed to create chat group:", error);
+    return { success: false, error: error?.message || "Failed to create chat group" };
   }
 }
 
@@ -355,12 +362,12 @@ export async function updateChatGroupAction(
   try {
     await ensureDatabaseTables();
     const channel = await prisma.chatChannel.findUnique({ where: { id: channelId } });
-    if (!channel) return { success: false, error: "Grup tidak ditemukan" };
+    if (!channel) return { success: false, error: "Group not found" };
 
     const isOwner = channel.createdById === currentUserId;
     const isAdmin = isOwner || (channel.admins && channel.admins.includes(currentUserId));
     if (!isAdmin) {
-      return { success: false, error: "Hanya admin grup yang dapat mengubah nama & info grup" };
+      return { success: false, error: "Only group admins can update group info" };
     }
 
     const updated = await prisma.chatChannel.update({
@@ -373,25 +380,27 @@ export async function updateChatGroupAction(
 
     return { success: true, channel: updated };
   } catch (error: any) {
-    console.error("Gagal update info grup:", error);
-    return { success: false, error: error?.message || "Gagal mengupdate info grup" };
+    console.error("Failed to update group info:", error);
+    return { success: false, error: error?.message || "Failed to update group info" };
   }
 }
 
 export async function inviteChannelMembersAction(
   channelId: string,
   currentUserId: string,
-  newMemberIds: string[]
+  newMemberIds: string[],
+  inviterName?: string,
+  invitedNames?: string[]
 ) {
   try {
     await ensureDatabaseTables();
     const channel = await prisma.chatChannel.findUnique({ where: { id: channelId } });
-    if (!channel) return { success: false, error: "Grup tidak ditemukan" };
+    if (!channel) return { success: false, error: "Group not found" };
 
     const isOwner = channel.createdById === currentUserId;
     const isAdmin = isOwner || (channel.admins && channel.admins.includes(currentUserId));
     if (!isAdmin) {
-      return { success: false, error: "Hanya admin grup yang dapat mengundang anggota" };
+      return { success: false, error: "Only group admins can invite members" };
     }
 
     const updatedMembers = Array.from(new Set([...(channel.members || []), ...newMemberIds]));
@@ -400,31 +409,43 @@ export async function inviteChannelMembersAction(
       data: { members: updatedMembers },
     });
 
+    if (invitedNames && invitedNames.length > 0) {
+      await prisma.chatMessage.create({
+        data: {
+          channelId,
+          sender: "System",
+          senderId: "system",
+          text: `${inviterName || "Admin"} added ${invitedNames.join(", ")}`,
+        },
+      });
+    }
+
     return { success: true, channel: updated };
   } catch (error: any) {
-    console.error("Gagal mengundang anggota:", error);
-    return { success: false, error: error?.message || "Gagal mengundang anggota" };
+    console.error("Failed to invite members:", error);
+    return { success: false, error: error?.message || "Failed to invite members" };
   }
 }
 
 export async function kickChannelMemberAction(
   channelId: string,
   currentUserId: string,
-  targetMemberId: string
+  targetMemberId: string,
+  targetMemberName?: string
 ) {
   try {
     await ensureDatabaseTables();
     const channel = await prisma.chatChannel.findUnique({ where: { id: channelId } });
-    if (!channel) return { success: false, error: "Grup tidak ditemukan" };
+    if (!channel) return { success: false, error: "Group not found" };
 
     const isOwner = channel.createdById === currentUserId;
     const isAdmin = isOwner || (channel.admins && channel.admins.includes(currentUserId));
     if (!isAdmin) {
-      return { success: false, error: "Hanya admin grup yang dapat mengeluarkan anggota" };
+      return { success: false, error: "Only group admins can remove members" };
     }
 
     if (targetMemberId === channel.createdById) {
-      return { success: false, error: "Pembuat grup (Owner) tidak dapat dikeluarkan" };
+      return { success: false, error: "The group creator cannot be removed" };
     }
 
     const updatedMembers = (channel.members || []).filter((id) => id !== targetMemberId);
@@ -438,27 +459,37 @@ export async function kickChannelMemberAction(
       },
     });
 
+    await prisma.chatMessage.create({
+      data: {
+        channelId,
+        sender: "System",
+        senderId: "system",
+        text: `${targetMemberName || "A member"} was removed`,
+      },
+    });
+
     return { success: true, channel: updated };
   } catch (error: any) {
-    console.error("Gagal mengeluarkan anggota:", error);
-    return { success: false, error: error?.message || "Gagal mengeluarkan anggota" };
+    console.error("Failed to remove member:", error);
+    return { success: false, error: error?.message || "Failed to remove member" };
   }
 }
 
 export async function promoteChannelAdminAction(
   channelId: string,
   currentUserId: string,
-  targetMemberId: string
+  targetMemberId: string,
+  targetMemberName?: string
 ) {
   try {
     await ensureDatabaseTables();
     const channel = await prisma.chatChannel.findUnique({ where: { id: channelId } });
-    if (!channel) return { success: false, error: "Grup tidak ditemukan" };
+    if (!channel) return { success: false, error: "Group not found" };
 
     const isOwner = channel.createdById === currentUserId;
     const isAdmin = isOwner || (channel.admins && channel.admins.includes(currentUserId));
     if (!isAdmin) {
-      return { success: false, error: "Hanya admin grup yang dapat menjadikan user lain admin" };
+      return { success: false, error: "Only group admins can promote another member to admin" };
     }
 
     const updatedAdmins = Array.from(new Set([...(channel.admins || []), targetMemberId]));
@@ -467,18 +498,32 @@ export async function promoteChannelAdminAction(
       data: { admins: updatedAdmins },
     });
 
+    await prisma.chatMessage.create({
+      data: {
+        channelId,
+        sender: "System",
+        senderId: "system",
+        text: `${targetMemberName || "A member"} is now an admin`,
+      },
+    });
+
     return { success: true, channel: updated };
   } catch (error: any) {
-    console.error("Gagal menjadikan admin:", error);
-    return { success: false, error: error?.message || "Gagal menjadikan admin" };
+    console.error("Failed to promote admin:", error);
+    return { success: false, error: error?.message || "Failed to promote admin" };
   }
 }
 
-export async function leaveChatGroupAction(channelId: string, currentUserId: string) {
+export async function leaveChatGroupAction(channelId: string, currentUserId: string, userName?: string) {
   try {
     await ensureDatabaseTables();
     const channel = await prisma.chatChannel.findUnique({ where: { id: channelId } });
-    if (!channel) return { success: false, error: "Grup tidak ditemukan" };
+    if (!channel) return { success: false, error: "Group not found" };
+
+    // The group creator cannot leave; they can delete the group instead
+    if (channel.createdById === currentUserId) {
+      return { success: false, error: "The group creator cannot leave the group. You can delete the group instead." };
+    }
 
     const updatedMembers = (channel.members || []).filter((id) => id !== currentUserId);
     const updatedAdmins = (channel.admins || []).filter((id) => id !== currentUserId);
@@ -491,10 +536,19 @@ export async function leaveChatGroupAction(channelId: string, currentUserId: str
       },
     });
 
+    await prisma.chatMessage.create({
+      data: {
+        channelId,
+        sender: "System",
+        senderId: "system",
+        text: `${userName || "A member"} left`,
+      },
+    });
+
     return { success: true, channel: updated };
   } catch (error: any) {
-    console.error("Gagal keluar dari grup:", error);
-    return { success: false, error: error?.message || "Gagal keluar dari grup" };
+    console.error("Failed to leave group:", error);
+    return { success: false, error: error?.message || "Failed to leave group" };
   }
 }
 
@@ -506,9 +560,9 @@ export async function editChatMessageAction(
   try {
     await ensureDatabaseTables();
     const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
-    if (!msg) return { success: false, error: "Pesan tidak ditemukan" };
+    if (!msg) return { success: false, error: "Message not found" };
     if (msg.senderId && msg.senderId !== currentUserId) {
-      return { success: false, error: "Hanya pengirim yang dapat mengedit pesan ini" };
+      return { success: false, error: "Only the sender can edit this message" };
     }
 
     const updated = await prisma.chatMessage.update({
@@ -525,8 +579,8 @@ export async function editChatMessageAction(
       );
       return { success: true };
     } catch (rawErr: any) {
-      console.error("Gagal edit pesan chat:", error, rawErr);
-      return { success: false, error: error?.message || rawErr?.message || "Gagal mengedit pesan" };
+      console.error("Failed to edit chat message:", error, rawErr);
+      return { success: false, error: error?.message || rawErr?.message || "Failed to edit message" };
     }
   }
 }
@@ -535,9 +589,9 @@ export async function deleteChatMessageAction(messageId: string, currentUserId: 
   try {
     await ensureDatabaseTables();
     const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
-    if (!msg) return { success: false, error: "Pesan tidak ditemukan" };
+    if (!msg) return { success: false, error: "Message not found" };
     if (msg.senderId && msg.senderId !== currentUserId) {
-      return { success: false, error: "Hanya pengirim yang dapat menghapus pesan ini" };
+      return { success: false, error: "Only the sender can delete this message" };
     }
 
     await prisma.chatMessage.delete({ where: { id: messageId } });
@@ -547,8 +601,8 @@ export async function deleteChatMessageAction(messageId: string, currentUserId: 
       await prisma.$executeRawUnsafe('DELETE FROM "ChatMessage" WHERE "id" = $1', messageId);
       return { success: true };
     } catch (rawErr: any) {
-      console.error("Gagal hapus pesan chat:", error, rawErr);
-      return { success: false, error: error?.message || rawErr?.message || "Gagal menghapus pesan" };
+      console.error("Failed to delete chat message:", error, rawErr);
+      return { success: false, error: error?.message || rawErr?.message || "Failed to delete message" };
     }
   }
 }
@@ -595,7 +649,7 @@ export async function deleteChatChannelAction(channelId: string, currentUserId?:
       const isOwner = channel.createdById === currentUserId;
       const isAdmin = isOwner || (channel.admins && channel.admins.includes(currentUserId));
       if (!isAdmin) {
-        return { success: false, error: "Hanya admin/pembuat grup yang dapat menghapus grup ini" };
+        return { success: false, error: "Only group admins can delete this group" };
       }
     }
 
@@ -603,8 +657,8 @@ export async function deleteChatChannelAction(channelId: string, currentUserId?:
     await prisma.chatChannel.delete({ where: { id: channelId } });
     return { success: true };
   } catch (error: any) {
-    console.error("Gagal menghapus channel:", error);
-    return { success: false, error: error?.message || "Gagal menghapus saluran" };
+    console.error("Failed to delete channel:", error);
+    return { success: false, error: error?.message || "Failed to delete channel" };
   }
 }
 

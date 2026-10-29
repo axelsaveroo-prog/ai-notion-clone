@@ -356,11 +356,18 @@ export function TeamChatSidebar() {
       ]);
 
       if (fetchedChannels && Array.isArray(fetchedChannels)) {
-        const validChannels = (fetchedChannels as Channel[]).filter(
-          (c) => c.id !== "general" && c.name?.toLowerCase() !== "general"
-        );
+        const validChannels = (fetchedChannels as Channel[]).filter((c) => {
+          if (c.id === "general" || c.name?.toLowerCase() === "general") return false;
+          if (c.type === "group") {
+            return (
+              (Array.isArray(c.members) && c.members.includes(currentUserId)) ||
+              c.createdById === currentUserId
+            );
+          }
+          return true;
+        });
         setChannels(validChannels);
-        // JANGAN auto buka chat apapun ketika dibuka (biarkan kosong sampai user memilih)
+        // Do not auto-open any chat; keep empty until user selects
         if (activeChannelId === "general") {
           setActiveChannelId("");
         }
@@ -373,7 +380,7 @@ export function TeamChatSidebar() {
         setTeamMembers(fetchedUsers);
       }
     } catch (error) {
-      console.error("Gagal memuat saluran / pengguna chat:", error);
+      console.error("Failed to load chat channels / users:", error);
     }
   };
 
@@ -438,13 +445,13 @@ export function TeamChatSidebar() {
             isForwarded: m.isForwarded || false,
             replyToSender: m.replyToSender || null,
             replyToText: m.replyToText || null,
-            attachment: m.fileUrl ? { name: "Lampiran", size: "File", type: m.fileType || "file", url: m.fileUrl } : undefined,
+            attachment: m.fileUrl ? { name: "Attachment", size: "File", type: m.fileType || "file", url: m.fileUrl } : undefined,
           };
         });
         setMessages((prev) => ({ ...prev, [channelId]: formatted }));
       }
     } catch (error) {
-      console.error("Gagal memuat pesan:", error);
+      console.error("Failed to load messages:", error);
     }
   };
 
@@ -490,7 +497,7 @@ export function TeamChatSidebar() {
           replyToText: m.replyToText || null,
           attachment: m.fileUrl
             ? {
-                name: "Lampiran",
+                name: "Attachment",
                 size: "File",
                 type: (m.fileType === "image" ? "image" : "file") as "image" | "file",
                 url: m.fileUrl,
@@ -552,7 +559,16 @@ export function TeamChatSidebar() {
         if (hasMissingChannel) {
           getChatChannelsAction(currentUserId).then((fetched) => {
             if (fetched && Array.isArray(fetched)) {
-              setChannels(fetched.filter((c: any) => c.id !== "general" && c.name?.toLowerCase() !== "general"));
+              setChannels(fetched.filter((c: any) => {
+                if (c.id === "general" || c.name?.toLowerCase() === "general") return false;
+                if (c.type === "group") {
+                  return (
+                    (Array.isArray(c.members) && c.members.includes(currentUserId)) ||
+                    c.createdById === currentUserId
+                  );
+                }
+                return true;
+              }));
             }
           }).catch(() => {});
         }
@@ -566,16 +582,16 @@ export function TeamChatSidebar() {
         if (!isCurrentActive) {
           playNotificationChime();
           const targetCh = channels.find((c) => c.id === lastIncomingMsg.channelId);
-          const targetName = targetCh ? getChannelDisplayName(targetCh) : lastIncomingMsg.sender || "Chat Tim";
+          const targetName = targetCh ? getChannelDisplayName(targetCh) : lastIncomingMsg.sender || "Team Chat";
 
           setUnreadNotification({
             id: lastIncomingMsg.id,
             sender: lastIncomingMsg.sender,
             senderImage: lastIncomingMsg.senderImage,
-            text: lastIncomingMsg.text || (lastIncomingMsg.fileType === "image" ? "📷 Mengirim foto" : "📎 Mengirim berkas"),
+            text: lastIncomingMsg.text || (lastIncomingMsg.fileType === "image" ? "📷 Sent a photo" : "📎 Sent a file"),
             channelId: lastIncomingMsg.channelId,
             channelName: targetName,
-            time: "Baru saja",
+            time: "Just now",
           });
         } else {
           // Jika channel yang aktif sedang dibuka, langsung tandai telah dibaca
@@ -724,8 +740,11 @@ export function TeamChatSidebar() {
       lastMsg?: Message;
     }> = [];
 
-    // 1. Tambah Group Channels (general disaring bersih)
-    for (const ch of channels.filter((c) => c.type === "group" && c.id !== "general" && c.name?.toLowerCase() !== "general")) {
+    // 1. Tambah Group Channels (general disaring bersih, hanya yang diikuti/dibuat)
+    for (const ch of channels.filter((c) => {
+      if (c.type !== "group" || c.id === "general" || c.name?.toLowerCase() === "general") return false;
+      return (Array.isArray(c.members) && c.members.includes(currentUserId)) || c.createdById === currentUserId;
+    })) {
       const msgs = messages[ch.id] || [];
       const lastMsg =
         msgs[msgs.length - 1] ||
@@ -736,7 +755,7 @@ export function TeamChatSidebar() {
               senderId: ch.lastMessage.senderId,
               text:
                 ch.lastMessage.text ||
-                (ch.lastMessage.fileType === "image" ? "📷 Foto" : "📎 Lampiran"),
+                (ch.lastMessage.fileType === "image" ? "📷 Photo" : "📎 Attachment"),
               time: new Date(ch.lastMessage.createdAt).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -752,7 +771,7 @@ export function TeamChatSidebar() {
       items.push({
         id: ch.id,
         name: getChannelDisplayName(ch),
-        subtitle: ch.description || "Grup Tim",
+        subtitle: ch.description || "Team Group",
         type: "group",
         unread,
         lastMsg,
@@ -775,7 +794,7 @@ export function TeamChatSidebar() {
               senderId: ch.lastMessage.senderId,
               text:
                 ch.lastMessage.text ||
-                (ch.lastMessage.fileType === "image" ? "📷 Foto" : "📎 Lampiran"),
+                (ch.lastMessage.fileType === "image" ? "📷 Photo" : "📎 Attachment"),
               time: new Date(ch.lastMessage.createdAt).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -799,7 +818,7 @@ export function TeamChatSidebar() {
       items.push({
         id: ch.id,
         name: displayName,
-        subtitle: online ? "Online" : "Rekan Tim",
+        subtitle: online ? "Online" : "Team Member",
         type: "direct",
         avatarUrl: partner?.imageUrl,
         isOnline: online,
@@ -817,7 +836,7 @@ export function TeamChatSidebar() {
         items.unshift({
           id: activeChannelId,
           name: partner.name || partner.email,
-          subtitle: isUserOnline(partner) ? "Online" : "Obrolan Baru",
+          subtitle: isUserOnline(partner) ? "Online" : "New Chat",
           type: "direct",
           avatarUrl: partner.imageUrl,
           isOnline: isUserOnline(partner),
@@ -930,7 +949,7 @@ export function TeamChatSidebar() {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.warn("Gagal membuka webcam langsung, fallback ke input kamera:", err);
+      console.warn("Failed to open webcam directly, falling back to camera input:", err);
       setIsCameraModalOpen(false);
       cameraInputRef.current?.click();
     }
@@ -981,7 +1000,7 @@ export function TeamChatSidebar() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeChannelId || activeChannelId === "general") {
-      alert("Silakan pilih saluran atau obrolan terlebih dahulu.");
+      alert("Please select a channel or conversation first.");
       return;
     }
     if ((!inputText.trim() && !pendingFile) || isSending) return;
@@ -1050,14 +1069,14 @@ export function TeamChatSidebar() {
       });
 
       if (!res.success) {
-        console.error("Gagal mengirim pesan:", res.error);
-        alert("Gagal mengirim pesan: " + (res.error || "Gagal menyimpan pesan ke database"));
+        console.error("Failed to send message:", res.error);
+        alert("Failed to send message: " + (res.error || "Failed to save message to database"));
       } else {
         loadMessages(activeChannelId);
       }
     } catch (error: any) {
-      console.error("Gagal mengirim pesan:", error);
-      alert("Gagal mengirim pesan: " + (error?.message || "Koneksi terputus"));
+      console.error("Failed to send message:", error);
+      alert("Failed to send message: " + (error?.message || "Connection lost"));
     } finally {
       setIsSending(false);
     }
@@ -1070,10 +1089,10 @@ export function TeamChatSidebar() {
     setContextMenuMsg(null);
   };
 
-  // Hapus Pesan
+  // Delete Message
   const handleDeleteMessage = async (msgId: string) => {
     setContextMenuMsg(null);
-    if (!confirm("Hapus pesan ini?")) return;
+    if (!confirm("Are you sure you want to delete this message?")) return;
 
     setMessages((prev) => {
       const currentList = prev[activeChannelId] || [];
@@ -1086,29 +1105,29 @@ export function TeamChatSidebar() {
     try {
       await deleteChatMessageAction(msgId, currentUserId);
     } catch (err: any) {
-      alert("Gagal menghapus pesan: " + err?.message);
+      alert("Failed to delete message: " + err?.message);
     }
   };
 
-  // Salin Teks Pesan
+  // Copy Message Text
   const handleCopyText = (text: string) => {
     navigator.clipboard.writeText(text);
     setContextMenuMsg(null);
   };
 
-  // Balas Pesan
+  // Reply Message
   const handleReplyMessage = (msg: Message) => {
     setReplyingMessage(msg);
     setContextMenuMsg(null);
   };
 
-  // Mulai Teruskan Pesan
+  // Start Forward Message
   const handleStartForward = (msg: Message) => {
     setForwardingMessage(msg);
     setContextMenuMsg(null);
   };
 
-  // Kirim Teruskan Pesan ke Channel / DM Pilihan
+  // Confirm Forward Message to Channel / DM
   const handleConfirmForward = async (targetChannelId: string) => {
     if (!forwardingMessage || isForwarding) return;
     setIsForwarding(true);
@@ -1131,7 +1150,7 @@ export function TeamChatSidebar() {
       loadMessages(targetChannelId);
       updateLastRead(targetChannelId);
     } catch (err: any) {
-      alert("Gagal meneruskan pesan: " + err?.message);
+      alert("Failed to forward message: " + err?.message);
     } finally {
       setIsForwarding(false);
     }
@@ -1208,7 +1227,7 @@ export function TeamChatSidebar() {
     loadMessages(channelId);
   };
 
-  // Buat Grup Chat Baru
+  // Create New Group Chat
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName.trim()) return;
@@ -1233,18 +1252,18 @@ export function TeamChatSidebar() {
         setNewGroupDesc("");
         updateLastRead(createdCh.id);
       } else {
-        alert(res.error || "Gagal membuat grup");
+        alert(res.error || "Failed to create group");
       }
     } catch (e: any) {
-      alert("Terjadi kesalahan: " + e?.message);
+      alert("An error occurred: " + e?.message);
     } finally {
       setIsCreatingGroup(false);
     }
   };
 
-  // Hapus Grup
+  // Delete Group (Creator Only)
   const handleDeleteGroup = async (channelId: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus grup ini beserta semua riwayat chatnya?")) return;
+    if (!confirm("Are you sure you want to delete this group and all its messages permanently?")) return;
     try {
       const res = await deleteChatChannelAction(channelId, currentUserId);
       if (res.success) {
@@ -1254,14 +1273,14 @@ export function TeamChatSidebar() {
         setShowMobileChat(false);
         setIsManageGroupModalOpen(false);
       } else {
-        alert(res.error || "Gagal menghapus saluran");
+        alert(res.error || "Failed to delete group");
       }
     } catch (e: any) {
-      alert("Gagal: " + e?.message);
+      alert("Failed: " + e?.message);
     }
   };
 
-  // Buka Modal Kelola Grup
+  // Open Manage Group Modal
   const handleOpenManageGroup = () => {
     setEditGroupName(activeChannel.name);
     setEditGroupDesc(activeChannel.description || "");
@@ -1269,7 +1288,7 @@ export function TeamChatSidebar() {
     setIsManageGroupModalOpen(true);
   };
 
-  // Simpan Info Grup (Nama & Deskripsi)
+  // Save Group Info (Name & Description)
   const handleSaveGroupInfo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editGroupName.trim() || isSavingGroupInfo) return;
@@ -1285,90 +1304,137 @@ export function TeamChatSidebar() {
         setChannels((prev) =>
           prev.map((c) => (c.id === activeChannel.id ? (res.channel as Channel) : c))
         );
-        alert("Informasi grup berhasil diperbarui!");
+        alert("Group information updated successfully!");
       } else {
-        alert(res.error || "Gagal memperbarui grup");
+        alert(res.error || "Failed to update group");
       }
     } catch (err: any) {
-      alert("Terjadi kesalahan: " + err?.message);
+      alert("An error occurred: " + err?.message);
     } finally {
       setIsSavingGroupInfo(false);
     }
   };
 
-  // Kick Anggota dari Grup
+  // Remove Member from Group (Admin Only)
   const handleKickMember = async (memberId: string, memberName: string) => {
-    if (!confirm(`Keluarkan ${memberName} dari grup ini?`)) return;
+    if (!confirm(`Remove ${memberName} from this group?`)) return;
     setIsActionLoading(true);
     try {
-      const res = await kickChannelMemberAction(activeChannel.id, currentUserId, memberId);
+      const res = await kickChannelMemberAction(activeChannel.id, currentUserId, memberId, memberName);
       if (res.success && res.channel) {
         setChannels((prev) =>
           prev.map((c) => (c.id === activeChannel.id ? (res.channel as Channel) : c))
         );
+        const sysMsg: Message = {
+          id: `sys-${Date.now()}`,
+          sender: "System",
+          senderId: "system",
+          text: `${memberName} was removed`,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          createdAtRaw: new Date().toISOString(),
+          isSelf: false,
+        };
+        setMessages((prev) => ({
+          ...prev,
+          [activeChannel.id]: [...(prev[activeChannel.id] || []), sysMsg],
+        }));
       } else {
-        alert(res.error || "Gagal mengeluarkan anggota");
+        alert(res.error || "Failed to remove member");
       }
     } catch (err: any) {
-      alert("Gagal mengeluarkan anggota: " + err?.message);
+      alert("Failed to remove member: " + err?.message);
     } finally {
       setIsActionLoading(false);
     }
   };
 
-  // Jadikan Anggota sebagai Admin
+  // Promote Member to Admin
   const handlePromoteAdmin = async (memberId: string, memberName: string) => {
-    if (!confirm(`Jadikan ${memberName} sebagai Admin grup?`)) return;
+    if (!confirm(`Make ${memberName} a group admin?`)) return;
     setIsActionLoading(true);
     try {
-      const res = await promoteChannelAdminAction(activeChannel.id, currentUserId, memberId);
+      const res = await promoteChannelAdminAction(activeChannel.id, currentUserId, memberId, memberName);
       if (res.success && res.channel) {
         setChannels((prev) =>
           prev.map((c) => (c.id === activeChannel.id ? (res.channel as Channel) : c))
         );
-        alert(`${memberName} sekarang menjadi Admin grup.`);
+        const sysMsg: Message = {
+          id: `sys-${Date.now()}`,
+          sender: "System",
+          senderId: "system",
+          text: `${memberName} is now an admin`,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          createdAtRaw: new Date().toISOString(),
+          isSelf: false,
+        };
+        setMessages((prev) => ({
+          ...prev,
+          [activeChannel.id]: [...(prev[activeChannel.id] || []), sysMsg],
+        }));
+        alert(`${memberName} is now a group admin.`);
       } else {
-        alert(res.error || "Gagal menjadikan admin");
+        alert(res.error || "Failed to promote admin");
       }
     } catch (err: any) {
-      alert("Gagal menjadikan admin: " + err?.message);
+      alert("Failed to promote admin: " + err?.message);
     } finally {
       setIsActionLoading(false);
     }
   };
 
-  // Undang Anggota Baru ke Grup
+  // Invite Members to Group (Admin Only)
   const handleInviteMembers = async () => {
     if (inviteSelectedUsers.length === 0 || isActionLoading) return;
     setIsActionLoading(true);
     try {
+      const invitedNames = teamMembers
+        .filter((m) => inviteSelectedUsers.includes(m.id))
+        .map((m) => m.name || m.email);
+
       const res = await inviteChannelMembersAction(
         activeChannel.id,
         currentUserId,
-        inviteSelectedUsers
+        inviteSelectedUsers,
+        currentUserName,
+        invitedNames
       );
       if (res.success && res.channel) {
         setChannels((prev) =>
           prev.map((c) => (c.id === activeChannel.id ? (res.channel as Channel) : c))
         );
         setInviteSelectedUsers([]);
-        alert("Anggota baru berhasil ditambahkan!");
+        if (invitedNames.length > 0) {
+          const sysMsg: Message = {
+            id: `sys-${Date.now()}`,
+            sender: "System",
+            senderId: "system",
+            text: `${currentUserName} added ${invitedNames.join(", ")}`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            createdAtRaw: new Date().toISOString(),
+            isSelf: false,
+          };
+          setMessages((prev) => ({
+            ...prev,
+            [activeChannel.id]: [...(prev[activeChannel.id] || []), sysMsg],
+          }));
+        }
+        alert("New members added successfully!");
       } else {
-        alert(res.error || "Gagal mengundang anggota");
+        alert(res.error || "Failed to invite members");
       }
     } catch (err: any) {
-      alert("Gagal mengundang anggota: " + err?.message);
+      alert("Failed to invite members: " + err?.message);
     } finally {
       setIsActionLoading(false);
     }
   };
 
-  // Keluar dari Grup
+  // Leave Group (Members & Promoted Admins; Creator must delete)
   const handleLeaveGroup = async () => {
-    if (!confirm("Apakah Anda yakin ingin keluar dari grup ini?")) return;
+    if (!confirm("Are you sure you want to leave this group?")) return;
     setIsActionLoading(true);
     try {
-      const res = await leaveChatGroupAction(activeChannel.id, currentUserId);
+      const res = await leaveChatGroupAction(activeChannel.id, currentUserId, currentUserName);
       if (res.success) {
         const remaining = channels.filter((c) => c.id !== activeChannel.id);
         setChannels(remaining);
@@ -1376,10 +1442,10 @@ export function TeamChatSidebar() {
         setShowMobileChat(false);
         setIsManageGroupModalOpen(false);
       } else {
-        alert(res.error || "Gagal keluar dari grup");
+        alert(res.error || "Failed to leave group");
       }
     } catch (err: any) {
-      alert("Gagal keluar: " + err?.message);
+      alert("Failed to leave group: " + err?.message);
     } finally {
       setIsActionLoading(false);
     }
@@ -1477,7 +1543,7 @@ export function TeamChatSidebar() {
               ? "bg-[#27272a] text-white border border-zinc-700 hover:bg-[#323238]"
               : "bg-[#C65921] hover:bg-[#b04d1c] text-white border border-[#C65921]/50 shadow-md"
           }`}
-          title={isOpen ? "Tutup Chat" : "Buka Chat Tim"}
+          title={isOpen ? "Close Chat" : "Open Team Chat"}
         >
           {isOpen ? (
             <X size={20} className="transition-transform rotate-0 group-hover:rotate-90 duration-200" />
@@ -1498,7 +1564,7 @@ export function TeamChatSidebar() {
       {/* 4. KOTAK CHATBOX ALA WHATSAPP DESKTOP (MATTE #C65921)     */}
       {/* ========================================================= */}
       <div
-        className={`fixed bottom-20 left-5 z-[60] w-[calc(100vw-40px)] sm:w-[440px] md:w-[780px] h-[600px] max-h-[82vh] bg-[#141416] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col origin-bottom-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`fixed bottom-20 left-2.5 sm:left-5 z-[60] w-[calc(100vw-20px)] sm:w-[440px] md:w-[780px] h-[580px] sm:h-[600px] max-h-[85vh] bg-[#141416] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col origin-bottom-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isOpen
             ? "scale-100 opacity-100 translate-y-0 pointer-events-auto"
             : "scale-90 opacity-0 translate-y-4 pointer-events-none"
@@ -1514,16 +1580,16 @@ export function TeamChatSidebar() {
           }`}>
             
             {/* Header Profil Sendiri & Tombol Aksi WhatsApp */}
-            <div className="p-3.5 bg-[#18181c] flex items-center justify-between border-b border-zinc-800">
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-3 sm:p-3.5 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 gap-2">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 {currentUserImage ? (
-                  <img src={currentUserImage} alt={currentUserName} className="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-700" />
+                  <img src={currentUserImage} alt={currentUserName} className="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-700 shrink-0" />
                 ) : (
-                  <div className="w-9 h-9 rounded-full bg-[#C65921] flex items-center justify-center text-white font-bold text-xs ring-1 ring-zinc-700">
+                  <div className="w-9 h-9 rounded-full bg-[#C65921] flex items-center justify-center text-white font-bold text-xs ring-1 ring-zinc-700 shrink-0">
                     {(currentUserName || "U")[0]?.toUpperCase()}
                   </div>
                 )}
-                <div className="truncate">
+                <div className="truncate min-w-0">
                   <h4 className="text-xs font-semibold text-white truncate leading-tight">{currentUserName}</h4>
                   <span className="text-[10px] text-[#C65921] font-medium flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#C65921]" />
@@ -1532,13 +1598,13 @@ export function TeamChatSidebar() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 {/* Tombol Obrolan Baru (Pilih Kontak ala WA) */}
                 <button
                   type="button"
                   onClick={() => setIsNewChatModalOpen(true)}
                   className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition cursor-pointer"
-                  title="Obrolan Baru (Pilih Kontak)"
+                  title="New Chat (Select Contact)"
                 >
                   <MessageSquarePlus size={17} />
                 </button>
@@ -1548,7 +1614,7 @@ export function TeamChatSidebar() {
                   type="button"
                   onClick={() => setIsGroupModalOpen(true)}
                   className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition cursor-pointer"
-                  title="Buat Grup Baru"
+                  title="New Group"
                 >
                   <Plus size={17} />
                 </button>
@@ -1558,7 +1624,7 @@ export function TeamChatSidebar() {
                   type="button"
                   onClick={() => setIsOpen(false)}
                   className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
-                  title="Tutup Chat"
+                  title="Close Chat"
                 >
                   <X size={16} />
                 </button>
@@ -1573,12 +1639,12 @@ export function TeamChatSidebar() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari atau mulai chat baru..."
+                  placeholder="Search or start new chat..."
                   className="w-full bg-[#1e1e22] border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-[#C65921]"
                 />
               </div>
 
-              {/* Filter Tabs: Semua, Grup, Pribadi */}
+              {/* Filter Tabs: All, Groups, Direct */}
               <div className="flex items-center gap-1">
                 {(["all", "groups", "direct"] as const).map((tab) => (
                   <button
@@ -1591,7 +1657,7 @@ export function TeamChatSidebar() {
                         : "bg-[#1e1e22] text-zinc-400 hover:text-zinc-200"
                     }`}
                   >
-                    {tab === "all" ? "Semua" : tab === "groups" ? "Grup" : "Pribadi"}
+                    {tab === "all" ? "All" : tab === "groups" ? "Groups" : "Direct"}
                   </button>
                 ))}
               </div>
@@ -1605,9 +1671,9 @@ export function TeamChatSidebar() {
                     <MessageSquarePlus size={18} />
                   </div>
                   <div>
-                    <p className="font-semibold text-zinc-200">Belum ada percakapan</p>
+                    <p className="font-semibold text-zinc-200">No conversations yet</p>
                     <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
-                      Mulai obrolan baru dengan rekan tim atau buat grup diskusi.
+                      Start a new chat with your teammates or create a group.
                     </p>
                   </div>
                   <button
@@ -1616,7 +1682,7 @@ export function TeamChatSidebar() {
                     className="px-3.5 py-1.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white font-semibold text-xs transition cursor-pointer shadow-sm inline-flex items-center gap-1.5"
                   >
                     <MessageSquarePlus size={14} />
-                    <span>Mulai Obrolan Baru</span>
+                    <span>New Chat</span>
                   </button>
                 </div>
               ) : (
@@ -1665,7 +1731,7 @@ export function TeamChatSidebar() {
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-[11px] text-zinc-400 truncate flex items-center gap-1">
                             <span className="truncate">
-                              {item.lastMsg?.text || (item.lastMsg?.attachment?.type === "image" ? "📷 Foto" : item.subtitle)}
+                              {item.lastMsg?.text || (item.lastMsg?.attachment?.type === "image" ? "📷 Photo" : item.subtitle)}
                             </span>
                           </p>
 
@@ -1697,19 +1763,19 @@ export function TeamChatSidebar() {
                 /* ======================================================= */
                 <div className="flex-1 flex flex-col h-full bg-[#0e0e11] min-w-0 overflow-hidden animate-in fade-in duration-150">
                   {/* Header Info Grup dengan Tombol Kembali ← */}
-                  <div className="p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0">
-                    <div className="flex items-center gap-2.5">
+                  <div className="p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0 gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1 truncate">
                       <button
                         type="button"
                         onClick={() => setIsManageGroupModalOpen(false)}
-                        className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition cursor-pointer"
-                        title="Kembali ke obrolan"
+                        className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition cursor-pointer shrink-0"
+                        title="Back to chat"
                       >
                         <ArrowLeft size={17} />
                       </button>
-                      <div>
-                        <h3 className="text-xs font-bold text-white">Info Grup</h3>
-                        <span className="text-[10px] text-zinc-400">
+                      <div className="truncate min-w-0">
+                        <h3 className="text-xs font-bold text-white truncate leading-tight">Group Info</h3>
+                        <span className="text-[10px] text-zinc-400 truncate block">
                           {getChannelDisplayName(activeChannel)}
                         </span>
                       </div>
@@ -1718,8 +1784,8 @@ export function TeamChatSidebar() {
                     <button
                       type="button"
                       onClick={() => setIsManageGroupModalOpen(false)}
-                      className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
-                      title="Tutup Info"
+                      className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                      title="Close Info"
                     >
                       <X size={16} />
                     </button>
@@ -1737,10 +1803,10 @@ export function TeamChatSidebar() {
                       <form onSubmit={handleSaveGroupInfo} className="w-full space-y-3 text-left">
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="text-[11px] font-semibold text-zinc-400">Nama Grup</label>
+                            <label className="text-[11px] font-semibold text-zinc-400">Group Name</label>
                             {isCurrentUserAdmin && (
                               <span className="text-[10px] text-[#C65921] font-semibold flex items-center gap-1">
-                                <ShieldCheck size={11} /> Anda Admin
+                                <ShieldCheck size={11} /> Admin
                               </span>
                             )}
                           </div>
@@ -1754,13 +1820,13 @@ export function TeamChatSidebar() {
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Deskripsi Grup</label>
+                          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Group Description</label>
                           <textarea
                             rows={2}
                             disabled={!isCurrentUserAdmin}
                             value={editGroupDesc}
                             onChange={(e) => setEditGroupDesc(e.target.value)}
-                            placeholder="Tambahkan deskripsi grup..."
+                            placeholder="Add a group description..."
                             className="w-full bg-[#131316] border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C65921] disabled:opacity-60 resize-none"
                           />
                         </div>
@@ -1772,7 +1838,7 @@ export function TeamChatSidebar() {
                               disabled={isSavingGroupInfo}
                               className="px-3.5 py-1.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                             >
-                              {isSavingGroupInfo ? "Menyimpan..." : "Simpan Perubahan"}
+                              {isSavingGroupInfo ? "Saving..." : "Save Changes"}
                             </button>
                           </div>
                         )}
@@ -1783,7 +1849,7 @@ export function TeamChatSidebar() {
                     <div className="bg-[#18181c] border border-zinc-800 rounded-2xl p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-zinc-200">
-                          Anggota ({currentGroupMembers.length})
+                          Members ({currentGroupMembers.length})
                         </span>
                       </div>
 
@@ -1800,25 +1866,25 @@ export function TeamChatSidebar() {
                               key={member.id}
                               className="pt-2 first:pt-0 flex items-center justify-between gap-2"
                             >
-                              <div className="flex items-center gap-2.5 truncate">
+                              <div className="flex items-center gap-2.5 truncate min-w-0 flex-1">
                                 <div className="w-8 h-8 rounded-full bg-[#241f1c] text-[#C65921] border border-[#382b24] flex items-center justify-center font-bold text-xs shrink-0">
                                   {(member.name || member.email)[0]?.toUpperCase()}
                                 </div>
-                                <div className="truncate">
+                                <div className="truncate min-w-0">
                                   <span className="text-xs font-medium text-white block truncate">
-                                    {member.name || member.email} {isSelf && "(Anda)"}
+                                    {member.name || member.email} {isSelf && "(You)"}
                                   </span>
                                   <div className="flex items-center gap-1 mt-0.5">
                                     {isMemberOwner ? (
                                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#C65921] text-white font-bold">
-                                        Owner
+                                        Admin
                                       </span>
                                     ) : isMemberAdmin ? (
                                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#C65921]/20 text-[#C65921] font-semibold border border-[#C65921]/40">
                                         Admin
                                       </span>
                                     ) : (
-                                      <span className="text-[9px] text-zinc-500">Anggota</span>
+                                      <span className="text-[9px] text-zinc-500">Member</span>
                                     )}
                                   </div>
                                 </div>
@@ -1835,10 +1901,10 @@ export function TeamChatSidebar() {
                                         handlePromoteAdmin(member.id, member.name || member.email)
                                       }
                                       className="p-1 rounded-lg bg-zinc-800 hover:bg-[#C65921]/20 text-zinc-400 hover:text-[#C65921] transition cursor-pointer text-[10px] flex items-center gap-1 px-2"
-                                      title="Jadikan Admin"
+                                      title="Make Admin"
                                     >
                                       <ShieldCheck size={11} />
-                                      <span>Jadikan Admin</span>
+                                      <span>Make Admin</span>
                                     </button>
                                   )}
 
@@ -1850,7 +1916,7 @@ export function TeamChatSidebar() {
                                         handleKickMember(member.id, member.name || member.email)
                                       }
                                       className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition cursor-pointer"
-                                      title="Keluarkan dari grup"
+                                      title="Remove from group"
                                     >
                                       <UserMinus size={13} />
                                     </button>
@@ -1867,7 +1933,7 @@ export function TeamChatSidebar() {
                     {isCurrentUserAdmin && availableUsersToInvite.length > 0 && (
                       <div className="bg-[#18181c] border border-zinc-800 rounded-2xl p-4 space-y-2.5">
                         <span className="text-xs font-semibold text-zinc-200 block">
-                          Undang Rekan Tim ke Grup ({inviteSelectedUsers.length} dipilih)
+                          Add Members to Group ({inviteSelectedUsers.length} selected)
                         </span>
 
                         <div className="flex flex-col gap-1 p-1 bg-[#131316] rounded-xl max-h-36 overflow-y-auto no-scrollbar border border-zinc-800">
@@ -1899,7 +1965,7 @@ export function TeamChatSidebar() {
                             className="px-3.5 py-1.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white text-xs font-semibold transition cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
                           >
                             <UserPlus size={13} />
-                            <span>Tambahkan ke Grup</span>
+                            <span>Add to Group</span>
                           </button>
                         </div>
                       </div>
@@ -1915,7 +1981,7 @@ export function TeamChatSidebar() {
                           className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2 border border-rose-500/20"
                         >
                           <LogOut size={14} />
-                          <span>Keluar dari Grup</span>
+                          <span>Exit Group</span>
                         </button>
                       ) : (
                         <button
@@ -1925,7 +1991,7 @@ export function TeamChatSidebar() {
                           className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2 border border-rose-500/20"
                         >
                           <Trash2 size={14} />
-                          <span>Hapus Grup Ini</span>
+                          <span>Delete Group</span>
                         </button>
                       )}
                     </div>
@@ -1934,12 +2000,12 @@ export function TeamChatSidebar() {
               ) : (
                 <>
                   {/* Header Saluran Aktif */}
-                <div className="p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0">
+                <div className="p-2.5 sm:p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0 gap-2">
                   <div 
                     onClick={() => {
                       if (activeChannel.type === "group") handleOpenManageGroup();
                     }}
-                    className={`flex items-center gap-2.5 min-w-0 ${
+                    className={`flex items-center gap-2 min-w-0 flex-1 overflow-hidden ${
                       activeChannel.type === "group" ? "cursor-pointer group/hdr hover:opacity-90" : ""
                     }`}
                   >
@@ -1950,8 +2016,8 @@ export function TeamChatSidebar() {
                         e.stopPropagation();
                         setShowMobileChat(false);
                       }}
-                      className="md:hidden p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer mr-0.5"
-                      title="Kembali ke Daftar Chat"
+                      className="md:hidden p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer mr-0.5 shrink-0"
+                      title="Back to chat list"
                     >
                       <ChevronLeft size={18} />
                     </button>
@@ -1974,33 +2040,33 @@ export function TeamChatSidebar() {
                       )}
                     </div>
 
-                    <div className="truncate">
-                      <div className="flex items-center gap-1.5">
+                    <div className="truncate min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <h4 className="text-xs font-semibold text-white truncate leading-tight group-hover/hdr:text-[#C65921] transition">
                           {getChannelDisplayName(activeChannel)}
                         </h4>
                         {activeChannel.type === "group" && (
-                          <span className="text-[10px] text-zinc-500 font-mono">
-                            ({activeChannel.members?.length || 1} anggota)
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">
+                            ({activeChannel.members?.length || 1} members)
                           </span>
                         )}
                       </div>
                       <p className="text-[10px] text-zinc-400 truncate">
                         {activeChannel.type === "direct"
                           ? isDmPartnerOnline ? "Online" : "Offline"
-                          : activeChannel.description || "Klik untuk kelola & info grup"}
+                          : activeChannel.description || "Click for group info"}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     {/* Tombol Kelola Grup */}
                     {activeChannel.type === "group" && (
                       <button
                         type="button"
                         onClick={handleOpenManageGroup}
-                        className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
-                        title="Kelola Grup (Info, Kick, Invite, Admin)"
+                        className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                        title="Group Info"
                       >
                         <Settings size={16} />
                       </button>
@@ -2009,8 +2075,8 @@ export function TeamChatSidebar() {
                     <button
                       type="button"
                       onClick={() => setIsOpen(false)}
-                      className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
-                      title="Tutup Chat"
+                      className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                      title="Close Chat"
                     >
                       <X size={16} />
                     </button>
@@ -2027,13 +2093,23 @@ export function TeamChatSidebar() {
                       <div className="w-12 h-12 rounded-2xl bg-[#1c1c20] border border-zinc-800 flex items-center justify-center text-[#C65921]">
                         <MessageCircle size={24} />
                       </div>
-                      <p className="font-semibold text-zinc-200">Mulai percakapan</p>
+                      <p className="font-semibold text-zinc-200">Start conversation</p>
                       <span className="text-[11px] text-zinc-400 max-w-xs">
-                        Ketik pesan di bawah untuk memulai kolaborasi dengan {getChannelDisplayName(activeChannel)}.
+                        Type a message below to start collaborating with {getChannelDisplayName(activeChannel)}.
                       </span>
                     </div>
                   ) : (
                     activeMessages.map((msg) => {
+                      if (msg.senderId === "system" || msg.sender === "System") {
+                        return (
+                          <div key={msg.id} className="flex justify-center my-2 select-none">
+                            <span className="text-[10.5px] px-3.5 py-0.5 rounded-full bg-[#1b1b1f] text-zinc-400 border border-zinc-800/80 shadow-xs max-w-[85%] text-center">
+                              {msg.text}
+                            </span>
+                          </div>
+                        );
+                      }
+
                       const isImageOnly = msg.attachment?.type === "image" && !msg.text;
                       const isMenuOpen = contextMenuMsg?.id === msg.id;
 
@@ -2042,7 +2118,7 @@ export function TeamChatSidebar() {
                           key={msg.id}
                           className={`group relative flex flex-col ${msg.isSelf ? "items-end" : "items-start"}`}
                         >
-                          {/* Nama Pengirim untuk Pesan Orang Lain di Grup */}
+                          {/* Sender Name in Group */}
                           {!msg.isSelf && activeChannel.type === "group" && (
                             <div className="flex items-center gap-1.5 mb-0.5 ml-2">
                               <span className="text-[10px] text-[#C65921] font-semibold">
@@ -2051,7 +2127,7 @@ export function TeamChatSidebar() {
                             </div>
                           )}
 
-                          {/* Bubble Pesan (Warna Soft Terracotta #C65921 untuk pesan sendiri) */}
+                          {/* Message Bubble (Soft Terracotta #C65921 for self) */}
                           <div
                             className={`relative rounded-2xl text-xs leading-relaxed shadow-sm transition max-w-[85%] sm:max-w-[75%] ${
                               isImageOnly
@@ -2061,7 +2137,7 @@ export function TeamChatSidebar() {
                                 : "bg-[#1f1f23] text-zinc-100 border border-zinc-800/80 p-2.5 rounded-tl-xs"
                             }`}
                           >
-                            {/* Tombol Chevron Dropdown Opsi */}
+                            {/* Dropdown Chevron */}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2072,20 +2148,20 @@ export function TeamChatSidebar() {
                                 );
                               }}
                               className="opacity-0 group-hover:opacity-100 absolute top-1 right-1 z-10 w-5 h-5 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition cursor-pointer"
-                              title="Menu Pesan"
+                              title="Message menu"
                             >
                               <ChevronDown size={12} />
                             </button>
 
-                            {/* Banner "Diteruskan" (Forwarded) */}
+                            {/* Forwarded Banner */}
                             {msg.isForwarded && (
                               <div className="flex items-center gap-1 text-[10px] italic opacity-80 mb-1 font-sans">
                                 <Forward size={11} className="inline rotate-0" />
-                                <span>Diteruskan</span>
+                                <span>Forwarded</span>
                               </div>
                             )}
 
-                            {/* Quote Box Balasan (Reply To) */}
+                            {/* Reply Quote Box */}
                             {msg.replyToSender && (
                               <div className={`mb-1.5 p-1.5 px-2 rounded-lg border-l-3 text-[11px] select-none ${
                                 msg.isSelf ? "bg-black/20 border-white/80" : "bg-black/30 border-[#C65921]"
@@ -2099,7 +2175,7 @@ export function TeamChatSidebar() {
                               </div>
                             )}
 
-                            {/* Lampiran Gambar (Bebas Border, Dilengkapi Tombol Download) */}
+                            {/* Image Attachment */}
                             {msg.attachment?.type === "image" && (
                               <div className="relative group/img overflow-hidden rounded-xl mb-1">
                                 <img
@@ -2113,10 +2189,10 @@ export function TeamChatSidebar() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      downloadMedia(msg.attachment!.url, msg.attachment!.name || "foto.jpg");
+                                      downloadMedia(msg.attachment!.url, msg.attachment!.name || "photo.jpg");
                                     }}
                                     className="p-1.5 rounded-full bg-black/60 hover:bg-black text-white shadow backdrop-blur-sm transition cursor-pointer"
-                                    title="Download Foto"
+                                    title="Download Photo"
                                   >
                                     <Download size={13} />
                                   </button>
@@ -2124,7 +2200,7 @@ export function TeamChatSidebar() {
                               </div>
                             )}
 
-                            {/* Lampiran Berkas Dokumen */}
+                            {/* File Attachment */}
                             {msg.attachment?.type === "file" && (
                               <div className="flex items-center gap-2.5 p-2 rounded-xl bg-black/20 mb-1 border border-white/5">
                                 <FileText size={18} className="text-zinc-400" />
@@ -2136,21 +2212,21 @@ export function TeamChatSidebar() {
                                   type="button"
                                   onClick={() => downloadMedia(msg.attachment!.url, msg.attachment!.name)}
                                   className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
-                                  title="Download Berkas"
+                                  title="Download File"
                                 >
                                   <Download size={13} />
                                 </button>
                               </div>
                             )}
 
-                            {/* Teks Pesan */}
+                            {/* Message Text */}
                             {msg.text && (
                               <p className="whitespace-pre-wrap break-words pr-1 text-[12px]">
                                 {renderMessageTextWithLinks(msg.text, msg.isSelf)}
                               </p>
                             )}
 
-                            {/* Footer Bubble: Waktu & Tulisan 'edited' (TANPA CHECKLIST BACA) */}
+                            {/* Footer: Time & Edited */}
                             <div className="flex items-center justify-end gap-1 mt-0.5 text-[9px] opacity-75 font-mono select-none">
                               {msg.isEdited && (
                                 <span className="italic font-sans">edited</span>
@@ -2159,7 +2235,7 @@ export function TeamChatSidebar() {
                             </div>
                           </div>
 
-                          {/* Context Menu Opsi Pesan */}
+                          {/* Context Menu Options */}
                           {isMenuOpen && (
                             <div
                               ref={contextMenuRef}
@@ -2171,7 +2247,7 @@ export function TeamChatSidebar() {
                                 className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
                               >
                                 <Reply size={14} className="text-zinc-400" />
-                                <span>Balas</span>
+                                <span>Reply</span>
                               </button>
 
                               {msg.text && (
@@ -2181,7 +2257,7 @@ export function TeamChatSidebar() {
                                   className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
                                 >
                                   <Copy size={14} className="text-zinc-400" />
-                                  <span>Salin Teks</span>
+                                  <span>Copy Text</span>
                                 </button>
                               )}
 
@@ -2191,20 +2267,20 @@ export function TeamChatSidebar() {
                                 className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
                               >
                                 <Forward size={14} className="text-zinc-400" />
-                                <span>Teruskan</span>
+                                <span>Forward</span>
                               </button>
 
                               {msg.attachment?.type === "image" && (
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    downloadMedia(msg.attachment!.url, msg.attachment!.name || "foto.jpg");
+                                    downloadMedia(msg.attachment!.url, msg.attachment!.name || "photo.jpg");
                                     setContextMenuMsg(null);
                                   }}
                                   className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
                                 >
                                   <Download size={14} className="text-zinc-400" />
-                                  <span>Download Foto</span>
+                                  <span>Download Photo</span>
                                 </button>
                               )}
 
@@ -2215,7 +2291,7 @@ export function TeamChatSidebar() {
                                   className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left text-amber-300"
                                 >
                                   <Edit2 size={14} />
-                                  <span>Edit Pesan</span>
+                                  <span>Edit Message</span>
                                 </button>
                               )}
 
@@ -2226,7 +2302,7 @@ export function TeamChatSidebar() {
                                   className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-rose-500/10 transition cursor-pointer text-left text-rose-400"
                                 >
                                   <Trash2 size={14} />
-                                  <span>Hapus Pesan</span>
+                                  <span>Delete Message</span>
                                 </button>
                               )}
                             </div>
@@ -2239,34 +2315,34 @@ export function TeamChatSidebar() {
                 </div>
 
                 {/* Input Bar */}
-                <div className="p-2.5 bg-[#18181c] border-t border-zinc-800">
-                  {/* Banner Membalas Pesan */}
+                <div className="p-2 sm:p-2.5 bg-[#18181c] border-t border-zinc-800 shrink-0">
+                  {/* Replying Banner */}
                   {replyingMessage && (
                     <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-[#C65921] flex items-center justify-between text-xs">
-                      <div className="truncate">
+                      <div className="truncate min-w-0 flex-1 mr-2">
                         <span className="text-[10px] text-[#C65921] font-semibold block">
-                          Membalas ke {replyingMessage.sender}:
+                          Replying to {replyingMessage.sender}:
                         </span>
                         <span className="text-zinc-300 truncate block text-[11px]">
-                          {replyingMessage.text || "[Lampiran]"}
+                          {replyingMessage.text || "[Attachment]"}
                         </span>
                       </div>
                       <button
                         type="button"
                         onClick={() => setReplyingMessage(null)}
-                        className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+                        className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
                       >
                         <X size={14} />
                       </button>
                     </div>
                   )}
 
-                  {/* Banner Mengedit Pesan */}
+                  {/* Editing Banner */}
                   {editingMessage && (
                     <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-amber-400 flex items-center justify-between text-xs">
-                      <div className="truncate">
+                      <div className="truncate min-w-0 flex-1 mr-2">
                         <span className="text-[10px] text-amber-400 font-semibold block">
-                          Mengedit Pesan:
+                          Editing Message:
                         </span>
                         <span className="text-zinc-300 truncate block text-[11px]">
                           "{editingMessage.text}"
@@ -2278,37 +2354,37 @@ export function TeamChatSidebar() {
                           setEditingMessage(null);
                           setInputText("");
                         }}
-                        className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+                        className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
                       >
                         <X size={14} />
                       </button>
                     </div>
                   )}
 
-                  {/* Banner Pending File / Foto */}
+                  {/* Pending File Banner */}
                   {pendingFile && (
                     <div className="mb-2 p-2 rounded-xl bg-[#202024] border border-zinc-800 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 truncate">
+                      <div className="flex items-center gap-2 truncate min-w-0 flex-1 mr-2">
                         {pendingFile.type === "image" ? (
-                          <ImageIcon size={16} className="text-[#C65921]" />
+                          <ImageIcon size={16} className="text-[#C65921] shrink-0" />
                         ) : (
-                          <FileText size={16} className="text-[#C65921]" />
+                          <FileText size={16} className="text-[#C65921] shrink-0" />
                         )}
                         <span className="text-zinc-200 truncate text-[11px] font-medium">{pendingFile.name}</span>
-                        <span className="text-[9px] text-zinc-500 font-mono">({pendingFile.size})</span>
+                        <span className="text-[9px] text-zinc-500 font-mono shrink-0">({pendingFile.size})</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => setPendingFile(null)}
-                        className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+                        className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
                       >
                         <X size={14} />
                       </button>
                     </div>
                   )}
 
-                  {/* Baris Input */}
-                  <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                  {/* Input Form */}
+                  <form onSubmit={handleSendMessage} className="flex items-center gap-1.5 sm:gap-2">
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -2324,27 +2400,27 @@ export function TeamChatSidebar() {
                       className="hidden"
                     />
 
-                    {/* Tombol Lampiran Berkas */}
+                    {/* Attach File Button */}
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
-                      title="Kirim Berkas atau Foto"
+                      className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                      title="Attach file or photo"
                     >
                       <Paperclip size={18} />
                     </button>
 
-                    {/* Tombol Kamera Langsung */}
+                    {/* Camera Button */}
                     <button
                       type="button"
                       onClick={openCamera}
-                      className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
-                      title="Ambil Foto Kamera"
+                      className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                      title="Take photo"
                     >
                       <Camera size={18} />
                     </button>
 
-                    {/* Input Teks */}
+                    {/* Text Input */}
                     <input
                       type="text"
                       value={inputText}
@@ -2352,18 +2428,18 @@ export function TeamChatSidebar() {
                       onChange={(e) => setInputText(e.target.value)}
                       placeholder={
                         editingMessage
-                          ? "Ketik pesan baru..."
-                          : "Ketik pesan..."
+                          ? "Type new message..."
+                          : "Type a message..."
                       }
-                      className="flex-1 bg-[#1f1f23] text-zinc-200 placeholder:text-zinc-500 text-xs rounded-full px-4 py-2.5 focus:outline-none focus:border-[#C65921] border border-zinc-700/60"
+                      className="min-w-0 flex-1 bg-[#1f1f23] text-zinc-200 placeholder:text-zinc-500 text-xs rounded-full px-3.5 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:border-[#C65921] border border-zinc-700/60"
                     />
 
-                    {/* Tombol Kirim */}
+                    {/* Send Button */}
                     <button
                       type="submit"
                       disabled={(!inputText.trim() && !pendingFile) || isSending}
-                      className="p-2.5 rounded-full bg-[#C65921] hover:bg-[#b04d1c] text-white disabled:opacity-40 transition cursor-pointer shadow active:scale-95"
-                      title={editingMessage ? "Perbarui Pesan" : "Kirim Pesan"}
+                      className="p-2 sm:p-2.5 rounded-full bg-[#C65921] hover:bg-[#b04d1c] text-white disabled:opacity-40 transition cursor-pointer shadow active:scale-95 shrink-0"
+                      title={editingMessage ? "Update Message" : "Send Message"}
                     >
                       {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} className="fill-current" />}
                     </button>
@@ -2376,9 +2452,9 @@ export function TeamChatSidebar() {
                   <MessageSquare size={26} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Mulai Obrolan</h3>
+                  <h3 className="text-sm font-bold text-white">Start a Conversation</h3>
                   <p className="text-xs text-zinc-400 max-w-xs mt-1 leading-relaxed">
-                    Pilih obrolan dari daftar di sebelah kiri atau klik tombol di bawah untuk memulai obrolan baru.
+                    Select a chat from the sidebar or click below to start a new chat.
                   </p>
                 </div>
                 <button
@@ -2387,7 +2463,7 @@ export function TeamChatSidebar() {
                   className="mt-1 px-4 py-2 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
                 >
                   <MessageSquarePlus size={15} />
-                  <span>Mulai Obrolan Baru</span>
+                  <span>New Chat</span>
                 </button>
               </div>
             )}
@@ -2404,7 +2480,7 @@ export function TeamChatSidebar() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <MessageSquarePlus size={17} className="text-[#C65921]" />
-                <span>Obrolan Baru</span>
+                <span>New Chat</span>
               </div>
               <button
                 type="button"
@@ -2428,8 +2504,8 @@ export function TeamChatSidebar() {
                 <Users size={16} />
               </div>
               <div className="text-left">
-                <span className="text-xs font-semibold block text-white">Grup Baru</span>
-                <span className="text-[10px] text-zinc-400 block">Buat grup diskusi bersama tim</span>
+                <span className="text-xs font-semibold block text-white">New Group</span>
+                <span className="text-[10px] text-zinc-400 block">Create a discussion group with your team</span>
               </div>
             </button>
 
@@ -2440,7 +2516,7 @@ export function TeamChatSidebar() {
                 type="text"
                 value={newChatSearchQuery}
                 onChange={(e) => setNewChatSearchQuery(e.target.value)}
-                placeholder="Cari nama atau email rekan..."
+                placeholder="Search by name or email..."
                 className="w-full bg-[#131316] border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#C65921]"
               />
             </div>
@@ -2448,7 +2524,7 @@ export function TeamChatSidebar() {
             {/* List Kontak Tim */}
             <div className="space-y-1">
               <span className="text-[11px] font-semibold text-zinc-400 block px-1">
-                Kontak Rekan Tim
+                Team Contacts
               </span>
               <div className="space-y-1 max-h-56 overflow-y-auto no-scrollbar">
                 {teamMembers
@@ -2480,7 +2556,7 @@ export function TeamChatSidebar() {
                               {member.name || member.email}
                             </span>
                             <span className="text-[10px] text-zinc-400 block truncate">
-                              {online ? "Online" : "Rekan Tim"}
+                              {online ? "Online" : "Team Member"}
                             </span>
                           </div>
                         </div>
@@ -2502,7 +2578,7 @@ export function TeamChatSidebar() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Forward size={17} className="text-[#C65921]" />
-                <span>Teruskan pesan ke</span>
+                <span>Forward message to</span>
               </div>
               <button
                 type="button"
@@ -2514,7 +2590,7 @@ export function TeamChatSidebar() {
             </div>
 
             <div className="p-2.5 rounded-xl bg-[#131316] text-xs text-zinc-300 max-h-20 overflow-y-auto italic border-l-3 border-[#C65921]">
-              {forwardingMessage.text || (forwardingMessage.attachment ? `[Lampiran: ${forwardingMessage.attachment.type}]` : "Pesan")}
+              {forwardingMessage.text || (forwardingMessage.attachment ? `[Attachment: ${forwardingMessage.attachment.type}]` : "Message")}
             </div>
 
             <div className="relative">
@@ -2523,7 +2599,7 @@ export function TeamChatSidebar() {
                 type="text"
                 value={forwardSearchQuery}
                 onChange={(e) => setForwardSearchQuery(e.target.value)}
-                placeholder="Cari saluran atau rekan..."
+                placeholder="Search chats or contacts..."
                 className="w-full bg-[#131316] border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#C65921]"
               />
             </div>
@@ -2549,7 +2625,7 @@ export function TeamChatSidebar() {
                       </div>
                     </div>
                     <span className="text-[11px] font-semibold text-[#C65921] px-2.5 py-1 rounded-lg bg-[#C65921]/10 hover:bg-[#C65921]/20 transition shrink-0">
-                      Kirim
+                      Send
                     </span>
                   </button>
                 ))}
@@ -2567,7 +2643,7 @@ export function TeamChatSidebar() {
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2 text-white text-sm font-semibold">
                 <Camera size={16} className="text-[#C65921]" />
-                <span>Ambil Foto Kamera (Normal)</span>
+                <span>Take Photo (Normal)</span>
               </div>
               <button
                 type="button"
@@ -2597,7 +2673,7 @@ export function TeamChatSidebar() {
                 className="text-xs text-zinc-400 hover:text-white flex items-center gap-1.5 p-1.5 rounded-lg hover:bg-white/5 transition cursor-pointer"
               >
                 <RefreshCw size={13} />
-                <span>Cermin Kamera: {isCameraMirrored ? "Aktif" : "Nonaktif (Normal)"}</span>
+                <span>Mirror Camera: {isCameraMirrored ? "On" : "Off (Normal)"}</span>
               </button>
 
               <button
@@ -2606,7 +2682,7 @@ export function TeamChatSidebar() {
                 className="px-5 py-2.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer transition"
               >
                 <Camera size={14} />
-                <span>Jepret Foto</span>
+                <span>Capture Photo</span>
               </button>
             </div>
           </div>
@@ -2626,7 +2702,7 @@ export function TeamChatSidebar() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                downloadMedia(previewImage.url, previewImage.name || "foto.jpg");
+                downloadMedia(previewImage.url, previewImage.name || "photo.jpg");
               }}
               className="p-2.5 rounded-full bg-[#18181c] hover:bg-zinc-800 text-white shadow-lg cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
             >
@@ -2664,7 +2740,7 @@ export function TeamChatSidebar() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Users size={16} className="text-[#C65921]" />
-                <span>Buat Grup Chat Baru</span>
+                <span>New Group Chat</span>
               </div>
               <button 
                 type="button"
@@ -2677,35 +2753,35 @@ export function TeamChatSidebar() {
 
             <form onSubmit={handleCreateGroup} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-zinc-300 mb-1 font-medium">Nama Grup</label>
+                <label className="block text-zinc-300 mb-1 font-medium">Group Name</label>
                 <input
                   type="text"
                   required
                   value={newGroupName}
                   onChange={(e) => setNewGroupName(e.target.value)}
-                  placeholder="e.g. Project Branding, Tim Kreatif"
+                  placeholder="e.g. Project Branding, Creative Team"
                   className="w-full bg-[#131316] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#C65921]"
                 />
               </div>
 
               <div>
-                <label className="block text-zinc-300 mb-1 font-medium">Deskripsi (Opsional)</label>
+                <label className="block text-zinc-300 mb-1 font-medium">Description (Optional)</label>
                 <input
                   type="text"
                   value={newGroupDesc}
                   onChange={(e) => setNewGroupDesc(e.target.value)}
-                  placeholder="e.g. Diskusi harian tim"
+                  placeholder="e.g. Daily team discussions"
                   className="w-full bg-[#131316] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#C65921]"
                 />
               </div>
 
               <div>
                 <label className="block text-zinc-300 mb-1.5 font-medium">
-                  Pilih Anggota ({selectedMembers.length} dipilih)
+                  Select Members ({selectedMembers.length} selected)
                 </label>
                 <div className="flex flex-col gap-1 p-2 bg-[#131316] border border-zinc-800 rounded-xl max-h-36 overflow-y-auto no-scrollbar">
                   {teamMembers.length === 0 ? (
-                    <span className="text-zinc-500 text-[11px] p-2 text-center">Belum ada anggota terdaftar</span>
+                    <span className="text-zinc-500 text-[11px] p-2 text-center">No members available</span>
                   ) : (
                     teamMembers.map((member) => {
                       const isSelected = selectedMembers.includes(member.id);
@@ -2740,14 +2816,14 @@ export function TeamChatSidebar() {
                   onClick={() => setIsGroupModalOpen(false)}
                   className="flex-1 py-2 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer font-medium"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isCreatingGroup || !newGroupName.trim()}
                   className="flex-1 py-2 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  {isCreatingGroup ? "Membuat..." : "Buat Grup"}
+                  {isCreatingGroup ? "Creating..." : "Create Group"}
                 </button>
               </div>
             </form>
