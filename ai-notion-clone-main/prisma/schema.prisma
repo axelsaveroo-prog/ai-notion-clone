@@ -43,6 +43,7 @@ model ChatChannel {
   type        String   @default("group") // "group" | "direct"
   description String?
   members     String[] // User IDs or names
+  admins      String[] @default([]) // Admin user IDs
   createdById String?
   createdAt   DateTime @default(now())
 }
