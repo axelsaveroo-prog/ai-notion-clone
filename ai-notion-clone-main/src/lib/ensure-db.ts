@@ -109,17 +109,34 @@ const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "ChatMessage_createdAt_idx" ON "ChatMessage"("createdAt")`,
   `CREATE INDEX IF NOT EXISTS "Attendance_userId_idx" ON "Attendance"("userId")`,
   `CREATE INDEX IF NOT EXISTS "Attendance_timestamp_idx" ON "Attendance"("timestamp")`,
-  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastActiveAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP`
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "senderId" TEXT`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "senderImage" TEXT`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "text" TEXT`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "fileUrl" TEXT`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "fileType" TEXT`,
+  `ALTER TABLE "ChatChannel" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'group'`,
+  `ALTER TABLE "ChatChannel" ADD COLUMN IF NOT EXISTS "description" TEXT`,
+  `ALTER TABLE "ChatChannel" ADD COLUMN IF NOT EXISTS "members" TEXT[] DEFAULT ARRAY[]::TEXT[]`,
+  `ALTER TABLE "ChatChannel" ADD COLUMN IF NOT EXISTS "createdById" TEXT`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastActiveAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP`,
+  `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "eventType" TEXT DEFAULT 'online'`,
+  `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "meetLink" TEXT`,
+  `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "location" TEXT`,
+  `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "creatorName" TEXT`,
+  `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "approvals" JSONB`,
+  `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "assignedBy" TEXT`,
+  `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "dueDate" TEXT`,
+  `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "brief" TEXT`
 ];
 
 export async function ensureDatabaseTables(force = false) {
   if (isDbInitialized && !force) return;
-  try {
-    for (const statement of DDL_STATEMENTS) {
+  for (const statement of DDL_STATEMENTS) {
+    try {
       await prisma.$executeRawUnsafe(statement);
+    } catch {
+      // Abaikan jika statement gagal (misal tabel/kolom/index sudah ada)
     }
-    isDbInitialized = true;
-  } catch (err) {
-    console.warn("ensureDatabaseTables warning (continuing):", err);
   }
+  isDbInitialized = true;
 }
