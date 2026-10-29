@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { 
   getChatMessages, 
@@ -52,7 +52,8 @@ import {
   UserPlus,
   UserMinus,
   LogOut,
-  Check
+  Check,
+  ArrowLeft
 } from "lucide-react";
 
 interface Attachment {
@@ -70,7 +71,7 @@ interface Message {
   senderImage?: string | null;
   text: string;
   time: string;
-  createdAtRaw?: string;
+  createdAtRaw?: string | Date;
   attachment?: Attachment;
   isSelf: boolean;
   isEdited?: boolean;
@@ -359,8 +360,9 @@ export function TeamChatSidebar() {
           (c) => c.id !== "general" && c.name?.toLowerCase() !== "general"
         );
         setChannels(validChannels);
-        if (!activeChannelId || activeChannelId === "general") {
-          setActiveChannelId(validChannels[0]?.id || "");
+        // JANGAN auto buka chat apapun ketika dibuka (biarkan kosong sampai user memilih)
+        if (activeChannelId === "general") {
+          setActiveChannelId("");
         }
       } else {
         setChannels([]);
@@ -446,56 +448,161 @@ export function TeamChatSidebar() {
     }
   };
 
-  // 3. Polling global & listener untuk deteksi notifikasi pesan masuk
-  useEffect(() => {
-    const checkNewMessages = async () => {
-      try {
-        const latestMsgs = await getLatestChatUpdatesAction(25);
-        if (!latestMsgs || latestMsgs.length === 0) return;
+  // 3. Polling global & listener untuk deteksi notifikasi pesan masuk & sinkronisasi data
+  const checkNewMessages = useCallback(async () => {
+    try {
+      const latestMsgs = await getLatestChatUpdatesAction(50);
+      if (!latestMsgs || latestMsgs.length === 0) return;
 
-        let hasNewIncoming = false;
-        let lastIncomingMsg: any = null;
+      let hasNewIncoming = false;
+      let lastIncomingMsg: any = null;
 
-        for (const m of latestMsgs) {
-          if (m.channelId === "general") continue;
-          const isKnown = knownMessageIdsRef.current.has(m.id);
-          const isSelf = m.senderId ? m.senderId === currentUserId : m.sender === currentUserName;
-          knownMessageIdsRef.current.add(m.id);
+      // Format pesan yang masuk dari server
+      const formattedIncoming: Record<string, Message[]> = {};
 
-          if (!isKnown && !isSelf) {
-            hasNewIncoming = true;
-            lastIncomingMsg = m;
+      for (const m of latestMsgs) {
+        if (m.channelId === "general") continue;
+        const isKnown = knownMessageIdsRef.current.has(m.id);
+        const isSelf = m.senderId ? m.senderId === currentUserId : m.sender === currentUserName;
+        knownMessageIdsRef.current.add(m.id);
+
+        if (!isKnown && !isSelf) {
+          hasNewIncoming = true;
+          lastIncomingMsg = m;
+        }
+
+        if (!formattedIncoming[m.channelId]) {
+          formattedIncoming[m.channelId] = [];
+        }
+        formattedIncoming[m.channelId].push({
+          id: m.id,
+          channelId: m.channelId,
+          sender: m.sender,
+          senderId: m.senderId,
+          senderImage: m.senderImage,
+          text: m.text || "",
+          time: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          createdAtRaw: typeof m.createdAt === "string" ? m.createdAt : m.createdAt?.toISOString(),
+          isSelf,
+          isEdited: m.isEdited || false,
+          isForwarded: m.isForwarded || false,
+          replyToSender: m.replyToSender || null,
+          replyToText: m.replyToText || null,
+          attachment: m.fileUrl
+            ? {
+                name: "Lampiran",
+                size: "File",
+                type: (m.fileType === "image" ? "image" : "file") as "image" | "file",
+                url: m.fileUrl,
+              }
+            : undefined,
+        });
+      }
+
+      // Merge langsung ke state messages per channel (agar obrolan & preview list langsung terupdate seketika tanpa harus dipencet dulu)
+      setMessages((prev) => {
+        let hasChange = false;
+        const updated = { ...prev };
+
+        for (const [chId, incMsgs] of Object.entries(formattedIncoming)) {
+          const existing = updated[chId] || [];
+          const existingIds = new Set(existing.map((x) => x.id));
+          const newOnes = incMsgs.filter((x) => !existingIds.has(x.id));
+          if (newOnes.length > 0) {
+            hasChange = true;
+            const combined = [...existing, ...newOnes].sort(
+              (a, b) => new Date(a.createdAtRaw || 0).getTime() - new Date(b.createdAtRaw || 0).getTime()
+            );
+            updated[chId] = combined;
           }
         }
+        return hasChange ? updated : prev;
+      });
 
-        if (hasNewIncoming && lastIncomingMsg) {
-          const isCurrentActive = isOpen && activeChannelId === lastIncomingMsg.channelId;
-          if (!isCurrentActive) {
-            playNotificationChime();
-            const targetCh = channels.find((c) => c.id === lastIncomingMsg.channelId);
-            const targetName = targetCh ? getChannelDisplayName(targetCh) : "Chat Tim";
-
-            setUnreadNotification({
-              id: lastIncomingMsg.id,
-              sender: lastIncomingMsg.sender,
-              senderImage: lastIncomingMsg.senderImage,
-              text: lastIncomingMsg.text || (lastIncomingMsg.fileType === "image" ? "📷 Mengirim foto" : "📎 Mengirim berkas"),
-              channelId: lastIncomingMsg.channelId,
-              channelName: targetName,
-              time: "Baru saja",
-            });
+      // Update lastMessage di channels agar nama pengirim & cuplikan teks terupdate seketika
+      setChannels((prevChannels) => {
+        let hasChannelUpdates = false;
+        const updatedChannels = prevChannels.map((c) => {
+          const chIncoming = formattedIncoming[c.id];
+          if (chIncoming && chIncoming.length > 0) {
+            const newest = chIncoming[chIncoming.length - 1];
+            if (!c.lastMessage || c.lastMessage.id !== newest.id) {
+              hasChannelUpdates = true;
+              return {
+                ...c,
+                lastMessage: {
+                  id: newest.id,
+                  sender: newest.sender,
+                  senderId: newest.senderId,
+                  text: newest.text,
+                  fileType: newest.attachment?.type,
+                  createdAt: newest.createdAtRaw || new Date().toISOString(),
+                },
+                messageCount: (c.messageCount || 0) + chIncoming.length,
+              };
+            }
           }
+          return c;
+        });
+
+        // Jika ada channel baru yang belum ada di daftar channels (misal DM baru dari user lain)
+        const hasMissingChannel = Object.keys(formattedIncoming).some(
+          (chId) => !prevChannels.some((c) => c.id === chId)
+        );
+        if (hasMissingChannel) {
+          getChatChannelsAction(currentUserId).then((fetched) => {
+            if (fetched && Array.isArray(fetched)) {
+              setChannels(fetched.filter((c: any) => c.id !== "general" && c.name?.toLowerCase() !== "general"));
+            }
+          }).catch(() => {});
         }
 
-        if (activeChannelId && activeChannelId !== "general") {
-          loadMessages(activeChannelId);
-        }
-      } catch {}
-    };
+        return hasChannelUpdates ? updatedChannels : prevChannels;
+      });
 
-    const interval = setInterval(checkNewMessages, isOpen ? 2500 : 4500);
-    return () => clearInterval(interval);
+      // Notifikasi suara & popup jika ada pesan baru dari orang lain
+      if (hasNewIncoming && lastIncomingMsg) {
+        const isCurrentActive = isOpen && activeChannelId === lastIncomingMsg.channelId;
+        if (!isCurrentActive) {
+          playNotificationChime();
+          const targetCh = channels.find((c) => c.id === lastIncomingMsg.channelId);
+          const targetName = targetCh ? getChannelDisplayName(targetCh) : lastIncomingMsg.sender || "Chat Tim";
+
+          setUnreadNotification({
+            id: lastIncomingMsg.id,
+            sender: lastIncomingMsg.sender,
+            senderImage: lastIncomingMsg.senderImage,
+            text: lastIncomingMsg.text || (lastIncomingMsg.fileType === "image" ? "📷 Mengirim foto" : "📎 Mengirim berkas"),
+            channelId: lastIncomingMsg.channelId,
+            channelName: targetName,
+            time: "Baru saja",
+          });
+        } else {
+          // Jika channel yang aktif sedang dibuka, langsung tandai telah dibaca
+          updateLastRead(activeChannelId);
+        }
+      }
+
+      if (activeChannelId && activeChannelId !== "general") {
+        loadMessages(activeChannelId);
+      }
+    } catch {}
   }, [activeChannelId, channels, currentUserId, currentUserName, isOpen]);
+
+  // Interval polling: 1500ms saat chat terbuka, 2500ms saat chat tertutup
+  useEffect(() => {
+    checkNewMessages();
+    const interval = setInterval(checkNewMessages, isOpen ? 1500 : 2500);
+    return () => clearInterval(interval);
+  }, [checkNewMessages, isOpen]);
+
+  // Saat chatbox dibuka oleh user, langsung segarkan data chat seketika
+  useEffect(() => {
+    if (isOpen) {
+      loadInitialChatData();
+      checkNewMessages();
+    }
+  }, [isOpen]);
 
   // Auto-dismiss popup notifikasi setelah 6 detik
   useEffect(() => {
@@ -597,8 +704,9 @@ export function TeamChatSidebar() {
     return counts;
   }, [messages, lastReadPerChannel]);
 
-  const totalUnreadCount = useMemo(() => {
-    return Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+  // Hitung jumlah percakapan/chat yang belum dibaca (ala badge WhatsApp di ikon aplikasi: dihitung dari jumlah user/grup yang chat masuk, bukan total pesan)
+  const unreadConversationsCount = useMemo(() => {
+    return Object.values(unreadCounts).filter((count) => count > 0).length;
   }, [unreadCounts]);
 
   // ==========================================
@@ -633,6 +741,10 @@ export function TeamChatSidebar() {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
+              createdAtRaw:
+                typeof ch.lastMessage.createdAt === "string"
+                  ? ch.lastMessage.createdAt
+                  : ch.lastMessage.createdAt.toISOString(),
               isSelf: ch.lastMessage.senderId === currentUserId,
             } as Message)
           : undefined);
@@ -668,6 +780,10 @@ export function TeamChatSidebar() {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
+              createdAtRaw:
+                typeof ch.lastMessage.createdAt === "string"
+                  ? ch.lastMessage.createdAt
+                  : ch.lastMessage.createdAt.toISOString(),
               isSelf: ch.lastMessage.senderId === currentUserId,
             } as Message)
           : undefined);
@@ -709,6 +825,15 @@ export function TeamChatSidebar() {
         });
       }
     }
+
+    // Urutkan percakapan: chat dengan pesan terbaru selalu di atas (ala WhatsApp)
+    items.sort((a, b) => {
+      if (a.id === activeChannelId && (!a.lastMsg || !b.lastMsg)) return -1;
+      if (b.id === activeChannelId && (!a.lastMsg || !b.lastMsg)) return 1;
+      const timeA = a.lastMsg?.createdAtRaw ? new Date(a.lastMsg.createdAtRaw).getTime() : 0;
+      const timeB = b.lastMsg?.createdAtRaw ? new Date(b.lastMsg.createdAtRaw).getTime() : 0;
+      return timeB - timeA;
+    });
 
     // Filter berdasarkan query & tab
     return items.filter((item) => {
@@ -1043,11 +1168,13 @@ export function TeamChatSidebar() {
     loadMessages(dmChannelId);
   };
 
-  // Buka Direct Chat dari list utama
+  // Buka Direct Chat / Grup dari list utama
   const handleSelectConversation = async (item: { id: string; type: "group" | "direct"; name: string }) => {
     setActiveChannelId(item.id);
+    setIsManageGroupModalOpen(false);
     setShowMobileChat(true);
     updateLastRead(item.id);
+    loadMessages(item.id);
 
     if (item.type === "direct") {
       const member = teamMembers.find((m) => (m.name || m.email) === item.name);
@@ -1073,10 +1200,12 @@ export function TeamChatSidebar() {
   // Klik notifikasi untuk langsung menuju chat
   const handleOpenFromNotification = (channelId: string) => {
     setActiveChannelId(channelId);
+    setIsManageGroupModalOpen(false);
     setIsOpen(true);
     setShowMobileChat(true);
     setUnreadNotification(null);
     updateLastRead(channelId);
+    loadMessages(channelId);
   };
 
   // Buat Grup Chat Baru
@@ -1356,10 +1485,10 @@ export function TeamChatSidebar() {
             <MessageSquare size={20} className="fill-current text-white" />
           )}
 
-          {/* Badge Unread Count */}
-          {!isOpen && totalUnreadCount > 0 && (
+          {/* Badge Unread Count (Dihitung dari jumlah user/grup yang chat masuk, bukan total pesan) */}
+          {!isOpen && unreadConversationsCount > 0 && (
             <span className="absolute -top-1.5 -right-1.5 min-w-[19px] h-[19px] px-1 rounded-full bg-white text-[#C65921] text-[10px] font-black flex items-center justify-center ring-2 ring-[#C65921] shadow">
-              {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+              {unreadConversationsCount > 99 ? "99+" : unreadConversationsCount}
             </span>
           )}
         </button>
@@ -1562,8 +1691,249 @@ export function TeamChatSidebar() {
           }`}>
             
             {activeChannelId && activeChannelId !== "general" ? (
-              <>
-                {/* Header Saluran Aktif */}
+              isManageGroupModalOpen && activeChannel.type === "group" ? (
+                /* ======================================================= */
+                /* TAMPILAN INFO GRUP ALA WHATSAPP (INTEGRATED DI CHATBOX) */
+                /* ======================================================= */
+                <div className="flex-1 flex flex-col h-full bg-[#0e0e11] min-w-0 overflow-hidden animate-in fade-in duration-150">
+                  {/* Header Info Grup dengan Tombol Kembali ← */}
+                  <div className="p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsManageGroupModalOpen(false)}
+                        className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white transition cursor-pointer"
+                        title="Kembali ke obrolan"
+                      >
+                        <ArrowLeft size={17} />
+                      </button>
+                      <div>
+                        <h3 className="text-xs font-bold text-white">Info Grup</h3>
+                        <span className="text-[10px] text-zinc-400">
+                          {getChannelDisplayName(activeChannel)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsManageGroupModalOpen(false)}
+                      className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
+                      title="Tutup Info"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Isi Konten Info Grup */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+                    {/* Profil Card Grup ala WhatsApp */}
+                    <div className="bg-[#18181c] border border-zinc-800 rounded-2xl p-4 flex flex-col items-center text-center space-y-3">
+                      <div className="w-16 h-16 rounded-full bg-[#241f1c] text-[#C65921] border-2 border-[#382b24] flex items-center justify-center font-bold text-2xl shadow-md">
+                        <Users size={28} />
+                      </div>
+
+                      {/* Form Edit / Info Grup */}
+                      <form onSubmit={handleSaveGroupInfo} className="w-full space-y-3 text-left">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-semibold text-zinc-400">Nama Grup</label>
+                            {isCurrentUserAdmin && (
+                              <span className="text-[10px] text-[#C65921] font-semibold flex items-center gap-1">
+                                <ShieldCheck size={11} /> Anda Admin
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            disabled={!isCurrentUserAdmin}
+                            value={editGroupName}
+                            onChange={(e) => setEditGroupName(e.target.value)}
+                            className="w-full bg-[#131316] border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C65921] disabled:opacity-60"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Deskripsi Grup</label>
+                          <textarea
+                            rows={2}
+                            disabled={!isCurrentUserAdmin}
+                            value={editGroupDesc}
+                            onChange={(e) => setEditGroupDesc(e.target.value)}
+                            placeholder="Tambahkan deskripsi grup..."
+                            className="w-full bg-[#131316] border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#C65921] disabled:opacity-60 resize-none"
+                          />
+                        </div>
+
+                        {isCurrentUserAdmin && (
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="submit"
+                              disabled={isSavingGroupInfo}
+                              className="px-3.5 py-1.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+                            >
+                              {isSavingGroupInfo ? "Menyimpan..." : "Simpan Perubahan"}
+                            </button>
+                          </div>
+                        )}
+                      </form>
+                    </div>
+
+                    {/* Anggota Grup & Otoritas Admin (Jadikan Admin / Kick) */}
+                    <div className="bg-[#18181c] border border-zinc-800 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-200">
+                          Anggota ({currentGroupMembers.length})
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto no-scrollbar divide-y divide-zinc-800/40">
+                        {currentGroupMembers.map((member) => {
+                          const isMemberOwner = member.id === activeChannel.createdById;
+                          const isMemberAdmin =
+                            isMemberOwner ||
+                            (activeChannel.admins && activeChannel.admins.includes(member.id));
+                          const isSelf = member.id === currentUserId;
+
+                          return (
+                            <div
+                              key={member.id}
+                              className="pt-2 first:pt-0 flex items-center justify-between gap-2"
+                            >
+                              <div className="flex items-center gap-2.5 truncate">
+                                <div className="w-8 h-8 rounded-full bg-[#241f1c] text-[#C65921] border border-[#382b24] flex items-center justify-center font-bold text-xs shrink-0">
+                                  {(member.name || member.email)[0]?.toUpperCase()}
+                                </div>
+                                <div className="truncate">
+                                  <span className="text-xs font-medium text-white block truncate">
+                                    {member.name || member.email} {isSelf && "(Anda)"}
+                                  </span>
+                                  <div className="flex items-center gap-1 mt-0.5">
+                                    {isMemberOwner ? (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#C65921] text-white font-bold">
+                                        Owner
+                                      </span>
+                                    ) : isMemberAdmin ? (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#C65921]/20 text-[#C65921] font-semibold border border-[#C65921]/40">
+                                        Admin
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] text-zinc-500">Anggota</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Tombol Otoritas Admin */}
+                              {isCurrentUserAdmin && !isSelf && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {!isMemberAdmin && (
+                                    <button
+                                      type="button"
+                                      disabled={isActionLoading}
+                                      onClick={() =>
+                                        handlePromoteAdmin(member.id, member.name || member.email)
+                                      }
+                                      className="p-1 rounded-lg bg-zinc-800 hover:bg-[#C65921]/20 text-zinc-400 hover:text-[#C65921] transition cursor-pointer text-[10px] flex items-center gap-1 px-2"
+                                      title="Jadikan Admin"
+                                    >
+                                      <ShieldCheck size={11} />
+                                      <span>Jadikan Admin</span>
+                                    </button>
+                                  )}
+
+                                  {!isMemberOwner && (
+                                    <button
+                                      type="button"
+                                      disabled={isActionLoading}
+                                      onClick={() =>
+                                        handleKickMember(member.id, member.name || member.email)
+                                      }
+                                      className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition cursor-pointer"
+                                      title="Keluarkan dari grup"
+                                    >
+                                      <UserMinus size={13} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Undang Rekan Tim ke Grup (Khusus Admin) */}
+                    {isCurrentUserAdmin && availableUsersToInvite.length > 0 && (
+                      <div className="bg-[#18181c] border border-zinc-800 rounded-2xl p-4 space-y-2.5">
+                        <span className="text-xs font-semibold text-zinc-200 block">
+                          Undang Rekan Tim ke Grup ({inviteSelectedUsers.length} dipilih)
+                        </span>
+
+                        <div className="flex flex-col gap-1 p-1 bg-[#131316] rounded-xl max-h-36 overflow-y-auto no-scrollbar border border-zinc-800">
+                          {availableUsersToInvite.map((member) => {
+                            const isSelected = inviteSelectedUsers.includes(member.id);
+                            return (
+                              <button
+                                key={member.id}
+                                type="button"
+                                onClick={() => toggleInviteSelection(member.id)}
+                                className={`w-full px-2.5 py-1.5 rounded-lg text-[11px] transition cursor-pointer flex items-center justify-between text-left ${
+                                  isSelected
+                                    ? "bg-[#C65921] text-white font-medium"
+                                    : "bg-transparent text-zinc-300 hover:bg-white/5"
+                                }`}
+                              >
+                                <span className="truncate">{member.name || member.email}</span>
+                                {isSelected && <Check size={12} className="text-white shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            disabled={inviteSelectedUsers.length === 0 || isActionLoading}
+                            onClick={handleInviteMembers}
+                            className="px-3.5 py-1.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white text-xs font-semibold transition cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
+                          >
+                            <UserPlus size={13} />
+                            <span>Tambahkan ke Grup</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Aksi Keluar / Hapus Grup */}
+                    <div className="pt-2">
+                      {!isCurrentUserOwner ? (
+                        <button
+                          type="button"
+                          disabled={isActionLoading}
+                          onClick={handleLeaveGroup}
+                          className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2 border border-rose-500/20"
+                        >
+                          <LogOut size={14} />
+                          <span>Keluar dari Grup</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isActionLoading}
+                          onClick={() => handleDeleteGroup(activeChannel.id)}
+                          className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2 border border-rose-500/20"
+                        >
+                          <Trash2 size={14} />
+                          <span>Hapus Grup Ini</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Header Saluran Aktif */}
                 <div className="p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0">
                   <div 
                     onClick={() => {
@@ -2000,7 +2370,7 @@ export function TeamChatSidebar() {
                   </form>
                 </div>
               </>
-            ) : (
+            )) : (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-500 space-y-3">
                 <div className="w-14 h-14 rounded-2xl bg-[#1c1c20] border border-zinc-800 flex items-center justify-center text-[#C65921]">
                   <MessageSquare size={26} />
@@ -2124,233 +2494,7 @@ export function TeamChatSidebar() {
       )}
 
       {/* ========================================================= */}
-      {/* 6. MODAL KELOLA GRUP (EDIT INFO, KICK, INVITE, JADIKAN ADMIN) */}
-      {/* ========================================================= */}
-      {isManageGroupModalOpen && activeChannel.type === "group" && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-[#18181c] border border-zinc-800 rounded-3xl p-5 max-w-md w-full space-y-4 shadow-2xl max-h-[85vh] overflow-y-auto no-scrollbar">
-            
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Settings size={17} className="text-[#C65921]" />
-                <h3 className="text-sm font-bold text-white">Kelola & Info Grup</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsManageGroupModalOpen(false)}
-                className="text-zinc-400 hover:text-white p-1 rounded-lg cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Bagian 1: Edit Informasi Grup */}
-            <form onSubmit={handleSaveGroupInfo} className="space-y-3 bg-[#131316] p-3 rounded-2xl border border-zinc-800/80">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-zinc-300">Informasi Grup</span>
-                {isCurrentUserAdmin && (
-                  <span className="text-[10px] text-[#C65921] font-semibold flex items-center gap-1">
-                    <ShieldCheck size={11} /> Anda Admin
-                  </span>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-zinc-400 mb-1">Nama Grup</label>
-                <input
-                  type="text"
-                  disabled={!isCurrentUserAdmin}
-                  value={editGroupName}
-                  onChange={(e) => setEditGroupName(e.target.value)}
-                  className="w-full bg-[#1c1c20] border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#C65921] disabled:opacity-50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-zinc-400 mb-1">Deskripsi Grup</label>
-                <input
-                  type="text"
-                  disabled={!isCurrentUserAdmin}
-                  value={editGroupDesc}
-                  onChange={(e) => setEditGroupDesc(e.target.value)}
-                  placeholder="Deskripsi grup..."
-                  className="w-full bg-[#1c1c20] border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#C65921] disabled:opacity-50"
-                />
-              </div>
-
-              {isCurrentUserAdmin && (
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="submit"
-                    disabled={isSavingGroupInfo}
-                    className="px-3.5 py-1.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white text-xs font-semibold transition cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingGroupInfo ? "Menyimpan..." : "Simpan Perubahan"}
-                  </button>
-                </div>
-              )}
-            </form>
-
-            {/* Bagian 2: Anggota Grup & Otoritas Kick / Admin */}
-            <div className="space-y-2 bg-[#131316] p-3 rounded-2xl border border-zinc-800/80">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-zinc-300">
-                  Anggota ({currentGroupMembers.length})
-                </span>
-              </div>
-
-              <div className="space-y-1.5 max-h-48 overflow-y-auto no-scrollbar">
-                {currentGroupMembers.map((member) => {
-                  const isMemberOwner = member.id === activeChannel.createdById;
-                  const isMemberAdmin = isMemberOwner || (activeChannel.admins && activeChannel.admins.includes(member.id));
-                  const isSelf = member.id === currentUserId;
-
-                  return (
-                    <div
-                      key={member.id}
-                      className="p-2 rounded-xl bg-[#1c1c20] flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <div className="w-7 h-7 rounded-full bg-[#C65921]/20 text-[#C65921] flex items-center justify-center font-bold text-xs shrink-0">
-                          {(member.name || member.email)[0]?.toUpperCase()}
-                        </div>
-                        <div className="truncate">
-                          <span className="text-xs font-medium text-white block truncate">
-                            {member.name || member.email} {isSelf && "(Anda)"}
-                          </span>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            {isMemberOwner ? (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#C65921] text-white font-bold">
-                                Owner
-                              </span>
-                            ) : isMemberAdmin ? (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#C65921]/20 text-[#C65921] font-semibold border border-[#C65921]/40">
-                                Admin
-                              </span>
-                            ) : (
-                              <span className="text-[9px] text-zinc-500">Anggota</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Tombol Otoritas Admin (Jadikan Admin & Kick) */}
-                      {isCurrentUserAdmin && !isSelf && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          {!isMemberAdmin && (
-                            <button
-                              type="button"
-                              disabled={isActionLoading}
-                              onClick={() => handlePromoteAdmin(member.id, member.name || member.email)}
-                              className="p-1 rounded-lg bg-zinc-800 hover:bg-[#C65921]/20 text-zinc-400 hover:text-[#C65921] transition cursor-pointer text-[10px] flex items-center gap-1 px-2"
-                              title="Jadikan Admin"
-                            >
-                              <ShieldCheck size={11} />
-                              <span>Jadikan Admin</span>
-                            </button>
-                          )}
-
-                          {!isMemberOwner && (
-                            <button
-                              type="button"
-                              disabled={isActionLoading}
-                              onClick={() => handleKickMember(member.id, member.name || member.email)}
-                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition cursor-pointer"
-                              title="Keluarkan dari grup"
-                            >
-                              <UserMinus size={13} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Bagian 3: Undang User Lain ke Grup (Khusus Admin) */}
-            {isCurrentUserAdmin && availableUsersToInvite.length > 0 && (
-              <div className="space-y-2 bg-[#131316] p-3 rounded-2xl border border-zinc-800/80">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-zinc-300">
-                    Undang Rekan Tim ke Grup ({inviteSelectedUsers.length} dipilih)
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 p-1.5 bg-[#1c1c20] rounded-xl max-h-36 overflow-y-auto no-scrollbar">
-                  {availableUsersToInvite.map((member) => {
-                    const isSelected = inviteSelectedUsers.includes(member.id);
-                    return (
-                      <button
-                        key={member.id}
-                        type="button"
-                        onClick={() => toggleInviteSelection(member.id)}
-                        className={`w-full px-2.5 py-1.5 rounded-lg text-[11px] transition cursor-pointer flex items-center justify-between text-left ${
-                          isSelected
-                            ? "bg-[#C65921] text-white font-medium"
-                            : "bg-transparent text-zinc-300 hover:bg-white/5"
-                        }`}
-                      >
-                        <span className="truncate">{member.name || member.email}</span>
-                        {isSelected && <Check size={12} className="text-white shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    disabled={inviteSelectedUsers.length === 0 || isActionLoading}
-                    onClick={handleInviteMembers}
-                    className="px-3.5 py-1.5 rounded-xl bg-[#C65921] hover:bg-[#b04d1c] text-white text-xs font-semibold transition cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
-                  >
-                    <UserPlus size={13} />
-                    <span>Tambahkan ke Grup</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Bagian 4: Aksi Keluar / Hapus Grup */}
-            <div className="pt-2 flex items-center justify-between border-t border-zinc-800">
-              {!isCurrentUserOwner ? (
-                <button
-                  type="button"
-                  disabled={isActionLoading}
-                  onClick={handleLeaveGroup}
-                  className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <LogOut size={13} />
-                  <span>Keluar dari Grup</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={isActionLoading}
-                  onClick={() => handleDeleteGroup(activeChannel.id)}
-                  className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <Trash2 size={13} />
-                  <span>Hapus Grup Ini</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setIsManageGroupModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* 7. MODAL TERUSKAN PESAN (FORWARD MODAL)                   */}
+      {/* 6. MODAL TERUSKAN PESAN (FORWARD MODAL)                   */}
       {/* ========================================================= */}
       {forwardingMessage && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
