@@ -244,9 +244,70 @@ export async function getChatChannelsAction(currentUserId?: string) {
   try {
     await ensureDatabaseTables();
     const channels = await prisma.chatChannel.findMany({
-      orderBy: { createdAt: "asc" },
+      where: {
+        NOT: {
+          OR: [
+            { id: "general" },
+            { name: { equals: "general", mode: "insensitive" } },
+          ],
+        },
+      },
+      orderBy: { createdAt: "desc" },
     });
-    return channels;
+
+    if (!channels || channels.length === 0) {
+      return [];
+    }
+
+    const channelIds = channels.map((c) => c.id);
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        channelId: { in: channelIds },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const msgsByChannel: Record<string, any[]> = {};
+    for (const m of messages) {
+      if (!msgsByChannel[m.channelId]) {
+        msgsByChannel[m.channelId] = [];
+      }
+      msgsByChannel[m.channelId].push(m);
+    }
+
+    const filteredChannels = channels.filter((c) => {
+      const channelMsgs = msgsByChannel[c.id] || [];
+      if (c.type === "direct") {
+        if (!currentUserId) return false;
+        const isMember =
+          (Array.isArray(c.members) && c.members.includes(currentUserId)) ||
+          c.id.includes(currentUserId);
+        if (!isMember) return false;
+        // Hanya tampilkan jika sudah pernah chat (ada pesan)
+        return channelMsgs.length > 0;
+      }
+      // Untuk grup
+      return true;
+    });
+
+    return filteredChannels.map((c) => {
+      const channelMsgs = msgsByChannel[c.id] || [];
+      const lastMsg = channelMsgs[0] || null;
+      return {
+        ...c,
+        lastMessage: lastMsg
+          ? {
+              id: lastMsg.id,
+              sender: lastMsg.sender,
+              senderId: lastMsg.senderId,
+              text: lastMsg.text,
+              fileType: lastMsg.fileType,
+              createdAt: lastMsg.createdAt,
+            }
+          : null,
+        messageCount: channelMsgs.length,
+      };
+    });
   } catch (error) {
     console.error("Gagal mengambil saluran chat:", error);
     return [];
