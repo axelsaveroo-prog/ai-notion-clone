@@ -275,7 +275,7 @@ export async function createChatGroupAction(data: {
   createdById?: string;
 }) {
   try {
-    const formattedName = data.name.trim().toLowerCase().replace(/\s+/g, "-");
+    const formattedName = data.name.trim().replace(/^#+/, "").trim();
     if (!formattedName) return { success: false, error: "Nama grup tidak boleh kosong" };
 
     const newChannel = await prisma.chatChannel.create({
@@ -293,6 +293,45 @@ export async function createChatGroupAction(data: {
   } catch (error: any) {
     console.error("Gagal membuat grup chat:", error);
     return { success: false, error: error?.message || "Gagal membuat grup chat" };
+  }
+}
+
+export async function editChatMessageAction(
+  messageId: string,
+  newText: string,
+  currentUserId: string
+) {
+  try {
+    const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+    if (!msg) return { success: false, error: "Pesan tidak ditemukan" };
+    if (msg.senderId && msg.senderId !== currentUserId) {
+      return { success: false, error: "Hanya pengirim yang dapat mengedit pesan ini" };
+    }
+
+    const updated = await prisma.chatMessage.update({
+      where: { id: messageId },
+      data: { text: newText },
+    });
+    return { success: true, message: updated };
+  } catch (error: any) {
+    console.error("Gagal edit pesan chat:", error);
+    return { success: false, error: error?.message || "Gagal mengedit pesan" };
+  }
+}
+
+export async function deleteChatMessageAction(messageId: string, currentUserId: string) {
+  try {
+    const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+    if (!msg) return { success: false, error: "Pesan tidak ditemukan" };
+    if (msg.senderId && msg.senderId !== currentUserId) {
+      return { success: false, error: "Hanya pengirim yang dapat menghapus pesan ini" };
+    }
+
+    await prisma.chatMessage.delete({ where: { id: messageId } });
+    return { success: true };
+  } catch (error: any) {
+    console.error("Gagal hapus pesan chat:", error);
+    return { success: false, error: error?.message || "Gagal menghapus pesan" };
   }
 }
 
@@ -360,6 +399,19 @@ export async function getChatMessages(channelId: string) {
     } catch {
       return [];
     }
+  }
+}
+
+export async function getLatestChatUpdatesAction(limit = 40) {
+  try {
+    await ensureDatabaseTables();
+    const msgs = await prisma.chatMessage.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+    return msgs.reverse();
+  } catch {
+    return [];
   }
 }
 

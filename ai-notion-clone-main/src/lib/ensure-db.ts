@@ -126,7 +126,8 @@ const DDL_STATEMENTS = [
   `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "approvals" JSONB`,
   `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "assignedBy" TEXT`,
   `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "dueDate" TEXT`,
-  `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "brief" TEXT`
+  `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "brief" TEXT`,
+  `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "isEdited" BOOLEAN DEFAULT false`
 ];
 
 export async function ensureDatabaseTables(force = false) {
