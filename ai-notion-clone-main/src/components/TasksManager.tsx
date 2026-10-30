@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { 
   Plus, 
   Trash2, 
@@ -82,7 +82,7 @@ const TYPE_STYLES: Record<string, { bg: string; text: string; border: string }> 
   Others: { bg: "bg-[#202023]", text: "text-[#c2c2c9]", border: "border-[#34343a]" },
 };
 
-export function TasksManager() {
+function TasksManagerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useUser();
@@ -1206,5 +1206,14 @@ export function TasksManager() {
       )}
 
     </div>
+  );
+}
+
+
+export function TasksManager() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-zinc-500">Memuat Task Operations...</div>}>
+      <TasksManagerContent />
+    </Suspense>
   );
 }
