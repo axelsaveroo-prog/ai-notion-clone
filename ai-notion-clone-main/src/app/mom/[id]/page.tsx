@@ -207,12 +207,6 @@ function MomContent({ eventId }: { eventId: string }) {
           <div className="flex items-center gap-2 text-zinc-500 text-xs mb-2 print:text-zinc-600">
             <FileText size={14} />
             <span className="uppercase font-semibold tracking-wider text-[10px]">Official Minutes of Meeting</span>
-            {!isPublicView && (
-              <>
-                <span className="print:hidden">•</span>
-                <span className="text-zinc-400 print:hidden">{isSaved ? "Tersimpan otomatis" : "Auto-saved"}</span>
-              </>
-            )}
           </div>
 
           {isPublicView ? (
@@ -269,9 +263,6 @@ function MomContent({ eventId }: { eventId: string }) {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 print:text-zinc-700">
               Notulen & Hasil Rapat
             </h3>
-            <span className="text-[11px] text-zinc-500 font-mono print:text-zinc-500">
-              {isSaved ? "Tersimpan ke Cloud" : "Realtime Studio Notes"}
-            </span>
           </div>
 
           {isPublicView ? (

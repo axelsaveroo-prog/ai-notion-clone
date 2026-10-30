@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Trash2, GripVertical, Loader2, Check } from "lucide-react";
+import { Plus, Trash2, GripVertical, Loader2, Check, Folder, FolderOpen, ArrowLeft, Filter, User as UserIcon, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
@@ -43,8 +43,10 @@ export function TasksManager() {
   const [isCreating, setIsCreating] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<{ id: string; name: string }[]>([]);
 
-  // State filter client dinamis
+  // Filter Client / Foldering
   const [selectedClientFilter, setSelectedClientFilter] = useState("ALL");
+  // Filter Scope: hanya tugas saya (tagged) vs semua tugas tim
+  const [scopeFilter, setScopeFilter] = useState<"my_tasks" | "all">("my_tasks");
 
   // State Drag and Drop
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -78,6 +80,39 @@ export function TasksManager() {
     loadData();
   }, [loadData]);
 
+  // Cek apakah tugas ditujukan / men-tag user saat ini
+  const isTaskForCurrentUser = useCallback((t: Task) => {
+    if (!user) return true;
+    const userIdentifiers = [
+      user.fullName?.toLowerCase().trim(),
+      user.firstName?.toLowerCase().trim(),
+      user.username?.toLowerCase().trim(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+      "you",
+      "team",
+      "all",
+    ].filter(Boolean) as string[];
+
+    if (t.assignedBy) {
+      const creator = t.assignedBy.toLowerCase().trim();
+      if (userIdentifiers.some((id) => id === creator || creator.includes(id))) return true;
+    }
+
+    if (t.assignee) {
+      const parts = t.assignee.split(",").map((p) => p.trim().toLowerCase());
+      if (parts.some((p) => userIdentifiers.some((id) => id === p || p === "you" || p === "all" || p === "team"))) {
+        return true;
+      }
+    }
+    return false;
+  }, [user]);
+
+  // Filter tasks sesuai scope (default: hanya tugas user yang ditag)
+  const scopedTasks = useMemo(() => {
+    if (scopeFilter === "all") return tasks;
+    return tasks.filter(isTaskForCurrentUser);
+  }, [tasks, scopeFilter, isTaskForCurrentUser]);
+
   // Tab filter client dinamis: diambil dari database clients dan tasks
   const dynamicClients = useMemo(() => {
     const clients = new Set<string>();
@@ -94,16 +129,19 @@ export function TasksManager() {
     return Array.from(clients).sort();
   }, [dbClients, tasks]);
 
-  const filterTabs = useMemo(() => {
-    return ["ALL", ...dynamicClients];
-  }, [dynamicClients]);
-
-  // Jika filter yang dipilih tidak ada lagi, kembalikan ke ALL
-  useEffect(() => {
-    if (selectedClientFilter !== "ALL" && !dynamicClients.includes(selectedClientFilter)) {
-      setSelectedClientFilter("ALL");
-    }
-  }, [dynamicClients, selectedClientFilter]);
+  // Folder data untuk UI foldering per client
+  const clientFolders = useMemo(() => {
+    return dynamicClients.map((clientName) => {
+      const clientTasks = scopedTasks.filter((t) => t.client === clientName);
+      const theme = getClientThemeByName(clientName, dbClients);
+      return {
+        name: clientName,
+        taskCount: clientTasks.length,
+        pendingCount: clientTasks.filter((t) => t.status !== "done").length,
+        theme,
+      };
+    });
+  }, [dynamicClients, scopedTasks, dbClients]);
 
   // Buat new task ala Notion: klik tombol -> buat draft kosongan -> langsung buka halaman brief
   const handleCreateNewTask = async () => {
@@ -111,12 +149,12 @@ export function TasksManager() {
     setIsCreating(true);
 
     try {
-      const defaultAssignee = availableUsers[0]?.name || user?.fullName || "Member";
+      const defaultAssignee = user?.fullName || availableUsers[0]?.name || "You";
       const defaultClient = selectedClientFilter !== "ALL" ? selectedClientFilter : (dynamicClients[0] || "General");
 
       const res = await createTaskAction({
         title: "Untitled Task",
-        status: "todo", // Masuk langsung ke To Do
+        status: "todo",
         client: defaultClient,
         assignee: defaultAssignee,
         brief: "",
@@ -124,7 +162,6 @@ export function TasksManager() {
 
       if (res && res.success && res.task) {
         toast.success("Brief baru dibuat! Membuka halaman brief...");
-        // Langsung redirect ke halaman brief kosongan ala Notion
         router.push(`/tasks/${res.task.id}`);
       } else {
         toast.error("Gagal membuat task: " + (res?.error || "Error database"));
@@ -138,7 +175,6 @@ export function TasksManager() {
 
   // Pindah kolom / update status
   const moveTask = async (id: string, newStatus: "todo" | "in_progress" | "done") => {
-    // Optimistic UI update
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
     try {
       await updateTaskStatusAction(id, newStatus);
@@ -168,7 +204,6 @@ export function TasksManager() {
   };
 
   const handleDragLeave = (e: React.DragEvent, colKey: string) => {
-    // Hanya reset jika keluar dari elemen kolom
     if (dragOverCol === colKey) {
       setDragOverCol(null);
     }
@@ -186,7 +221,6 @@ export function TasksManager() {
     if (!currentTask || currentTask.status === newStatus) return;
 
     await moveTask(taskId, newStatus);
-    // Notifikasi toast dihilangkan agar perpindahan task tenang dan instan
   };
 
   const handleDeleteTask = async (id: string) => {
@@ -200,8 +234,8 @@ export function TasksManager() {
   };
 
   const filteredTasks = selectedClientFilter === "ALL" 
-    ? tasks 
-    : tasks.filter((t) => t.client === selectedClientFilter);
+    ? scopedTasks 
+    : scopedTasks.filter((t) => t.client === selectedClientFilter);
 
   const columns: { key: "todo" | "in_progress" | "done"; label: string }[] = [
     { key: "todo", label: "TO DO" },
@@ -212,29 +246,147 @@ export function TasksManager() {
   return (
     <div className="w-full flex flex-col gap-6">
       
-      {/* Top Bar: Dynamic Client Filters & Notion-style "+ New Task" */}
-      <div className="bg-[#121214] border border-[#222226] p-4 rounded-2xl shadow-sm flex items-center justify-between flex-wrap gap-3">
-        {/* Dynamic Filters */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold mr-1">
-            Filter:
-          </span>
-          {filterTabs.map((c) => (
+      {/* ========================================================= */}
+      {/* 1. CLIENT FOLDERS HUB (FOLDERING PER CLIENT)              */}
+      {/* ========================================================= */}
+      <div className="bg-[#121214] border border-[#222226] p-4 rounded-2xl shadow-sm flex flex-col gap-3.5">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Folder className="w-4 h-4 text-amber-500/90" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white">Client Folders</h3>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+              {clientFolders.length} Folders
+            </span>
+          </div>
+
+          {/* Toggle: Tugas Saya (Tagged) vs Semua Tugas Tim */}
+          <div className="flex items-center gap-1 bg-[#18181c] p-1 rounded-xl border border-zinc-800 text-xs">
             <button
-              key={c}
-              onClick={() => setSelectedClientFilter(c)}
-              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
-                selectedClientFilter === c
-                  ? "bg-[#27272a] text-zinc-100 font-semibold border border-zinc-600/60 shadow-sm"
-                  : "bg-[#141416] text-zinc-400 hover:text-zinc-200 border border-zinc-800/80 hover:bg-[#1a1a1d]"
+              type="button"
+              onClick={() => setScopeFilter("my_tasks")}
+              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                scopeFilter === "my_tasks"
+                  ? "bg-zinc-700 text-white shadow-xs"
+                  : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              {c}
+              <UserIcon size={12} />
+              <span>Tugas Saya</span>
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setScopeFilter("all")}
+              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                scopeFilter === "all"
+                  ? "bg-zinc-700 text-white shadow-xs"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <Users size={12} />
+              <span>Semua Tugas</span>
+            </button>
+          </div>
         </div>
 
-        {/* Notion-style "+ New Task" Button (Soft palette, non-neon) */}
+        {/* Grid Folder Kartu per Client */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+          {/* Card: All Folders */}
+          <button
+            type="button"
+            onClick={() => setSelectedClientFilter("ALL")}
+            className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-2 ${
+              selectedClientFilter === "ALL"
+                ? "bg-[#27272a] border-zinc-500 shadow-md ring-1 ring-zinc-500/30"
+                : "bg-[#18181c] border-zinc-800/80 hover:border-zinc-700 hover:bg-[#202024]"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              {selectedClientFilter === "ALL" ? (
+                <FolderOpen className="w-5 h-5 text-zinc-200" />
+              ) : (
+                <Folder className="w-5 h-5 text-zinc-400" />
+              )}
+              <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded">
+                {scopedTasks.length}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-white truncate">All Folders</p>
+              <p className="text-[10px] text-zinc-400">Semua brief</p>
+            </div>
+          </button>
+
+          {/* Cards per Client */}
+          {clientFolders.map((folder) => {
+            const isSelected = selectedClientFilter === folder.name;
+            return (
+              <button
+                key={folder.name}
+                type="button"
+                onClick={() => setSelectedClientFilter(folder.name)}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-2 group ${
+                  isSelected
+                    ? "bg-[#27272a] border-zinc-400 shadow-md ring-1 ring-zinc-400/40"
+                    : "bg-[#18181c] border-zinc-800/80 hover:border-zinc-700 hover:bg-[#202024]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="relative">
+                    {isSelected ? (
+                      <FolderOpen className="w-5 h-5" style={{ color: folder.theme.dot }} />
+                    ) : (
+                      <Folder className="w-5 h-5 text-zinc-400 group-hover:text-zinc-200" />
+                    )}
+                    <span 
+                      className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full" 
+                      style={{ backgroundColor: folder.theme.dot }} 
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-300 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700/60">
+                    {folder.taskCount}
+                  </span>
+                </div>
+                <div className="truncate">
+                  <p className="text-xs font-semibold text-white truncate">{folder.name}</p>
+                  <p className="text-[10px] text-zinc-400 font-mono">
+                    {folder.pendingCount > 0 ? `${folder.pendingCount} pending` : "Done"}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* 2. ACTIVE FOLDER BAR & "+ NEW TASK" BUTTON                */}
+      {/* ========================================================= */}
+      <div className="bg-[#121214] border border-[#222226] p-4 rounded-2xl shadow-sm flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+            <FolderOpen className="w-3.5 h-3.5 text-zinc-500" />
+            <span className="text-zinc-500">Folder:</span>
+            <span className="font-semibold text-white">
+              {selectedClientFilter === "ALL" ? "All Client Folders" : selectedClientFilter}
+            </span>
+          </span>
+
+          {selectedClientFilter !== "ALL" && (
+            <button
+              type="button"
+              onClick={() => setSelectedClientFilter("ALL")}
+              className="text-[11px] text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-800/60 border border-zinc-700 hover:bg-zinc-800 transition cursor-pointer"
+            >
+              ← Lihat Semua Folder
+            </button>
+          )}
+
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">
+            ({filteredTasks.length} task brief)
+          </span>
+        </div>
+
+        {/* Notion-style "+ New Task" Button */}
         <button
           onClick={handleCreateNewTask}
           disabled={isCreating}
@@ -248,13 +400,15 @@ export function TasksManager() {
           ) : (
             <>
               <Plus className="w-3.5 h-3.5 text-zinc-800" />
-              <span>New Task</span>
+              <span>New Task {selectedClientFilter !== "ALL" ? `in ${selectedClientFilter}` : ""}</span>
             </>
           )}
         </button>
       </div>
 
-      {/* Kanban Grid with Drag & Drop */}
+      {/* ========================================================= */}
+      {/* 3. KANBAN GRID WITH DRAG & DROP                           */}
+      {/* ========================================================= */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {columns.map((col) => {
           const colTasks = filteredTasks.filter((t) => t.status === col.key);
@@ -288,7 +442,7 @@ export function TasksManager() {
                   <div className={`py-12 text-center text-xs text-zinc-600 italic border-2 border-dashed rounded-xl transition ${
                     isOver ? "border-zinc-600/50 bg-zinc-800/20 text-zinc-300" : "border-zinc-800/40"
                   }`}>
-                    {isOver ? "Lepaskan untuk memindahkan ke sini" : "Belum ada task"}
+                    {isOver ? "Lepaskan untuk memindahkan ke sini" : "Belum ada task di folder ini"}
                   </div>
                 ) : (
                   colTasks.map((task) => {
@@ -367,7 +521,7 @@ export function TasksManager() {
                           )}
                         </div>
 
-                        {/* Quick Status Buttons (Bisa drag & drop ATAU klik tombol) */}
+                        {/* Quick Status Buttons */}
                         <div className="flex items-center justify-between pt-2 border-t border-[#222226]/50 text-[10px]">
                           {col.key !== "todo" && (
                             <button 

@@ -683,10 +683,55 @@ export async function getChatMessages(channelId: string) {
   }
 }
 
-export async function getLatestChatUpdatesAction(limit = 40) {
+export async function getLatestChatUpdatesAction(currentUserId?: string, limit = 50) {
   try {
+    if (!currentUserId || currentUserId === "guest") {
+      return [];
+    }
     await ensureDatabaseTables();
+
+    const userChannels = await prisma.chatChannel.findMany({
+      where: {
+        NOT: {
+          OR: [
+            { id: "general" },
+            { name: { equals: "general", mode: "insensitive" } },
+          ],
+        },
+        OR: [
+          { members: { has: currentUserId } },
+          { admins: { has: currentUserId } },
+          { createdById: currentUserId },
+          { id: { contains: currentUserId } },
+        ],
+      },
+      select: { id: true, type: true, members: true, admins: true, createdById: true },
+    });
+
+    const allowedChannelIds = userChannels
+      .filter((c) => {
+        if (c.type === "direct" || c.id.startsWith("dm_")) {
+          return (Array.isArray(c.members) && c.members.includes(currentUserId)) || c.id.includes(currentUserId);
+        }
+        if (c.type === "group") {
+          return (
+            (Array.isArray(c.members) && c.members.includes(currentUserId)) ||
+            c.createdById === currentUserId ||
+            (Array.isArray(c.admins) && c.admins.includes(currentUserId))
+          );
+        }
+        return false;
+      })
+      .map((c) => c.id);
+
+    if (allowedChannelIds.length === 0) {
+      return [];
+    }
+
     const msgs = await prisma.chatMessage.findMany({
+      where: {
+        channelId: { in: allowedChannelIds },
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
     });

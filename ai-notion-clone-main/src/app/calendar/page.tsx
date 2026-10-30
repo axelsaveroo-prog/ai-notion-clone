@@ -7,6 +7,7 @@ import {
   createCalendarEvent, 
   updateCalendarEvent, 
   deleteCalendarEvent,
+  respondCalendarEventApprovalAction,
   getUsersAction,
   syncUserAction,
   getClientsAction,
@@ -14,6 +15,7 @@ import {
   updateClientAction,
   deleteClientAction
 } from "@/actions/actions";
+import { toast } from "sonner";
 import { getGoogleCalendarUrl } from "@/lib/utils";
 import { 
   getClientThemeByName, 
@@ -82,7 +84,15 @@ export default function CalendarPage() {
 
   // Set default bulan & tanggal sesuai hari ini
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [events, setEvents] = useState<ScheduleEvent[]>([]);
+  const [events, setEvents] = useState<ScheduleEvent[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("SIKA_CALENDAR_EVENTS");
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return [];
+  });
   const [selectedDate, setSelectedDate] = useState<string>(getTodayFormatted());
   
   // List User Terdaftar dari Clerk / Database
@@ -185,7 +195,8 @@ export default function CalendarPage() {
 
   const fetchInitialData = async () => {
     try {
-      await syncUserAction();
+      // Background sync non-blocking
+      syncUserAction().catch(() => {});
 
       const [eventsData, usersData, clientsData] = await Promise.all([
         getCalendarEvents(),
@@ -193,7 +204,12 @@ export default function CalendarPage() {
         getClientsAction()
       ]);
 
-      if (eventsData) setEvents(eventsData);
+      if (eventsData && Array.isArray(eventsData)) {
+        setEvents(eventsData);
+        try {
+          localStorage.setItem("SIKA_CALENDAR_EVENTS", JSON.stringify(eventsData));
+        } catch {}
+      }
       if (usersData && usersData.length > 0) {
         setDbUsers(usersData);
       }
@@ -378,9 +394,83 @@ export default function CalendarPage() {
   next30Days.setDate(next30Days.getDate() + 30);
   const next30DaysStr = `${next30Days.getFullYear()}-${String(next30Days.getMonth() + 1).padStart(2, '0')}-${String(next30Days.getDate()).padStart(2, '0')}`;
 
-  // Upcoming Schedule: jadwal selama 1 bulan ke depan (jadwal lewat tidak ditampilkan)
+  // Helper periksa apakah user login di-tag atau creator dari event
+  const isUserTaggedOrCreator = (ev: ScheduleEvent) => {
+    if (!user) return true;
+    const userIdentifiers = [
+      user.fullName?.toLowerCase().trim(),
+      user.firstName?.toLowerCase().trim(),
+      user.username?.toLowerCase().trim(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+    ].filter(Boolean) as string[];
+
+    if (ev.creatorName) {
+      const creator = ev.creatorName.toLowerCase().trim();
+      if (userIdentifiers.some((id) => id === creator || creator.includes(id))) return true;
+    }
+
+    if (ev.assignees && Array.isArray(ev.assignees) && ev.assignees.length > 0) {
+      return ev.assignees.some((a) => {
+        const lower = a.toLowerCase().trim();
+        return userIdentifiers.some((id) => id === lower || lower.includes(id));
+      });
+    }
+
+    return false;
+  };
+
+  // Response persetujuan jadwal (Terima / Tolak) di Upcoming List
+  const handleApprovalResponse = async (ev: ScheduleEvent, status: "accepted" | "rejected") => {
+    const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "Member";
+
+    // Optimistic UI update
+    setEvents((prev) =>
+      prev.map((item) => {
+        if (item.id !== ev.id) return item;
+        const approvals = { ...(item.approvals || {}), [currentUserName]: status };
+        return { ...item, approvals };
+      })
+    );
+
+    try {
+      const res = await respondCalendarEventApprovalAction(ev.id, currentUserName, status);
+      if (res && res.success) {
+        if (status === "accepted") {
+          toast.success(`Jadwal "${ev.title}" berhasil Anda terima!`);
+          const gCalUrl = getGoogleCalendarUrl({
+            title: ev.title,
+            date: ev.date,
+            time: ev.time,
+            client: ev.client,
+            assignees: ev.assignees,
+            eventType: ev.eventType,
+            meetLink: ev.meetLink,
+            location: ev.location,
+          });
+          window.open(gCalUrl, "_blank");
+        } else {
+          toast.info(`Jadwal "${ev.title}" ditolak dan disembunyikan dari upcoming list Anda.`);
+        }
+        window.dispatchEvent(new Event("sika_schedule_updated"));
+      } else {
+        toast.error("Gagal memperbarui status jadwal.");
+      }
+    } catch {
+      toast.error("Terjadi kesalahan saat merespons jadwal.");
+    }
+  };
+
+  // Upcoming Schedule: HANYA jadwal di mana user di-tag / creator, tidak menampilkan yang sudah di-reject
   const upcomingEvents = events
     .filter((ev) => ev.date >= todayStr && ev.date <= next30DaysStr)
+    .filter((ev) => {
+      if (!isUserTaggedOrCreator(ev)) return false;
+      const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
+      const approvalsMap = (ev.approvals as Record<string, string>) || {};
+      const myStatus = approvalsMap[currentUserName] || (user?.fullName ? approvalsMap[user.fullName] : undefined);
+      if (myStatus === "rejected") return false;
+      return true;
+    })
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
   return (
@@ -529,6 +619,62 @@ export default function CalendarPage() {
                           </Link>
                         </div>
                       </div>
+
+                      {/* Tombol Terima / Tolak untuk Assignee yang di-tag */}
+                      {(() => {
+                        const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
+                        const isCreator = ev.creatorName && (
+                          ev.creatorName.toLowerCase() === currentUserName.toLowerCase() ||
+                          (user?.fullName && ev.creatorName.toLowerCase() === user.fullName.toLowerCase())
+                        );
+                        const approvalsMap = (ev.approvals as Record<string, string>) || {};
+                        const myStatus = approvalsMap[currentUserName] || (isCreator ? "accepted" : "pending");
+
+                        if (!isCreator && myStatus === "pending") {
+                          return (
+                            <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-amber-600/20 bg-amber-950/20 p-2 rounded-lg">
+                              <span className="text-[10px] text-amber-400 font-medium">Konfirmasi:</span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleApprovalResponse(ev, "accepted");
+                                  }}
+                                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] flex items-center gap-1 transition shadow cursor-pointer active:scale-95"
+                                  title="Terima jadwal ini"
+                                >
+                                  <Check size={10} />
+                                  <span>Terima</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleApprovalResponse(ev, "rejected");
+                                  }}
+                                  className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-rose-950 hover:text-rose-300 text-zinc-400 text-[10px] flex items-center gap-1 transition cursor-pointer active:scale-95"
+                                  title="Tolak jadwal ini"
+                                >
+                                  <X size={10} />
+                                  <span>Tolak</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (!isCreator && myStatus === "accepted") {
+                          return (
+                            <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium pt-0.5">
+                              <Check size={10} />
+                              <span>✓ Jadwal Diterima</span>
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })()}
                     </div>
                   );
                 })

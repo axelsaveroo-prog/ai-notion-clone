@@ -2,37 +2,37 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback, memo, type ChangeEvent, type RefObject, type ClipboardEvent } from "react";
 import { useUser } from "@clerk/nextjs";
-import { 
-  getChatMessages, 
-  sendChatMessage, 
-  getChatChannelsAction, 
-  createChatGroupAction, 
+import {
+  getChatMessages,
+  sendChatMessage,
+  getChatChannelsAction,
+  createChatGroupAction,
   updateChatGroupAction,
   inviteChannelMembersAction,
   kickChannelMemberAction,
   promoteChannelAdminAction,
   leaveChatGroupAction,
-  getOrCreateDirectChannelAction, 
-  deleteChatChannelAction, 
-  getUsersAction, 
+  getOrCreateDirectChannelAction,
+  deleteChatChannelAction,
+  getUsersAction,
   syncUserAction,
   heartbeatAction,
   editChatMessageAction,
   deleteChatMessageAction,
   getLatestChatUpdatesAction
 } from "@/actions/actions";
-import { 
-  MessageSquare, 
+import {
+  MessageSquare,
   MessageSquarePlus,
-  Hash, 
-  Plus, 
-  Send, 
-  Paperclip, 
-  Image as ImageIcon, 
-  FileText, 
-  X, 
-  ChevronLeft, 
-  ChevronDown, 
+  Hash,
+  Plus,
+  Send,
+  Paperclip,
+  Image as ImageIcon,
+  FileText,
+  X,
+  ChevronLeft,
+  ChevronDown,
   Download,
   Users,
   Search,
@@ -188,9 +188,8 @@ function renderMessageTextWithLinks(text: string, isSelf: boolean) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className={`underline break-all transition cursor-pointer font-medium inline-flex items-center gap-0.5 ${
-            isSelf ? "text-orange-100 hover:text-white" : "text-[#C65921] hover:underline"
-          }`}
+          className={`underline break-all transition cursor-pointer font-medium inline-flex items-center gap-0.5 ${isSelf ? "text-orange-100 hover:text-white" : "text-[#C65921] hover:underline"
+            }`}
         >
           <span>{part}</span>
           <ExternalLink size={10} className="shrink-0 opacity-70" />
@@ -210,7 +209,7 @@ const playNotificationChime = () => {
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
+      ctx.resume().catch(() => { });
     }
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -223,7 +222,7 @@ const playNotificationChime = () => {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.25);
-  } catch {}
+  } catch { }
 };
 
 // ==========================================
@@ -519,6 +518,8 @@ export function TeamChatSidebar() {
   const prevActiveMsgCountRef = useRef<number>(0);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const isFirstCheckRef = useRef(true);
+  const mountTimeRef = useRef(Date.now());
 
   const channelsRef = useRef(channels);
   channelsRef.current = channels;
@@ -548,7 +549,7 @@ export function TeamChatSidebar() {
       if (saved) {
         setLastReadPerChannel(JSON.parse(saved));
       }
-    } catch {}
+    } catch { }
   }, []);
 
   const updateLastRead = (channelId: string) => {
@@ -558,7 +559,7 @@ export function TeamChatSidebar() {
       const updated = { ...prev, [channelId]: now };
       try {
         localStorage.setItem("sika_chat_last_read", JSON.stringify(updated));
-      } catch {}
+      } catch { }
       return updated;
     });
   };
@@ -619,9 +620,9 @@ export function TeamChatSidebar() {
   // Periodic heartbeat agar user terdeteksi online
   useEffect(() => {
     if (!user?.id) return;
-    heartbeatAction().catch(() => {});
+    heartbeatAction().catch(() => { });
     const interval = setInterval(() => {
-      heartbeatAction().catch(() => {});
+      heartbeatAction().catch(() => { });
     }, 25000);
     return () => clearInterval(interval);
   }, [user?.id]);
@@ -635,7 +636,7 @@ export function TeamChatSidebar() {
             setTeamMembers(fetchedUsers as TeamMember[]);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
 
     const interval = setInterval(refreshPresence, isOpen ? 5000 : 25000);
@@ -686,8 +687,12 @@ export function TeamChatSidebar() {
   // 3. Polling global & listener untuk deteksi notifikasi pesan masuk & sinkronisasi data
   const checkNewMessages = useCallback(async () => {
     try {
-      const latestMsgs = await getLatestChatUpdatesAction(50);
+      if (!currentUserId || currentUserId === "guest") return;
+      const latestMsgs = await getLatestChatUpdatesAction(currentUserId, 50);
       if (!latestMsgs || latestMsgs.length === 0) return;
+
+      const isFirst = isFirstCheckRef.current;
+      isFirstCheckRef.current = false;
 
       let hasNewIncoming = false;
       let lastIncomingMsg: any = null;
@@ -701,7 +706,21 @@ export function TeamChatSidebar() {
         const isSelf = m.senderId ? m.senderId === currentUserId : m.sender === currentUserName;
         knownMessageIdsRef.current.add(m.id);
 
-        if (!isKnown && !isSelf) {
+        // Validasi kepemilikan pesan: HANYA jika pesan berasal dari saluran yang diikuti user
+        const isMyDirect = m.channelId.startsWith("dm_") && m.channelId.includes(currentUserId);
+        const isMyGroup = channelsRef.current.some(
+          (c) => c.id === m.channelId && (c.members?.includes(currentUserId) || c.admins?.includes(currentUserId) || c.createdById === currentUserId)
+        );
+
+        // Jika bukan DM atau grup milik user, JANGAN proses dan JANGAN masukkan ke pesan
+        if (!isMyDirect && !isMyGroup) {
+          continue;
+        }
+
+        const msgTime = new Date(m.createdAt).getTime();
+        const isAfterMount = !isNaN(msgTime) && msgTime >= mountTimeRef.current;
+
+        if (!isKnown && !isSelf && !isFirst && isAfterMount) {
           hasNewIncoming = true;
           lastIncomingMsg = m;
         }
@@ -725,11 +744,11 @@ export function TeamChatSidebar() {
           replyToText: m.replyToText || null,
           attachment: m.fileUrl
             ? {
-                name: "Attachment",
-                size: "File",
-                type: (m.fileType === "image" ? "image" : "file") as "image" | "file",
-                url: m.fileUrl,
-              }
+              name: "Attachment",
+              size: "File",
+              type: (m.fileType === "image" ? "image" : "file") as "image" | "file",
+              url: m.fileUrl,
+            }
             : undefined,
         });
       }
@@ -798,7 +817,7 @@ export function TeamChatSidebar() {
                 return true;
               }));
             }
-          }).catch(() => {});
+          }).catch(() => { });
         }
 
         return hasChannelUpdates ? updatedChannels : prevChannels;
@@ -826,7 +845,7 @@ export function TeamChatSidebar() {
           updateLastRead(activeChannelIdRef.current);
         }
       }
-    } catch {}
+    } catch { }
   }, [currentUserId, currentUserName]);
 
   // Interval polling: 1500ms saat chat terbuka, 2500ms saat chat tertutup
@@ -885,12 +904,20 @@ export function TeamChatSidebar() {
 
   // Nama Tampilan Saluran
   const getChannelDisplayName = (channel: Channel) => {
-    if (channel.type === "direct") {
-      const parts = channel.name.split(" & ");
-      if (parts.length === 2) {
-        return parts[0] === currentUserName ? parts[1] : parts[0];
+    if (channel.type === "direct" || channel.id.startsWith("dm_")) {
+      // Prioritaskan cari rekan bicara dari teamMembers
+      const partner = teamMembers.find(
+        (m) => m.id !== currentUserId && (channel.members?.includes(m.id) || channel.id.includes(m.id))
+      );
+      if (partner) {
+        return partner.name || partner.email;
       }
-      return channel.name;
+      if (channel.name && channel.name.includes(" & ")) {
+        const parts = channel.name.split(" & ");
+        const isFirstMe = parts[0]?.trim().toLowerCase() === currentUserName?.trim().toLowerCase();
+        return isFirstMe ? parts[1]?.trim() : parts[0]?.trim();
+      }
+      return channel.name ? channel.name.replace(/^dm_/, "") : "Direct Message";
     }
     const cleanName = channel.name.replace(/^#+/, "").trim();
     return cleanName;
@@ -907,14 +934,31 @@ export function TeamChatSidebar() {
         admins: [],
       };
     }
-    return channels.find((c) => c.id === activeChannelId) || {
+    const found = channels.find((c) => c.id === activeChannelId);
+    if (found) return found;
+
+    if (activeChannelId.startsWith("dm_")) {
+      const partner = teamMembers.find(
+        (m) => m.id !== currentUserId && activeChannelId.includes(m.id)
+      );
+      const partnerName = partner ? (partner.name || partner.email) : "Direct Message";
+      return {
+        id: activeChannelId,
+        name: `${currentUserName} & ${partnerName}`,
+        type: "direct" as const,
+        members: [currentUserId, partner?.id || ""].filter(Boolean),
+        admins: [],
+      };
+    }
+
+    return {
       id: activeChannelId,
       name: activeChannelId,
-      type: activeChannelId.startsWith("dm_") ? "direct" : "group",
+      type: "group" as const,
       members: [],
       admins: [],
     };
-  }, [channels, activeChannelId]);
+  }, [channels, activeChannelId, teamMembers, currentUserId, currentUserName]);
 
   // Cek hak akses admin pada channel aktif
   const isCurrentUserAdmin = useMemo(() => {
@@ -964,8 +1008,9 @@ export function TeamChatSidebar() {
   // Hitung status Unread per channel & total
   const unreadCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const validChannelIds = new Set(channels.map((c) => c.id));
     for (const [chId, msgList] of Object.entries(messages)) {
-      if (chId === "general") continue;
+      if (chId === "general" || !validChannelIds.has(chId)) continue;
       const lastRead = lastReadPerChannel[chId] || 0;
       const unreadCount = msgList.filter((m) => {
         if (m.isSelf) return false;
@@ -975,7 +1020,7 @@ export function TeamChatSidebar() {
       if (unreadCount > 0) counts[chId] = unreadCount;
     }
     return counts;
-  }, [messages, lastReadPerChannel]);
+  }, [messages, lastReadPerChannel, channels]);
 
   // Hitung jumlah percakapan/chat yang belum dibaca (ala badge WhatsApp di ikon aplikasi: dihitung dari jumlah user/grup yang chat masuk, bukan total pesan)
   const unreadConversationsCount = useMemo(() => {
@@ -1007,22 +1052,22 @@ export function TeamChatSidebar() {
         msgs[msgs.length - 1] ||
         (ch.lastMessage
           ? ({
-              id: ch.lastMessage.id,
-              sender: ch.lastMessage.sender,
-              senderId: ch.lastMessage.senderId,
-              text:
-                ch.lastMessage.text ||
-                (ch.lastMessage.fileType === "image" ? "📷 Photo" : "📎 Attachment"),
-              time: new Date(ch.lastMessage.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              createdAtRaw:
-                typeof ch.lastMessage.createdAt === "string"
-                  ? ch.lastMessage.createdAt
-                  : ch.lastMessage.createdAt.toISOString(),
-              isSelf: ch.lastMessage.senderId === currentUserId,
-            } as Message)
+            id: ch.lastMessage.id,
+            sender: ch.lastMessage.sender,
+            senderId: ch.lastMessage.senderId,
+            text:
+              ch.lastMessage.text ||
+              (ch.lastMessage.fileType === "image" ? "📷 Photo" : "📎 Attachment"),
+            time: new Date(ch.lastMessage.createdAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            createdAtRaw:
+              typeof ch.lastMessage.createdAt === "string"
+                ? ch.lastMessage.createdAt
+                : ch.lastMessage.createdAt.toISOString(),
+            isSelf: ch.lastMessage.senderId === currentUserId,
+          } as Message)
           : undefined);
       const unread = unreadCounts[ch.id] || 0;
       items.push({
@@ -1046,22 +1091,22 @@ export function TeamChatSidebar() {
         msgs[msgs.length - 1] ||
         (ch.lastMessage
           ? ({
-              id: ch.lastMessage.id,
-              sender: ch.lastMessage.sender,
-              senderId: ch.lastMessage.senderId,
-              text:
-                ch.lastMessage.text ||
-                (ch.lastMessage.fileType === "image" ? "📷 Photo" : "📎 Attachment"),
-              time: new Date(ch.lastMessage.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              createdAtRaw:
-                typeof ch.lastMessage.createdAt === "string"
-                  ? ch.lastMessage.createdAt
-                  : ch.lastMessage.createdAt.toISOString(),
-              isSelf: ch.lastMessage.senderId === currentUserId,
-            } as Message)
+            id: ch.lastMessage.id,
+            sender: ch.lastMessage.sender,
+            senderId: ch.lastMessage.senderId,
+            text:
+              ch.lastMessage.text ||
+              (ch.lastMessage.fileType === "image" ? "📷 Photo" : "📎 Attachment"),
+            time: new Date(ch.lastMessage.createdAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            createdAtRaw:
+              typeof ch.lastMessage.createdAt === "string"
+                ? ch.lastMessage.createdAt
+                : ch.lastMessage.createdAt.toISOString(),
+            isSelf: ch.lastMessage.senderId === currentUserId,
+          } as Message)
           : undefined);
       const unread = unreadCounts[ch.id] || 0;
       const online = partner ? isUserOnline(partner) : false;
@@ -1086,9 +1131,9 @@ export function TeamChatSidebar() {
 
     // Jika sedang membuka DM baru yang belum ada di list channels
     if (activeChannelId && activeChannelId.startsWith("dm_") && !items.some((i) => i.id === activeChannelId)) {
-      const parts = activeChannelId.replace("dm_", "").split("_");
-      const otherId = parts.find((id) => id !== currentUserId);
-      const partner = teamMembers.find((m) => m.id === otherId);
+      const partner = teamMembers.find(
+        (m) => m.id !== currentUserId && activeChannelId.includes(m.id)
+      );
       if (partner) {
         items.unshift({
           id: activeChannelId,
@@ -1437,6 +1482,26 @@ export function TeamChatSidebar() {
     const dmChannelId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
     const targetName = member.name || member.email;
 
+    // Optimistic channel insertion agar nama user seketika langsung muncul rapi tanpa nama acak
+    const optimisticChannel: Channel = {
+      id: dmChannelId,
+      name: `${currentUserName} & ${targetName}`,
+      type: "direct",
+      members: [currentUserId, member.id],
+      admins: [],
+    };
+
+    setChannels((prev) => {
+      const existing = prev.find((c) => c.id === dmChannelId);
+      if (existing) return prev;
+      return [...prev, optimisticChannel];
+    });
+
+    setActiveChannelId(dmChannelId);
+    setShowMobileChat(true);
+    updateLastRead(dmChannelId);
+    loadMessages(dmChannelId);
+
     try {
       const res = await getOrCreateDirectChannelAction(
         currentUserId,
@@ -1447,18 +1512,13 @@ export function TeamChatSidebar() {
       if (res && res.success && res.channel) {
         const ch = res.channel as Channel;
         setChannels((prev) => {
-          if (prev.some((c) => c.id === ch.id)) return prev;
-          return [...prev, ch];
+          const others = prev.filter((c) => c.id !== ch.id);
+          return [...others, ch];
         });
       }
     } catch (e) {
       console.warn("Direct channel fetch fallback:", e);
     }
-
-    setActiveChannelId(dmChannelId);
-    setShowMobileChat(true);
-    updateLastRead(dmChannelId);
-    loadMessages(dmChannelId);
   };
 
   // Buka Direct Chat / Grup dari list utama
@@ -1485,7 +1545,7 @@ export function TeamChatSidebar() {
               return [...prev, res.channel as Channel];
             });
           }
-        } catch {}
+        } catch { }
       }
     }
   };
@@ -1812,11 +1872,10 @@ export function TeamChatSidebar() {
             setIsOpen(!isOpen);
             if (!isOpen) setShowMobileChat(false);
           }}
-          className={`relative group w-12 h-12 rounded-full shadow-lg transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer flex items-center justify-center active:scale-95 ${
-            isOpen
-              ? "bg-[#27272a] text-white border border-zinc-700 hover:bg-[#323238]"
-              : "bg-[#C65921] hover:bg-[#b04d1c] text-white border border-[#C65921]/50 shadow-md"
-          }`}
+          className={`relative group w-12 h-12 rounded-full shadow-lg transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer flex items-center justify-center active:scale-95 ${isOpen
+            ? "bg-[#27272a] text-white border border-zinc-700 hover:bg-[#323238]"
+            : "bg-[#C65921] hover:bg-[#b04d1c] text-white border border-[#C65921]/50 shadow-md"
+            }`}
           title={isOpen ? "Close Chat" : "Open Team Chat"}
         >
           {isOpen ? (
@@ -1838,21 +1897,19 @@ export function TeamChatSidebar() {
       {/* 4. KOTAK CHATBOX ALA WHATSAPP DESKTOP (MATTE #C65921)     */}
       {/* ========================================================= */}
       <div
-        className={`fixed inset-0 sm:inset-auto sm:bottom-20 sm:left-5 z-[60] w-full sm:w-[440px] md:w-[780px] h-[100dvh] sm:h-[600px] sm:max-h-[85vh] bg-[#141416] sm:border sm:border-zinc-800 sm:rounded-3xl rounded-none shadow-2xl overflow-hidden flex flex-col origin-bottom-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          isOpen
-            ? "scale-100 opacity-100 translate-y-0 pointer-events-auto"
-            : "scale-90 opacity-0 translate-y-4 pointer-events-none"
-        }`}
+        className={`fixed inset-0 sm:inset-auto sm:bottom-20 sm:left-5 z-[60] w-full sm:w-[440px] md:w-[780px] h-[100dvh] sm:h-[600px] sm:max-h-[85vh] bg-[#141416] sm:border sm:border-zinc-800 sm:rounded-3xl rounded-none shadow-2xl overflow-hidden flex flex-col origin-bottom-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isOpen
+          ? "scale-100 opacity-100 translate-y-0 pointer-events-auto"
+          : "scale-90 opacity-0 translate-y-4 pointer-events-none"
+          }`}
       >
         <div className="flex-1 flex overflow-hidden">
-          
+
           {/* ======================================================= */}
           {/* KOLOM KIRI: DAFTAR CHAT / KONTAK                        */}
           {/* ======================================================= */}
-          <div className={`w-full md:w-72 lg:w-80 flex flex-col border-r border-zinc-800 bg-[#141416] shrink-0 ${
-            showMobileChat ? "hidden md:flex" : "flex"
-          }`}>
-            
+          <div className={`w-full md:w-72 lg:w-80 flex flex-col border-r border-zinc-800 bg-[#141416] shrink-0 ${showMobileChat ? "hidden md:flex" : "flex"
+            }`}>
+
             {/* Header Profil Sendiri & Tombol Aksi WhatsApp */}
             <div className="p-3 sm:p-3.5 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 gap-2">
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -1925,11 +1982,10 @@ export function TeamChatSidebar() {
                     key={tab}
                     type="button"
                     onClick={() => setActiveTab(tab)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-medium transition cursor-pointer ${
-                      activeTab === tab
-                        ? "bg-[#C65921] text-white font-semibold"
-                        : "bg-[#1e1e22] text-zinc-400 hover:text-zinc-200"
-                    }`}
+                    className={`px-3 py-1 rounded-full text-[11px] font-medium transition cursor-pointer ${activeTab === tab
+                      ? "bg-[#C65921] text-white font-semibold"
+                      : "bg-[#1e1e22] text-zinc-400 hover:text-zinc-200"
+                      }`}
                   >
                     {tab === "all" ? "All" : tab === "groups" ? "Groups" : "Direct"}
                   </button>
@@ -1966,11 +2022,10 @@ export function TeamChatSidebar() {
                     <div
                       key={item.id}
                       onClick={() => handleSelectConversation(item)}
-                      className={`px-3.5 py-3 flex items-center gap-3 cursor-pointer transition select-none ${
-                        isCurrent
-                          ? "bg-[#1f1d1b] border-l-2 border-[#C65921]"
-                          : "hover:bg-[#1a1a1e] active:bg-[#202024]"
-                      }`}
+                      className={`px-3.5 py-3 flex items-center gap-3 cursor-pointer transition select-none ${isCurrent
+                        ? "bg-[#1f1d1b] border-l-2 border-[#C65921]"
+                        : "hover:bg-[#1a1a1e] active:bg-[#202024]"
+                        }`}
                     >
                       {/* Avatar */}
                       <div className="relative shrink-0">
@@ -2026,10 +2081,9 @@ export function TeamChatSidebar() {
           {/* ======================================================= */}
           {/* KOLOM KANAN: RUANG CHAT AKTIF                           */}
           {/* ======================================================= */}
-          <div className={`flex-1 flex flex-col bg-[#0e0e11] min-w-0 ${
-            !showMobileChat ? "hidden md:flex" : "flex"
-          }`}>
-            
+          <div className={`flex-1 flex flex-col bg-[#0e0e11] min-w-0 ${!showMobileChat ? "hidden md:flex" : "flex"
+            }`}>
+
             {activeChannelId && activeChannelId !== "general" ? (
               isManageGroupModalOpen && activeChannel.type === "group" ? (
                 /* ======================================================= */
@@ -2218,11 +2272,10 @@ export function TeamChatSidebar() {
                                 key={member.id}
                                 type="button"
                                 onClick={() => toggleInviteSelection(member.id)}
-                                className={`w-full px-2.5 py-1.5 rounded-lg text-[11px] transition cursor-pointer flex items-center justify-between text-left ${
-                                  isSelected
-                                    ? "bg-[#C65921] text-white font-medium"
-                                    : "bg-transparent text-zinc-300 hover:bg-white/5"
-                                }`}
+                                className={`w-full px-2.5 py-1.5 rounded-lg text-[11px] transition cursor-pointer flex items-center justify-between text-left ${isSelected
+                                  ? "bg-[#C65921] text-white font-medium"
+                                  : "bg-transparent text-zinc-300 hover:bg-white/5"
+                                  }`}
                               >
                                 <span className="truncate">{member.name || member.email}</span>
                                 {isSelected && <Check size={12} className="text-white shrink-0" />}
@@ -2274,340 +2327,337 @@ export function TeamChatSidebar() {
               ) : (
                 <>
                   {/* Header Saluran Aktif */}
-                <div className="p-2.5 sm:p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0 gap-2">
-                  <div 
-                    onClick={() => {
-                      if (activeChannel.type === "group") handleOpenManageGroup();
-                    }}
-                    className={`flex items-center gap-2 min-w-0 flex-1 overflow-hidden ${
-                      activeChannel.type === "group" ? "cursor-pointer group/hdr hover:opacity-90" : ""
-                    }`}
-                  >
-                    {/* Tombol Back di Mobile */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowMobileChat(false);
+                  <div className="p-2.5 sm:p-3 bg-[#18181c] flex items-center justify-between border-b border-zinc-800 shrink-0 gap-2">
+                    <div
+                      onClick={() => {
+                        if (activeChannel.type === "group") handleOpenManageGroup();
                       }}
-                      className="md:hidden p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer mr-0.5 shrink-0"
-                      title="Back to chat list"
+                      className={`flex items-center gap-2 min-w-0 flex-1 overflow-hidden ${activeChannel.type === "group" ? "cursor-pointer group/hdr hover:opacity-90" : ""
+                        }`}
                     >
-                      <ChevronLeft size={18} />
-                    </button>
-
-                    <div className="relative shrink-0">
-                      {activeChannel.type === "group" ? (
-                        <div className="w-10 h-10 rounded-full bg-[#241f1c] border border-[#382b24] text-[#C65921] flex items-center justify-center font-bold text-sm shadow-sm">
-                          <Users size={16} />
-                        </div>
-                      ) : activeDmPartner?.imageUrl ? (
-                        <img src={activeDmPartner.imageUrl} alt={activeDmPartner.name || ""} className="w-10 h-10 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#C65921] font-bold text-sm">
-                          {(getChannelDisplayName(activeChannel) || "U")[0]?.toUpperCase()}
-                        </div>
-                      )}
-
-                      {activeChannel.type === "direct" && isDmPartnerOnline && (
-                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#C65921] ring-2 ring-[#18181c]" />
-                      )}
-                    </div>
-
-                    <div className="truncate min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <h4 className="text-xs font-semibold text-white truncate leading-tight group-hover/hdr:text-[#C65921] transition">
-                          {getChannelDisplayName(activeChannel)}
-                        </h4>
-                        {activeChannel.type === "group" && (
-                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">
-                            ({activeChannel.members?.length || 1} members)
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-zinc-400 truncate">
-                        {activeChannel.type === "direct"
-                          ? isDmPartnerOnline ? "Online" : "Offline"
-                          : activeChannel.description || "Click for group info"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    {/* Tombol Kelola Grup */}
-                    {activeChannel.type === "group" && (
+                      {/* Tombol Back di Mobile */}
                       <button
                         type="button"
-                        onClick={handleOpenManageGroup}
-                        className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
-                        title="Group Info"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMobileChat(false);
+                        }}
+                        className="md:hidden p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer mr-0.5 shrink-0"
+                        title="Back to chat list"
                       >
-                        <Settings size={16} />
+                        <ChevronLeft size={18} />
                       </button>
-                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => setIsOpen(false)}
-                      className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
-                      title="Close Chat"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Area Pesan Chat Realtime */}
-                <div
-                  ref={messagesContainerRef}
-                  onPaste={handlePaste}
-                  className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0 bg-[#0e0e11] overscroll-contain"
-                >
-                  {activeMessages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-xs gap-2 text-center px-6">
-                      <div className="w-12 h-12 rounded-2xl bg-[#1c1c20] border border-zinc-800 flex items-center justify-center text-[#C65921]">
-                        <MessageCircle size={24} />
-                      </div>
-                      <p className="font-semibold text-zinc-200">Start conversation</p>
-                      <span className="text-[11px] text-zinc-400 max-w-xs">
-                        Type a message below to start collaborating with {getChannelDisplayName(activeChannel)}.
-                      </span>
-                    </div>
-                  ) : (
-                    activeMessages.map((msg) => {
-                      if (msg.senderId === "system" || msg.sender === "System") {
-                        return (
-                          <div key={msg.id} className="flex justify-center my-2 select-none">
-                            <span className="text-[10.5px] px-3.5 py-0.5 rounded-full bg-[#1b1b1f] text-zinc-400 border border-zinc-800/80 shadow-xs max-w-[85%] text-center">
-                              {msg.text}
-                            </span>
+                      <div className="relative shrink-0">
+                        {activeChannel.type === "group" ? (
+                          <div className="w-10 h-10 rounded-full bg-[#241f1c] border border-[#382b24] text-[#C65921] flex items-center justify-center font-bold text-sm shadow-sm">
+                            <Users size={16} />
                           </div>
-                        );
-                      }
+                        ) : activeDmPartner?.imageUrl ? (
+                          <img src={activeDmPartner.imageUrl} alt={activeDmPartner.name || ""} className="w-10 h-10 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#C65921] font-bold text-sm">
+                            {(getChannelDisplayName(activeChannel) || "U")[0]?.toUpperCase()}
+                          </div>
+                        )}
 
-                      const isImageOnly = msg.attachment?.type === "image" && !msg.text;
-                      const isMenuOpen = contextMenuMsg?.id === msg.id;
+                        {activeChannel.type === "direct" && isDmPartnerOnline && (
+                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#C65921] ring-2 ring-[#18181c]" />
+                        )}
+                      </div>
 
-                      return (
-                        <div
-                          key={msg.id}
-                          className={`group relative flex flex-col ${msg.isSelf ? "items-end" : "items-start"}`}
+                      <div className="truncate min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <h4 className="text-xs font-semibold text-white truncate leading-tight group-hover/hdr:text-[#C65921] transition">
+                            {getChannelDisplayName(activeChannel)}
+                          </h4>
+                          {activeChannel.type === "group" && (
+                            <span className="text-[10px] text-zinc-500 font-mono shrink-0">
+                              ({activeChannel.members?.length || 1} members)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-zinc-400 truncate">
+                          {activeChannel.type === "direct"
+                            ? isDmPartnerOnline ? "Online" : "Offline"
+                            : activeChannel.description || "Click for group info"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* Tombol Kelola Grup */}
+                      {activeChannel.type === "group" && (
+                        <button
+                          type="button"
+                          onClick={handleOpenManageGroup}
+                          className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                          title="Group Info"
                         >
-                          {/* Sender Name in Group */}
-                          {!msg.isSelf && activeChannel.type === "group" && (
-                            <div className="flex items-center gap-1.5 mb-0.5 ml-2">
-                              <span className="text-[10px] text-[#C65921] font-semibold">
-                                {msg.sender}
+                          <Settings size={16} />
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setIsOpen(false)}
+                        className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                        title="Close Chat"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Area Pesan Chat Realtime */}
+                  <div
+                    ref={messagesContainerRef}
+                    onPaste={handlePaste}
+                    className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0 bg-[#0e0e11] overscroll-contain"
+                  >
+                    {activeMessages.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-xs gap-2 text-center px-6">
+                        <div className="w-12 h-12 rounded-2xl bg-[#1c1c20] border border-zinc-800 flex items-center justify-center text-[#C65921]">
+                          <MessageCircle size={24} />
+                        </div>
+                        <p className="font-semibold text-zinc-200">Start conversation</p>
+                        <span className="text-[11px] text-zinc-400 max-w-xs">
+                          Type a message below to start collaborating with {getChannelDisplayName(activeChannel)}.
+                        </span>
+                      </div>
+                    ) : (
+                      activeMessages.map((msg) => {
+                        if (msg.senderId === "system" || msg.sender === "System") {
+                          return (
+                            <div key={msg.id} className="flex justify-center my-2 select-none">
+                              <span className="text-[10.5px] px-3.5 py-0.5 rounded-full bg-[#1b1b1f] text-zinc-400 border border-zinc-800/80 shadow-xs max-w-[85%] text-center">
+                                {msg.text}
                               </span>
                             </div>
-                          )}
+                          );
+                        }
 
-                          {/* Message Bubble (Soft Terracotta #C65921 for self) */}
+                        const isImageOnly = msg.attachment?.type === "image" && !msg.text;
+                        const isMenuOpen = contextMenuMsg?.id === msg.id;
+
+                        return (
                           <div
-                            className={`relative rounded-2xl text-xs leading-relaxed shadow-sm transition max-w-[85%] sm:max-w-[75%] ${
-                              isImageOnly
+                            key={msg.id}
+                            className={`group relative flex flex-col ${msg.isSelf ? "items-end" : "items-start"}`}
+                          >
+                            {/* Sender Name in Group */}
+                            {!msg.isSelf && activeChannel.type === "group" && (
+                              <div className="flex items-center gap-1.5 mb-0.5 ml-2">
+                                <span className="text-[10px] text-[#C65921] font-semibold">
+                                  {msg.sender}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Message Bubble (Soft Terracotta #C65921 for self) */}
+                            <div
+                              className={`relative rounded-2xl text-xs leading-relaxed shadow-sm transition max-w-[85%] sm:max-w-[75%] ${isImageOnly
                                 ? "p-1 bg-transparent"
                                 : msg.isSelf
-                                ? "bg-[#C65921] text-white p-2.5 rounded-tr-xs"
-                                : "bg-[#1f1f23] text-zinc-100 border border-zinc-800/80 p-2.5 rounded-tl-xs"
-                            }`}
-                          >
-                            {/* Dropdown Chevron */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setContextMenuMsg(
-                                  isMenuOpen ? null : { id: msg.id, x: rect.right, y: rect.bottom }
-                                );
-                              }}
-                              className="opacity-0 group-hover:opacity-100 absolute top-1 right-1 z-10 w-5 h-5 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition cursor-pointer"
-                              title="Message menu"
+                                  ? "bg-[#C65921] text-white p-2.5 rounded-tr-xs"
+                                  : "bg-[#1f1f23] text-zinc-100 border border-zinc-800/80 p-2.5 rounded-tl-xs"
+                                }`}
                             >
-                              <ChevronDown size={12} />
-                            </button>
+                              {/* Dropdown Chevron */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setContextMenuMsg(
+                                    isMenuOpen ? null : { id: msg.id, x: rect.right, y: rect.bottom }
+                                  );
+                                }}
+                                className="opacity-0 group-hover:opacity-100 absolute top-1 right-1 z-10 w-5 h-5 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition cursor-pointer"
+                                title="Message menu"
+                              >
+                                <ChevronDown size={12} />
+                              </button>
 
-                            {/* Forwarded Banner */}
-                            {msg.isForwarded && (
-                              <div className="flex items-center gap-1 text-[10px] italic opacity-80 mb-1 font-sans">
-                                <Forward size={11} className="inline rotate-0" />
-                                <span>Forwarded</span>
-                              </div>
-                            )}
+                              {/* Forwarded Banner */}
+                              {msg.isForwarded && (
+                                <div className="flex items-center gap-1 text-[10px] italic opacity-80 mb-1 font-sans">
+                                  <Forward size={11} className="inline rotate-0" />
+                                  <span>Forwarded</span>
+                                </div>
+                              )}
 
-                            {/* Reply Quote Box */}
-                            {msg.replyToSender && (
-                              <div className={`mb-1.5 p-1.5 px-2 rounded-lg border-l-3 text-[11px] select-none ${
-                                msg.isSelf ? "bg-black/20 border-white/80" : "bg-black/30 border-[#C65921]"
-                              }`}>
-                                <span className={`font-semibold block text-[10px] ${msg.isSelf ? "text-orange-100" : "text-[#C65921]"}`}>
-                                  {msg.replyToSender}
-                                </span>
-                                <span className="text-white/80 line-clamp-1 italic text-[10px]">
-                                  {msg.replyToText}
-                                </span>
-                              </div>
-                            )}
+                              {/* Reply Quote Box */}
+                              {msg.replyToSender && (
+                                <div className={`mb-1.5 p-1.5 px-2 rounded-lg border-l-3 text-[11px] select-none ${msg.isSelf ? "bg-black/20 border-white/80" : "bg-black/30 border-[#C65921]"
+                                  }`}>
+                                  <span className={`font-semibold block text-[10px] ${msg.isSelf ? "text-orange-100" : "text-[#C65921]"}`}>
+                                    {msg.replyToSender}
+                                  </span>
+                                  <span className="text-white/80 line-clamp-1 italic text-[10px]">
+                                    {msg.replyToText}
+                                  </span>
+                                </div>
+                              )}
 
-                            {/* Image Attachment */}
-                            {msg.attachment?.type === "image" && (
-                              <div className="relative group/img overflow-hidden rounded-xl mb-1">
-                                <img
-                                  src={msg.attachment.url}
-                                  alt={msg.attachment.name}
-                                  className="max-h-72 w-auto object-cover rounded-xl cursor-pointer hover:opacity-95 transition"
-                                  onClick={() => setPreviewImage({ url: msg.attachment!.url, name: msg.attachment!.name })}
-                                />
-                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/img:opacity-100 transition">
+                              {/* Image Attachment */}
+                              {msg.attachment?.type === "image" && (
+                                <div className="relative group/img overflow-hidden rounded-xl mb-1">
+                                  <img
+                                    src={msg.attachment.url}
+                                    alt={msg.attachment.name}
+                                    className="max-h-72 w-auto object-cover rounded-xl cursor-pointer hover:opacity-95 transition"
+                                    onClick={() => setPreviewImage({ url: msg.attachment!.url, name: msg.attachment!.name })}
+                                  />
+                                  <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/img:opacity-100 transition">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        downloadMedia(msg.attachment!.url, msg.attachment!.name || "photo.jpg");
+                                      }}
+                                      className="p-1.5 rounded-full bg-black/60 hover:bg-black text-white shadow backdrop-blur-sm transition cursor-pointer"
+                                      title="Download Photo"
+                                    >
+                                      <Download size={13} />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* File Attachment */}
+                              {msg.attachment?.type === "file" && (
+                                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-black/20 mb-1 border border-white/5">
+                                  <FileText size={18} className="text-zinc-400" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[11px] font-semibold text-white truncate">{msg.attachment.name}</p>
+                                    <span className="text-[9px] opacity-70 font-mono">{msg.attachment.size}</span>
+                                  </div>
                                   <button
                                     type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      downloadMedia(msg.attachment!.url, msg.attachment!.name || "photo.jpg");
-                                    }}
-                                    className="p-1.5 rounded-full bg-black/60 hover:bg-black text-white shadow backdrop-blur-sm transition cursor-pointer"
-                                    title="Download Photo"
+                                    onClick={() => downloadMedia(msg.attachment!.url, msg.attachment!.name)}
+                                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                                    title="Download File"
                                   >
                                     <Download size={13} />
                                   </button>
                                 </div>
-                              </div>
-                            )}
-
-                            {/* File Attachment */}
-                            {msg.attachment?.type === "file" && (
-                              <div className="flex items-center gap-2.5 p-2 rounded-xl bg-black/20 mb-1 border border-white/5">
-                                <FileText size={18} className="text-zinc-400" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[11px] font-semibold text-white truncate">{msg.attachment.name}</p>
-                                  <span className="text-[9px] opacity-70 font-mono">{msg.attachment.size}</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => downloadMedia(msg.attachment!.url, msg.attachment!.name)}
-                                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
-                                  title="Download File"
-                                >
-                                  <Download size={13} />
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Message Text */}
-                            {msg.text && (
-                              <p className="whitespace-pre-wrap break-words pr-1 text-[12px]">
-                                {renderMessageTextWithLinks(msg.text, msg.isSelf)}
-                              </p>
-                            )}
-
-                            {/* Footer: Time & Edited */}
-                            <div className="flex items-center justify-end gap-1 mt-0.5 text-[9px] opacity-75 font-mono select-none">
-                              {msg.isEdited && (
-                                <span className="italic font-sans">edited</span>
                               )}
-                              <span>{msg.time}</span>
-                            </div>
-                          </div>
 
-                          {/* Context Menu Options */}
-                          {isMenuOpen && (
-                            <div
-                              ref={contextMenuRef}
-                              className="absolute right-0 top-8 z-30 w-44 bg-[#1f1f23] border border-zinc-700/80 rounded-xl shadow-2xl py-1.5 text-xs text-zinc-200 space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => handleReplyMessage(msg)}
-                                className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
-                              >
-                                <Reply size={14} className="text-zinc-400" />
-                                <span>Reply</span>
-                              </button>
-
+                              {/* Message Text */}
                               {msg.text && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyText(msg.text)}
-                                  className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
-                                >
-                                  <Copy size={14} className="text-zinc-400" />
-                                  <span>Copy Text</span>
-                                </button>
+                                <p className="whitespace-pre-wrap break-words pr-1 text-[12px]">
+                                  {renderMessageTextWithLinks(msg.text, msg.isSelf)}
+                                </p>
                               )}
 
-                              <button
-                                type="button"
-                                onClick={() => handleStartForward(msg)}
-                                className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
-                              >
-                                <Forward size={14} className="text-zinc-400" />
-                                <span>Forward</span>
-                              </button>
-
-                              {msg.attachment?.type === "image" && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    downloadMedia(msg.attachment!.url, msg.attachment!.name || "photo.jpg");
-                                    setContextMenuMsg(null);
-                                  }}
-                                  className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
-                                >
-                                  <Download size={14} className="text-zinc-400" />
-                                  <span>Download Photo</span>
-                                </button>
-                              )}
-
-                              {msg.isSelf && msg.text && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEditMessage(msg)}
-                                  className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left text-amber-300"
-                                >
-                                  <Edit2 size={14} />
-                                  <span>Edit Message</span>
-                                </button>
-                              )}
-
-                              {msg.isSelf && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteMessage(msg.id)}
-                                  className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-rose-500/10 transition cursor-pointer text-left text-rose-400"
-                                >
-                                  <Trash2 size={14} />
-                                  <span>Delete Message</span>
-                                </button>
-                              )}
+                              {/* Footer: Time & Edited */}
+                              <div className="flex items-center justify-end gap-1 mt-0.5 text-[9px] opacity-75 font-mono select-none">
+                                {msg.isEdited && (
+                                  <span className="italic font-sans">edited</span>
+                                )}
+                                <span>{msg.time}</span>
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                  <div ref={chatBottomRef} />
-                </div>
 
-                {/* Input Bar */}
-                <ChatInputBar
-                  onSendMessage={handleSendMessage}
-                  isSending={isSending}
-                  editingMessage={editingMessage}
-                  onCancelEdit={handleCancelEdit}
-                  replyingMessage={replyingMessage}
-                  onCancelReply={handleCancelReply}
-                  pendingFile={pendingFile}
-                  onClearPendingFile={handleClearPendingFile}
-                  onFileSelect={handleFileSelect}
-                  onOpenCamera={openCamera}
-                  onPasteImage={handlePasteImage}
-                  activeChannelId={activeChannelId}
-                  fileInputRef={fileInputRef}
-                  cameraInputRef={cameraInputRef}
-                />
-              </>
-            )) : (
+                            {/* Context Menu Options */}
+                            {isMenuOpen && (
+                              <div
+                                ref={contextMenuRef}
+                                className="absolute right-0 top-8 z-30 w-44 bg-[#1f1f23] border border-zinc-700/80 rounded-xl shadow-2xl py-1.5 text-xs text-zinc-200 space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleReplyMessage(msg)}
+                                  className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
+                                >
+                                  <Reply size={14} className="text-zinc-400" />
+                                  <span>Reply</span>
+                                </button>
+
+                                {msg.text && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyText(msg.text)}
+                                    className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
+                                  >
+                                    <Copy size={14} className="text-zinc-400" />
+                                    <span>Copy Text</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartForward(msg)}
+                                  className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
+                                >
+                                  <Forward size={14} className="text-zinc-400" />
+                                  <span>Forward</span>
+                                </button>
+
+                                {msg.attachment?.type === "image" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      downloadMedia(msg.attachment!.url, msg.attachment!.name || "photo.jpg");
+                                      setContextMenuMsg(null);
+                                    }}
+                                    className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left"
+                                  >
+                                    <Download size={14} className="text-zinc-400" />
+                                    <span>Download Photo</span>
+                                  </button>
+                                )}
+
+                                {msg.isSelf && msg.text && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditMessage(msg)}
+                                    className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-white/5 transition cursor-pointer text-left text-amber-300"
+                                  >
+                                    <Edit2 size={14} />
+                                    <span>Edit Message</span>
+                                  </button>
+                                )}
+
+                                {msg.isSelf && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    className="w-full px-3 py-1.5 flex items-center gap-2.5 hover:bg-rose-500/10 transition cursor-pointer text-left text-rose-400"
+                                  >
+                                    <Trash2 size={14} />
+                                    <span>Delete Message</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={chatBottomRef} />
+                  </div>
+
+                  {/* Input Bar */}
+                  <ChatInputBar
+                    onSendMessage={handleSendMessage}
+                    isSending={isSending}
+                    editingMessage={editingMessage}
+                    onCancelEdit={handleCancelEdit}
+                    replyingMessage={replyingMessage}
+                    onCancelReply={handleCancelReply}
+                    pendingFile={pendingFile}
+                    onClearPendingFile={handleClearPendingFile}
+                    onFileSelect={handleFileSelect}
+                    onOpenCamera={openCamera}
+                    onPasteImage={handlePasteImage}
+                    activeChannelId={activeChannelId}
+                    fileInputRef={fileInputRef}
+                    cameraInputRef={cameraInputRef}
+                  />
+                </>
+              )) : (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-500 space-y-3">
                 <div className="w-14 h-14 rounded-2xl bg-[#1c1c20] border border-zinc-800 flex items-center justify-center text-[#C65921]">
                   <MessageSquare size={26} />
@@ -2854,7 +2904,7 @@ export function TeamChatSidebar() {
       {/* 9. MODAL LIGHTBOX FOTO PREVIEW DENGAN TOMBOL DOWNLOAD     */}
       {/* ========================================================= */}
       {previewImage && (
-        <div 
+        <div
           onClick={() => setPreviewImage(null)}
           className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200"
         >
@@ -2879,8 +2929,8 @@ export function TeamChatSidebar() {
             </button>
           </div>
 
-          <div 
-            onClick={(e) => e.stopPropagation()} 
+          <div
+            onClick={(e) => e.stopPropagation()}
             className="max-w-4xl max-h-[85vh] flex items-center justify-center p-2"
           >
             <img
@@ -2903,9 +2953,9 @@ export function TeamChatSidebar() {
                 <Users size={16} className="text-[#C65921]" />
                 <span>New Group Chat</span>
               </div>
-              <button 
+              <button
                 type="button"
-                onClick={() => setIsGroupModalOpen(false)} 
+                onClick={() => setIsGroupModalOpen(false)}
                 className="text-zinc-400 hover:text-white cursor-pointer"
               >
                 <X size={15} />
@@ -2951,11 +3001,10 @@ export function TeamChatSidebar() {
                           key={member.id}
                           type="button"
                           onClick={() => toggleMemberSelection(member.id)}
-                          className={`w-full px-2.5 py-1.5 rounded-lg text-[11px] transition cursor-pointer border flex items-center justify-between text-left ${
-                            isSelected
-                              ? "bg-[#C65921] text-white border-transparent font-medium"
-                              : "bg-transparent text-zinc-300 border-transparent hover:bg-white/5"
-                          }`}
+                          className={`w-full px-2.5 py-1.5 rounded-lg text-[11px] transition cursor-pointer border flex items-center justify-between text-left ${isSelected
+                            ? "bg-[#C65921] text-white border-transparent font-medium"
+                            : "bg-transparent text-zinc-300 border-transparent hover:bg-white/5"
+                            }`}
                         >
                           <div className="flex items-center gap-2 truncate">
                             <span className="w-5 h-5 rounded-full bg-white/10 text-[9px] flex items-center justify-center font-bold text-white shrink-0">

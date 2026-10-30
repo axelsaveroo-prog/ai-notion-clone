@@ -28,7 +28,8 @@ import {
   getClientsAction,
   createClientAction,
   updateClientAction,
-  deleteClientAction 
+  deleteClientAction,
+  respondCalendarEventApprovalAction
 } from "@/actions/actions";
 import { getGoogleCalendarUrl } from "@/lib/utils";
 import { 
@@ -48,6 +49,8 @@ interface EventItem {
   eventType?: "online" | "offline" | string | null;
   meetLink?: string | null;
   location?: string | null;
+  creatorName?: string | null;
+  approvals?: Record<string, string> | any;
 }
 
 interface UserMember {
@@ -74,7 +77,15 @@ export function TeamCalendar() {
   const { user } = useUser();
   const creatorName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
 
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("SIKA_CALENDAR_EVENTS");
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [dbUsers, setDbUsers] = useState<UserMember[]>([]);
   const [dbClients, setDbClients] = useState<DbClient[]>([]);
@@ -187,6 +198,9 @@ export function TeamCalendar() {
 
       if (eventsData && Array.isArray(eventsData)) {
         setEvents(eventsData);
+        try {
+          localStorage.setItem("SIKA_CALENDAR_EVENTS", JSON.stringify(eventsData));
+        } catch {}
       }
       if (usersData && Array.isArray(usersData)) {
         setDbUsers(usersData);
@@ -301,7 +315,61 @@ export function TeamCalendar() {
     }
   };
 
-  // Filter ketat semingguan (tanggal >= hari ini dan <= 7 hari ke depan, jadwal lewat dihapus)
+  // Helper cek apakah user login di-tag atau pembuat jadwal
+  const isUserTaggedOrCreator = (ev: EventItem) => {
+    if (!user) return false;
+    const userIdentifiers = [
+      user.fullName?.toLowerCase().trim(),
+      user.firstName?.toLowerCase().trim(),
+      user.username?.toLowerCase().trim(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+    ].filter(Boolean) as string[];
+
+    if (ev.creatorName) {
+      const creator = ev.creatorName.toLowerCase().trim();
+      if (userIdentifiers.some((id) => id === creator || creator.includes(id))) return true;
+    }
+
+    if (ev.assignees && Array.isArray(ev.assignees) && ev.assignees.length > 0) {
+      return ev.assignees.some((a) => {
+        const lower = a.toLowerCase().trim();
+        return userIdentifiers.some((id) => id === lower || lower.includes(id));
+      });
+    }
+
+    if (ev.assignee && typeof ev.assignee === "string") {
+      const parts = ev.assignee.split(",").map((p) => p.trim().toLowerCase());
+      return parts.some((p) => userIdentifiers.some((id) => id === p || p.includes(id)));
+    }
+
+    return false;
+  };
+
+  const handleApprovalResponse = async (ev: EventItem, status: "accepted" | "rejected") => {
+    const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "Member";
+
+    setEvents((prev) =>
+      prev.map((item) => {
+        if (item.id !== ev.id) return item;
+        const approvals = { ...(item.approvals || {}), [currentUserName]: status };
+        return { ...item, approvals };
+      })
+    );
+
+    try {
+      const res = await respondCalendarEventApprovalAction(ev.id, currentUserName, status);
+      if (res && res.success) {
+        if (status === "accepted") {
+          toast.success(`Jadwal "${ev.title}" berhasil Anda terima!`);
+        } else {
+          toast.info(`Jadwal "${ev.title}" ditolak dan disembunyikan dari list Anda.`);
+        }
+        window.dispatchEvent(new Event("sika_schedule_updated"));
+      }
+    } catch {}
+  };
+
+  // Filter ketat semingguan: HANYA jadwal di mana user di-tag / creator, jadwal lewat atau ditolak disembunyikan
   const todayStr = getTodayFormatted();
   const next7Days = new Date();
   next7Days.setDate(next7Days.getDate() + 7);
@@ -309,6 +377,14 @@ export function TeamCalendar() {
 
   const weeklyUpcoming = [...events]
     .filter((ev) => ev.date >= todayStr && ev.date <= next7DaysStr)
+    .filter((ev) => {
+      if (!isUserTaggedOrCreator(ev)) return false;
+      const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
+      const approvalsMap = (ev.approvals as Record<string, string>) || {};
+      const myStatus = approvalsMap[currentUserName] || (user?.fullName ? approvalsMap[user.fullName] : undefined);
+      if (myStatus === "rejected") return false;
+      return true;
+    })
     .sort((a, b) => (a.date + (a.time || "")) > (b.date + (b.time || "")) ? 1 : -1)
     .slice(0, 6);
 
@@ -415,11 +491,57 @@ export function TeamCalendar() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   <div className="bg-[#121214] text-gray-300 px-2.5 py-1 rounded-md border border-[#222226] flex items-center gap-1.5 font-medium text-[11px] max-w-[200px] truncate">
                     <Users className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                     <span className="truncate">{assigneesList.join(", ")}</span>
                   </div>
+
+                  {(() => {
+                    const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
+                    const isCreator = ev.creatorName && (
+                      ev.creatorName.toLowerCase() === currentUserName.toLowerCase() ||
+                      (user?.fullName && ev.creatorName.toLowerCase() === user.fullName.toLowerCase())
+                    );
+                    const approvalsMap = (ev.approvals as Record<string, string>) || {};
+                    const myStatus = approvalsMap[currentUserName] || (isCreator ? "accepted" : "pending");
+
+                    if (!isCreator && myStatus === "pending") {
+                      return (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleApprovalResponse(ev, "accepted")}
+                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] flex items-center gap-1 transition shadow cursor-pointer active:scale-95"
+                            title="Terima jadwal ini"
+                          >
+                            <Check size={10} />
+                            <span>Terima</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApprovalResponse(ev, "rejected")}
+                            className="px-2 py-1 rounded bg-zinc-800 hover:bg-rose-950 hover:text-rose-300 text-zinc-400 text-[10px] flex items-center gap-1 transition cursor-pointer active:scale-95"
+                            title="Tolak jadwal ini"
+                          >
+                            <X size={10} />
+                            <span>Tolak</span>
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    if (!isCreator && myStatus === "accepted") {
+                      return (
+                        <span className="text-[10px] text-emerald-400 font-medium px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/40 flex items-center gap-1">
+                          <Check size={10} />
+                          <span>Diterima</span>
+                        </span>
+                      );
+                    }
+
+                    return null;
+                  })()}
                 </div>
               </div>
             );

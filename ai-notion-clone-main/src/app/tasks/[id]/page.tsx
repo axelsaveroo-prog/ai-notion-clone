@@ -406,26 +406,6 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         </Link>
 
         <div className="flex items-center gap-3">
-          {/* Status Save Indicator */}
-          {saveStatus === "saving" && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-400">
-              <Loader2 size={13} className="animate-spin" />
-              <span>Menyimpan...</span>
-            </span>
-          )}
-          {saveStatus === "saved" && (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-              <Check size={13} />
-              <span>Tersimpan di database</span>
-            </span>
-          )}
-          {saveStatus === "error" && (
-            <span className="flex items-center gap-1.5 text-xs text-rose-400">
-              <AlertCircle size={13} />
-              <span>Gagal menyimpan</span>
-            </span>
-          )}
-
           <button
             onClick={handleDelete}
             title="Hapus Task"

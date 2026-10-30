@@ -95,27 +95,44 @@ export function TodayScheduleReminder() {
     };
   }, [loadEvents]);
 
-  // Filter jadwal sesuai user yang sedang login atau Team
+  // Filter jadwal ketat: HANYA jika user di-tag atau sebagai pembuat acara
   const isEventForCurrentUser = (ev: ScheduleEvent) => {
-    if (!user) return true;
-    if (!ev.assignees || ev.assignees.length === 0) return true;
+    if (!user) return false;
+
+    const currentUserName = user.fullName || user.username || user.primaryEmailAddress?.emailAddress || "";
+    const approvalsMap = (ev.approvals as Record<string, string>) || {};
+    // Jika ditolak oleh user ini, jangan tampilkan di reminder beranda
+    if (approvalsMap[currentUserName] === "rejected") return false;
 
     const userIdentifiers = [
-      user.fullName?.toLowerCase(),
-      user.firstName?.toLowerCase(),
-      user.username?.toLowerCase(),
-      user.primaryEmailAddress?.emailAddress?.toLowerCase(),
-      "you",
-      "team",
-      "all",
-      "entire team",
-      "you & team",
+      user.fullName?.toLowerCase().trim(),
+      user.firstName?.toLowerCase().trim(),
+      user.username?.toLowerCase().trim(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
     ].filter(Boolean) as string[];
 
-    return ev.assignees.some((assignee) => {
-      const a = assignee.toLowerCase().trim();
-      return userIdentifiers.some((idStr) => a === idStr || a.includes(idStr) || idStr.includes(a));
-    });
+    // 1. Cek jika user adalah pembuat jadwal
+    if (ev.creatorName) {
+      const creator = ev.creatorName.toLowerCase().trim();
+      if (userIdentifiers.some((id) => id === creator || creator.includes(id))) {
+        return true;
+      }
+    }
+
+    // 2. Cek jika user di-tag di assignees
+    if (ev.assignees && Array.isArray(ev.assignees) && ev.assignees.length > 0) {
+      return ev.assignees.some((assignee) => {
+        const a = assignee.toLowerCase().trim();
+        return userIdentifiers.some((id) => id === a || a.includes(id));
+      });
+    }
+
+    if (ev.assignee && typeof ev.assignee === "string") {
+      const parts = ev.assignee.split(",").map((p) => p.trim().toLowerCase());
+      return parts.some((p) => userIdentifiers.some((id) => id === p || p.includes(id)));
+    }
+
+    return false;
   };
 
   // Response Persetujuan Jadwal oleh Assignee
@@ -194,11 +211,7 @@ export function TodayScheduleReminder() {
         return (
           <div
             key={ev.id}
-            className={`group relative bg-[#141416] p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
-              needsApproval
-                ? "border border-amber-600/30 bg-[#161513]"
-                : "border border-zinc-800/80 hover:border-zinc-700 bg-[#141416]"
-            }`}
+            className="group relative bg-[#141416] p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all border border-zinc-800/80 hover:border-zinc-700"
           >
             {/* Info Jadwal Hari Ini */}
             <div className="flex items-start gap-3.5 flex-1 min-w-0">
@@ -277,29 +290,7 @@ export function TodayScheduleReminder() {
 
             {/* Tombol Aksi: Persetujuan (jika perlu), MoM, GMeet, dan Selesai */}
             <div className="flex items-center gap-2 shrink-0 self-end md:self-center flex-wrap">
-              {/* Tombol Persetujuan Khusus Assignee yang Di-tag */}
-              {needsApproval && (
-                <div className="flex items-center gap-1.5 bg-zinc-900/90 p-1 rounded-xl border border-amber-500/40">
-                  <button
-                    type="button"
-                    onClick={() => handleApprovalResponse(ev, "accepted")}
-                    className="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1 transition shadow cursor-pointer active:scale-95"
-                    title="Setujui jadwal ini dan sync ke Google Calendar Anda"
-                  >
-                    <Check size={12} />
-                    <span>Terima Jadwal</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApprovalResponse(ev, "rejected")}
-                    className="h-7 px-2 rounded-lg bg-zinc-800 hover:bg-rose-950/80 hover:text-rose-300 text-zinc-400 text-xs flex items-center gap-1 transition cursor-pointer active:scale-95"
-                    title="Tolak jadwal ini"
-                  >
-                    <XIcon size={12} />
-                    <span>Tolak</span>
-                  </button>
-                </div>
-              )}
+
 
               {/* Tombol Notulen MoM */}
               <Link
