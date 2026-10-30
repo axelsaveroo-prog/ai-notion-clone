@@ -130,7 +130,7 @@ function MomContent({ eventId }: { eventId: string }) {
             href="/calendar"
             className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
           >
-            <ArrowLeft size={16} /> Kembali ke Kalender
+            <ArrowLeft size={16} /> Back to Calendar
           </Link>
         )}
 
@@ -173,7 +173,7 @@ function MomContent({ eventId }: { eventId: string }) {
                     <input
                       readOnly
                       value={clientShareUrl}
-                      className="bg-transparent text-[11px] text-zinc-300 flex-1 px-1.5 focus:outline-none truncate font-mono"
+                      className="bg-transparent text-[11px] text-zinc-300 flex-1 px-1.5 focus:outline-none truncate font-sans"
                     />
                     <button
                       onClick={copyShareLink}
@@ -237,14 +237,14 @@ function MomContent({ eventId }: { eventId: string }) {
             <span className="flex items-center gap-2 text-zinc-400 font-medium print:text-zinc-600">
               <CalendarIcon size={14} /> Date:
             </span>
-            <span className="text-zinc-200 font-mono print:text-black">{date || "-"}</span>
+            <span className="text-zinc-200 font-sans print:text-black">{date || "-"}</span>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-2 text-zinc-400 font-medium print:text-zinc-600">
               <Clock size={14} /> Time:
             </span>
-            <span className="text-zinc-200 font-mono print:text-black">{time ? `${time} WIB` : "-"}</span>
+            <span className="text-zinc-200 font-sans print:text-black">{time ? `${time} WIB` : "-"}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -267,8 +267,8 @@ function MomContent({ eventId }: { eventId: string }) {
 
           {isPublicView ? (
             /* Tampilan Read-Only Bersih */
-            <div className="w-full bg-[#18181a]/50 border border-zinc-800/60 rounded-2xl p-6 text-zinc-200 font-mono text-sm leading-relaxed whitespace-pre-wrap print:bg-transparent print:border-none print:p-0 print:text-black print:text-xs">
-              {content || "Belum ada notulen rapat yang ditambahkan."}
+            <div className="w-full bg-[#18181a]/50 border border-zinc-800/60 rounded-2xl p-6 text-zinc-200 font-sans text-sm leading-relaxed whitespace-pre-wrap print:bg-transparent print:border-none print:p-0 print:text-black print:text-xs">
+              {content || "No meeting minutes added yet."}
             </div>
           ) : (
             <>
@@ -277,11 +277,11 @@ function MomContent({ eventId }: { eventId: string }) {
                 value={content}
                 onChange={(e) => handleSaveContent(e.target.value)}
                 rows={18}
-                placeholder="Tuliskan poin pembahasan, notulen, keputusan rapat, dan pembagian tugas di sini..."
-                className="w-full bg-[#18181a] border border-zinc-800 rounded-2xl p-6 text-zinc-200 font-mono text-sm leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y print:hidden"
+                placeholder="Write discussion points, meeting minutes, decisions, and action items here..."
+                className="w-full bg-[#18181a] border border-zinc-800 rounded-2xl p-6 text-zinc-200 font-sans text-sm leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y print:hidden"
               />
               {/* Tampilan teks rapi murni saat di-print ke kertas/PDF */}
-              <div className="hidden print:block text-black font-mono text-xs leading-relaxed whitespace-pre-wrap">
+              <div className="hidden print:block text-black font-sans text-xs leading-relaxed whitespace-pre-wrap">
                 {content}
               </div>
             </>
@@ -296,7 +296,7 @@ export default function MomDetailPage({ params }: { params: Promise<{ id: string
   const resolvedParams = use(params);
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0F0F0F] text-zinc-400 p-10">Memuat notulen...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#0F0F0F] text-zinc-400 p-10">Loading meeting minutes...</div>}>
       <MomContent eventId={resolvedParams.id} />
     </Suspense>
   );

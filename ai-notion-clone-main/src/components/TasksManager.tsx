@@ -470,11 +470,11 @@ function TasksManagerContent() {
           className="flex items-center gap-2 text-xs font-semibold text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg transition"
         >
           <Menu size={15} />
-          <span>Buka Folder Client ({clientList.length})</span>
+          <span>Open Client Folders ({clientList.length})</span>
         </button>
 
         <span className="text-xs text-zinc-400 font-medium">
-          {isClientPage ? `📁 ${activeClientName}` : (selectedView === "my_tasks" ? "👤 Tugas Saya" : "📋 Semua Brief")}
+          {isClientPage ? `📁 ${activeClientName}` : (selectedView === "my_tasks" ? "👤 My Tasks" : "📋 All Briefs")}
         </span>
       </div>
 
@@ -534,9 +534,9 @@ function TasksManagerContent() {
           >
             <div className="flex items-center gap-2">
               <UserIcon size={14} className={selectedView === "my_tasks" ? "text-amber-400" : "text-zinc-400"} />
-              <span>Tugas Saya</span>
+              <span>My Tasks</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 ">
               {tasks.filter(isTaskForCurrentUser).length}
             </span>
           </button>
@@ -552,9 +552,9 @@ function TasksManagerContent() {
           >
             <div className="flex items-center gap-2">
               <Users size={14} className={selectedView === "all_tasks" ? "text-amber-400" : "text-zinc-400"} />
-              <span>Semua Brief Tim</span>
+              <span>All Team Briefs</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 ">
               {tasks.length}
             </span>
           </button>
@@ -570,7 +570,7 @@ function TasksManagerContent() {
               type="button"
               onClick={() => setIsAddClientModalOpen(true)}
               className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-0.5 bg-zinc-800/80 hover:bg-zinc-700 px-1.5 py-0.5 rounded transition cursor-pointer"
-              title="Tambah Client Baru"
+              title="Add New Client"
             >
               <Plus size={11} />
               <span>Client</span>
@@ -581,7 +581,7 @@ function TasksManagerContent() {
           <div className="flex flex-col gap-1 max-h-[500px] overflow-y-auto no-scrollbar">
             {clientList.length === 0 ? (
               <div className="py-4 text-center text-[11px] text-zinc-500 italic">
-                Belum ada client folder
+                No client folders yet
               </div>
             ) : (
               clientList.map((clientName) => {
@@ -608,7 +608,7 @@ function TasksManagerContent() {
                       <span className="truncate">{clientName}</span>
                     </div>
 
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400 font-mono shrink-0 group-hover:text-zinc-200">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400  shrink-0 group-hover:text-zinc-200">
                       {clientTasksCount}
                     </span>
                   </button>
@@ -620,7 +620,7 @@ function TasksManagerContent() {
 
         {/* Bottom Helper Info */}
         <div className="mt-auto pt-4 border-t border-zinc-800/70 text-[10px] text-zinc-500 leading-relaxed">
-          Semua brief di folder client dapat dilihat bersama oleh seluruh tim.
+          All client briefs are shared and viewable by the entire team.
         </div>
       </aside>
 
@@ -655,7 +655,7 @@ function TasksManagerContent() {
                   className="text-xs text-zinc-400 hover:text-white px-2.5 py-1 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 transition flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft size={12} />
-                  <span>Semua Brief</span>
+                  <span>All Briefs</span>
                 </button>
               </div>
             </div>
@@ -679,7 +679,7 @@ function TasksManagerContent() {
                   </div>
 
                   <p className="text-xs text-zinc-400 mt-1">
-                    {displayedTasks.length} task briefs terdaftar • Terbuka untuk seluruh tim
+                    {displayedTasks.length} task briefs • Shared with entire team
                   </p>
                 </div>
 
@@ -692,7 +692,7 @@ function TasksManagerContent() {
                   {isCreating ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Membuat Brief...</span>
+                      <span>Creating Brief...</span>
                     </>
                   ) : (
                     <>
@@ -715,7 +715,7 @@ function TasksManagerContent() {
                 <p className="text-zinc-400">
                   Feel free to contact us if you have any questions.
                 </p>
-                <p className="font-semibold text-amber-500/90 pt-1 font-mono text-[11px]">#BetterWithSika</p>
+                <p className="font-semibold text-amber-500/90 pt-1  text-[11px]">#BetterWithSika</p>
               </div>
             </div>
 
@@ -756,7 +756,7 @@ function TasksManagerContent() {
                   </a>
 
                   <p className="text-[10px] text-zinc-500 px-1 pt-1">
-                    Gunakan link ini untuk mengakses Google Drive aset project {activeClientName}.
+                    Use this link to access Google Drive project assets for {activeClientName}.
                   </p>
                 </div>
               </div>
@@ -772,14 +772,14 @@ function TasksManagerContent() {
                     href="/calendar"
                     className="text-[10px] text-zinc-500 hover:text-white transition"
                   >
-                    + Kalender
+                    + Calendar
                   </Link>
                 </div>
 
                 <div className="space-y-1.5 flex-1 max-h-36 overflow-y-auto no-scrollbar">
                   {clientMeetingNotes.length === 0 ? (
                     <div className="p-3 rounded-xl bg-[#1a1a1e] border border-zinc-800/80 text-[11px] text-zinc-500 italic">
-                      Belum ada notulen MoM tercatat untuk {activeClientName}.
+                      No MoM notes recorded yet for {activeClientName}.
                     </div>
                   ) : (
                     clientMeetingNotes.map((m) => (
@@ -792,7 +792,7 @@ function TasksManagerContent() {
                           <span className="font-medium text-white block truncate text-[11px] group-hover:text-amber-400">
                             👥 {m.title}
                           </span>
-                          <span className="text-[9px] text-zinc-500 font-mono block">
+                          <span className="text-[9px] text-zinc-500  block">
                             {m.date} {m.time ? `• ${m.time} WIB` : ""}
                           </span>
                         </div>
@@ -816,7 +816,7 @@ function TasksManagerContent() {
                   <div className="p-2.5 rounded-xl bg-[#1a1a1e] border border-zinc-800 space-y-1">
                     <span className="text-[11px] font-semibold text-white block">📌 Brand Guidelines</span>
                     <p className="text-[10px] text-zinc-400">
-                      Standard visual, typography, tone of voice, dan format brief untuk {activeClientName}.
+                      Visual standards, typography, tone of voice, and brief guidelines for {activeClientName}.
                     </p>
                   </div>
                 </div>
@@ -831,7 +831,7 @@ function TasksManagerContent() {
                   <Layers size={16} className="text-amber-500" />
                   <span>PROGRESS BOARD</span>
                 </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 ">
                   {displayedTasks.length} Cards
                 </span>
               </div>
@@ -879,12 +879,12 @@ function TasksManagerContent() {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                  {selectedView === "my_tasks" ? "Tugas Saya" : "Semua Brief Tim"}
+                  {selectedView === "my_tasks" ? "My Tasks" : "All Team Briefs"}
                 </h1>
                 <p className="text-xs text-zinc-400 mt-1">
                   {selectedView === "my_tasks" 
-                    ? "Menampilkan brief yang men-tag Anda atau dibuat oleh Anda." 
-                    : "Menampilkan semua brief operasional kantor seluruh tim."}
+                    ? "Showing briefs tagging you or created by you." 
+                    : "Showing all operational briefs across the team."}
                 </p>
               </div>
 
@@ -912,7 +912,7 @@ function TasksManagerContent() {
             {/* Quick Search */}
             <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
               <div className="text-xs text-zinc-400">
-                Total brief: <span className="font-semibold text-white font-mono">{displayedTasks.length}</span>
+                Total briefs: <span className="font-semibold text-white">{displayedTasks.length}</span>
               </div>
 
               <div className="relative">
@@ -921,7 +921,7 @@ function TasksManagerContent() {
                   type="text"
                   value={taskSearchQuery}
                   onChange={(e) => setTaskSearchQuery(e.target.value)}
-                  placeholder="Cari brief atau assignee..."
+                  placeholder="Search briefs or assignees..."
                   className="w-48 sm:w-64 bg-[#141416] border border-zinc-800 rounded-xl pl-8 pr-2.5 py-1 text-xs text-white focus:outline-none focus:border-zinc-500"
                 />
               </div>
@@ -960,7 +960,7 @@ function TasksManagerContent() {
                       {col.label}
                     </h4>
                   </div>
-                  <span className="text-[10px] bg-[#1a1a1e] text-zinc-400 px-1.5 py-0.5 rounded font-mono font-medium border border-[#27272a]">
+                  <span className="text-[10px] bg-[#1a1a1e] text-zinc-400 px-1.5 py-0.5 rounded  font-medium border border-[#27272a]">
                     {colTasks.length}
                   </span>
                 </div>
@@ -971,7 +971,7 @@ function TasksManagerContent() {
                     <div className={`py-10 text-center text-[11px] text-zinc-600 italic border border-dashed rounded-xl transition ${
                       isOver ? "border-zinc-500/60 bg-zinc-800/30 text-zinc-300" : "border-zinc-800/40"
                     }`}>
-                      {isOver ? "Lepaskan di sini" : "Kosong"}
+                      {isOver ? "Drop here" : "Empty"}
                     </div>
                   ) : (
                     colTasks.map((task) => {
@@ -1014,7 +1014,7 @@ function TasksManagerContent() {
                                 e.stopPropagation();
                                 handleDeleteTask(task.id);
                               }}
-                              title="Hapus Task"
+                              title="Delete Task"
                               className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-zinc-500 hover:text-rose-400 transition cursor-pointer"
                             >
                               <Trash2 size={11} />
@@ -1044,7 +1044,7 @@ function TasksManagerContent() {
                             )}
 
                             {task.dueDate && (
-                              <span className="text-[9px] text-zinc-400 font-mono">
+                              <span className="text-[9px] text-zinc-400 ">
                                 {task.dueDate}
                               </span>
                             )}
@@ -1080,7 +1080,7 @@ function TasksManagerContent() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Bookmark size={15} className="text-amber-500" />
-                <span>Tambah Client Folder Baru</span>
+                <span>Add New Client Folder</span>
               </div>
               <button
                 type="button"
@@ -1094,12 +1094,12 @@ function TasksManagerContent() {
             <form onSubmit={handleCreateClient} className="space-y-3.5">
               <div>
                 <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
-                  Nama Client (Folder)
+                  Client Name (Folder)
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: AKASA LAND, APERIO"
+                  placeholder="e.g. AKASA LAND, APERIO"
                   value={newClientName}
                   onChange={(e) => setNewClientName(e.target.value)}
                   className="w-full bg-[#131316] border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
@@ -1108,7 +1108,7 @@ function TasksManagerContent() {
 
               <div>
                 <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">
-                  Warna Tema Folder
+                  Folder Theme Color
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {COLOR_OPTIONS_LIST.map((c) => (
@@ -1134,7 +1134,7 @@ function TasksManagerContent() {
                   onClick={() => setIsAddClientModalOpen(false)}
                   className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="submit"
@@ -1142,7 +1142,7 @@ function TasksManagerContent() {
                   className="px-4 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-semibold transition flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {isSavingClient ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                  <span>Buat Folder</span>
+                  <span>Create Folder</span>
                 </button>
               </div>
             </form>
@@ -1159,7 +1159,7 @@ function TasksManagerContent() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <LinkIcon size={15} className="text-sky-400" />
-                <span>Link Google Drive {activeClientName}</span>
+                <span>Google Drive Link - {activeClientName}</span>
               </div>
               <button
                 type="button"
@@ -1173,7 +1173,7 @@ function TasksManagerContent() {
             <form onSubmit={handleSaveDriveLink} className="space-y-3.5">
               <div>
                 <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
-                  URL Google Drive Folder
+                  Google Drive Folder URL
                 </label>
                 <input
                   type="url"
@@ -1191,13 +1191,13 @@ function TasksManagerContent() {
                   onClick={() => setIsEditDriveLinkOpen(false)}
                   className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-semibold transition"
                 >
-                  Simpan Link
+                  Save Link
                 </button>
               </div>
             </form>

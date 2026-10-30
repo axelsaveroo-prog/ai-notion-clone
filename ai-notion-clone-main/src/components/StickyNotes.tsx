@@ -144,7 +144,7 @@ export function StickyNotes() {
               <button
                 onClick={() => deleteNote(note.id)}
                 className="text-zinc-500 hover:text-white p-0.5 rounded transition cursor-pointer"
-                title="Hapus Note"
+                title="Delete Note"
               >
                 <X size={13} />
               </button>
@@ -168,7 +168,7 @@ export function StickyNotes() {
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="w-9 h-9 rounded-full bg-[#18181b] hover:bg-[#27272a] text-zinc-300 hover:text-white border border-[#27272a] flex items-center justify-center shadow-lg transition-all active:scale-95 cursor-pointer"
-            title={isOpen ? "Sembunyikan Notes" : "Tampilkan Notes"}
+            title={isOpen ? "Hide Notes" : "Show Notes"}
           >
             <StickyNote size={15} className={isOpen ? "opacity-100" : "opacity-40"} />
           </button>
@@ -178,7 +178,7 @@ export function StickyNotes() {
         <button
           onClick={addNote}
           className="h-9 px-3 rounded-full bg-white hover:bg-zinc-200 text-black flex items-center gap-1.5 shadow-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
-          title="Tambah Sticky Note"
+          title="Add Sticky Note"
         >
           <Plus size={14} strokeWidth={2.5} />
           <span>Note</span>

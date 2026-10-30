@@ -355,7 +355,7 @@ const ChatInputBar = memo(function ChatInputBar({
               <FileText size={16} className="text-[#C65921] shrink-0" />
             )}
             <span className="text-zinc-200 truncate text-[11px] font-medium">{pendingFile.name}</span>
-            <span className="text-[9px] text-zinc-500 font-mono shrink-0">({pendingFile.size})</span>
+            <span className="text-[9px] text-zinc-500 font-medium shrink-0">({pendingFile.size})</span>
           </div>
           <button
             type="button"
@@ -2051,7 +2051,7 @@ export function TeamChatSidebar() {
                         <div className="flex items-center justify-between gap-1 mb-0.5">
                           <h5 className="text-xs font-semibold text-white truncate">{item.name}</h5>
                           {item.lastMsg?.time && (
-                            <span className="text-[10px] text-zinc-500 shrink-0 font-mono">
+                            <span className="text-[10px] text-zinc-500 shrink-0 font-medium">
                               {item.lastMsg.time}
                             </span>
                           )}
@@ -2372,7 +2372,7 @@ export function TeamChatSidebar() {
                             {getChannelDisplayName(activeChannel)}
                           </h4>
                           {activeChannel.type === "group" && (
-                            <span className="text-[10px] text-zinc-500 font-mono shrink-0">
+                            <span className="text-[10px] text-zinc-500 font-medium shrink-0">
                               ({activeChannel.members?.length || 1} members)
                             </span>
                           )}
@@ -2531,7 +2531,7 @@ export function TeamChatSidebar() {
                                   <FileText size={18} className="text-zinc-400" />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-[11px] font-semibold text-white truncate">{msg.attachment.name}</p>
-                                    <span className="text-[9px] opacity-70 font-mono">{msg.attachment.size}</span>
+                                    <span className="text-[9px] opacity-70 font-medium">{msg.attachment.size}</span>
                                   </div>
                                   <button
                                     type="button"
@@ -2552,7 +2552,7 @@ export function TeamChatSidebar() {
                               )}
 
                               {/* Footer: Time & Edited */}
-                              <div className="flex items-center justify-end gap-1 mt-0.5 text-[9px] opacity-75 font-mono select-none">
+                              <div className="flex items-center justify-end gap-1 mt-0.5 text-[9px] opacity-75 font-medium select-none">
                                 {msg.isEdited && (
                                   <span className="italic font-sans">edited</span>
                                 )}

@@ -354,7 +354,7 @@ export function AttendanceTracker() {
             <div className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
               <span>{liveAddress}</span>
               {liveLocation && (
-                <span className="text-[10px] text-zinc-500 font-mono">
+                <span className="text-[10px] text-zinc-500 font-medium">
                   (akurasi ±{liveLocation.accuracy}m)
                 </span>
               )}
@@ -368,7 +368,7 @@ export function AttendanceTracker() {
                   <span className="text-zinc-400">Luar Kantor</span>
                 )}
                 {liveDistance !== null && (
-                  <span className="text-[10px] text-zinc-500 font-mono ml-1">
+                  <span className="text-[10px] text-zinc-500 font-medium ml-1">
                     ({liveDistance}m dari kantor)
                   </span>
                 )}
@@ -409,7 +409,7 @@ export function AttendanceTracker() {
               </div>
               <div>
                 <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">JAM MASUK (IN)</div>
-                <div className="text-sm font-bold text-white mt-0.5 font-mono">
+                <div className="text-sm font-bold text-white mt-0.5 font-medium">
                   {isLoadingStatus ? "--:--" : checkInTime || "--:--"}
                 </div>
               </div>
@@ -422,7 +422,7 @@ export function AttendanceTracker() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[10px] text-zinc-400">
                   <span className="flex items-center gap-1"><Camera size={11} /> Bukti Foto Masuk:</span>
-                  {recordedGpsIn && <span className="font-mono text-[9px] text-zinc-500">{recordedGpsIn}</span>}
+                  {recordedGpsIn && <span className="font-medium text-[9px] text-zinc-500">{recordedGpsIn}</span>}
                 </div>
                 <div className="w-full max-w-[150px] aspect-[4/3] rounded-xl overflow-hidden border border-[#27272a] bg-black">
                   <img src={checkInPhoto} alt="Foto Masuk" className="w-full h-full object-cover" />
@@ -446,7 +446,7 @@ export function AttendanceTracker() {
               </div>
               <div>
                 <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">JAM PULANG (OUT)</div>
-                <div className="text-sm font-bold text-white mt-0.5 font-mono">
+                <div className="text-sm font-bold text-white mt-0.5 font-medium">
                   {isLoadingStatus ? "--:--" : checkOutTime || "--:--"}
                 </div>
               </div>
@@ -459,7 +459,7 @@ export function AttendanceTracker() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[10px] text-zinc-400">
                   <span className="flex items-center gap-1"><Camera size={11} /> Bukti Foto Pulang:</span>
-                  {recordedGpsOut && <span className="font-mono text-[9px] text-zinc-500">{recordedGpsOut}</span>}
+                  {recordedGpsOut && <span className="font-medium text-[9px] text-zinc-500">{recordedGpsOut}</span>}
                 </div>
                 <div className="w-full max-w-[150px] aspect-[4/3] rounded-xl overflow-hidden border border-[#27272a] bg-black">
                   <img src={checkOutPhoto} alt="Foto Pulang" className="w-full h-full object-cover" />

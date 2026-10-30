@@ -329,7 +329,7 @@ export async function createChatGroupAction(data: {
 }) {
   try {
     const formattedName = data.name.trim().replace(/^#+/, "").trim();
-    if (!formattedName) return { success: false, error: "Nama grup tidak boleh kosong" };
+    if (!formattedName) return { success: false, error: "Group name cannot be empty" };
 
     const creatorId = data.createdById || null;
     const initialAdmins = creatorId ? [creatorId] : [];
@@ -966,7 +966,7 @@ export async function createCalendarEvent(data: {
     console.error("Gagal createCalendarEvent:", error);
     return { 
       success: false, 
-      error: error?.message || "Gagal menyimpan jadwal ke database Supabase." 
+      error: error?.message || "Failed to save schedule to database." 
     };
   }
 }
@@ -1005,10 +1005,10 @@ export async function updateCalendarEvent(
     revalidatePath("/");
     return { success: true, updated };
   } catch (error: any) {
-    console.error("Gagal updateCalendarEvent:", error);
+    console.error("Failed updateCalendarEvent:", error);
     return { 
       success: false, 
-      error: error?.message || "Gagal mengupdate jadwal di database." 
+      error: error?.message || "Failed to update schedule in database." 
     };
   }
 }
@@ -1022,7 +1022,7 @@ export async function respondCalendarEventApprovalAction(
     const ev = await prisma.calendarEvent.findUnique({
       where: { id: eventId },
     });
-    if (!ev) return { success: false, error: "Jadwal tidak ditemukan" };
+    if (!ev) return { success: false, error: "Schedule not found" };
 
     const currentApprovals = ((ev.approvals as Record<string, string>) || {});
     currentApprovals[userName] = status;
@@ -1036,7 +1036,7 @@ export async function respondCalendarEventApprovalAction(
     revalidatePath("/");
     return { success: true, status };
   } catch (error: any) {
-    console.error("Gagal update persetujuan jadwal:", error);
+    console.error("Failed to update schedule approval:", error);
     return { success: false, error: error?.message };
   }
 }
@@ -1048,7 +1048,7 @@ export async function getCalendarEvents() {
     });
     return events;
   } catch (error) {
-    console.error("Gagal mengambil event kalender:", error);
+    console.error("Failed to fetch calendar events:", error);
     return [];
   }
 }
@@ -1063,8 +1063,8 @@ export async function deleteCalendarEvent(id: string) {
     revalidatePath("/");
     return { success: true };
   } catch (error) {
-    console.error("Gagal menghapus event kalender:", error);
-    return { success: false, error: "Gagal menghapus jadwal." };
+    console.error("Failed to delete calendar event:", error);
+    return { success: false, error: "Failed to delete schedule." };
   }
 }
 

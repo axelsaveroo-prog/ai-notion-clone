@@ -164,7 +164,7 @@ export function TeamCalendar() {
   };
 
   const handleDeleteClientModal = async (id: string, name: string) => {
-    if (!confirm(`Hapus client "${name}" dari database?`)) return;
+    if (!confirm(`Delete client "${name}" from database?`)) return;
     setDeletingClientIdModal(id);
     try {
       const res = await deleteClientAction(id);
@@ -284,7 +284,7 @@ export function TeamCalendar() {
       });
 
       if (res && res.success) {
-        toast.success("Jadwal baru berhasil disimpan & langsung dibuka di Google Calendar!");
+        toast.success("New schedule entry saved & opened in Google Calendar!");
         
         // Otomatis buka Google Calendar di tab baru saat event dibuat tanpa perlu klik tombol manual
         const autoGCalUrl = getGoogleCalendarUrl({
@@ -305,44 +305,63 @@ export function TeamCalendar() {
         await loadData();
         window.dispatchEvent(new Event("sika_schedule_updated"));
       } else {
-        toast.error("Gagal menyimpan jadwal: " + (res?.error || "Error server"));
+        toast.error("Failed to save schedule: " + (res?.error || "Server error"));
       }
     } catch (err: any) {
       console.error("Error saving event:", err);
-      toast.error("Gagal menyimpan jadwal");
+      toast.error("Failed to save schedule");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Helper cek apakah user login di-tag atau pembuat jadwal
+  // Bulletproof helper to check if logged-in user is tagged or creator
   const isUserTaggedOrCreator = (ev: EventItem) => {
-    if (!user) return false;
+    if (!user) return true;
     const userIdentifiers = [
+      user.id?.toLowerCase().trim(),
       user.fullName?.toLowerCase().trim(),
       user.firstName?.toLowerCase().trim(),
+      user.lastName?.toLowerCase().trim(),
       user.username?.toLowerCase().trim(),
       user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+      "you",
+      "team",
+      "all",
+      "everyone",
+      "member",
     ].filter(Boolean) as string[];
 
     if (ev.creatorName) {
-      const creator = ev.creatorName.toLowerCase().trim();
-      if (userIdentifiers.some((id) => id === creator || creator.includes(id))) return true;
+      const creator = ev.creatorName.toLowerCase().replace(/^@+/, "").trim();
+      if (userIdentifiers.some((id) => id === creator || creator.includes(id) || id.includes(creator))) {
+        return true;
+      }
     }
 
-    if (ev.assignees && Array.isArray(ev.assignees) && ev.assignees.length > 0) {
-      return ev.assignees.some((a) => {
-        const lower = a.toLowerCase().trim();
-        return userIdentifiers.some((id) => id === lower || lower.includes(id));
-      });
+    const rawAssignees: string[] = [];
+    if (Array.isArray(ev.assignees)) {
+      rawAssignees.push(...ev.assignees);
+    } else if (typeof ev.assignees === "string") {
+      rawAssignees.push(...(ev.assignees as string).split(","));
     }
 
-    if (ev.assignee && typeof ev.assignee === "string") {
-      const parts = ev.assignee.split(",").map((p) => p.trim().toLowerCase());
-      return parts.some((p) => userIdentifiers.some((id) => id === p || p.includes(id)));
+    if (ev.assignee) {
+      if (typeof ev.assignee === "string") {
+        rawAssignees.push(...ev.assignee.split(","));
+      } else if (Array.isArray(ev.assignee)) {
+        rawAssignees.push(...ev.assignee);
+      }
     }
 
-    return false;
+    if (rawAssignees.length === 0) {
+      return true;
+    }
+
+    return rawAssignees.some((a) => {
+      const cleanA = a.toLowerCase().replace(/^@+/, "").trim();
+      return userIdentifiers.some((id) => cleanA === id || cleanA.includes(id) || id.includes(cleanA));
+    });
   };
 
   const handleApprovalResponse = async (ev: EventItem, status: "accepted" | "rejected") => {
@@ -360,9 +379,9 @@ export function TeamCalendar() {
       const res = await respondCalendarEventApprovalAction(ev.id, currentUserName, status);
       if (res && res.success) {
         if (status === "accepted") {
-          toast.success(`Jadwal "${ev.title}" berhasil Anda terima!`);
+          toast.success(`Schedule "${ev.title}" accepted!`);
         } else {
-          toast.info(`Jadwal "${ev.title}" ditolak dan disembunyikan dari list Anda.`);
+          toast.info(`Schedule "${ev.title}" declined.`);
         }
         window.dispatchEvent(new Event("sika_schedule_updated"));
       }
@@ -436,16 +455,16 @@ export function TeamCalendar() {
             Weekly Schedule ({weeklyUpcoming.length})
           </h4>
           <Link href="/calendar" className="text-[11px] text-zinc-400 hover:text-white transition">
-            Lihat semua kalender →
+            View all calendars →
           </Link>
         </div>
 
         {isLoading ? (
-          <div className="py-6 text-center text-xs text-zinc-500">Memuat jadwal...</div>
+          <div className="py-6 text-center text-xs text-zinc-500">Loading schedule...</div>
         ) : weeklyUpcoming.length === 0 ? (
           <div className="bg-[#161618]/60 border border-dashed border-[#222226] p-5 rounded-xl text-center text-xs text-zinc-400 flex flex-col items-center gap-2">
             <CalendarIcon className="w-6 h-6 text-zinc-600" />
-            <span>Tidak ada jadwal untuk 7 hari ke depan. Klik "+ Add Event" untuk membuat jadwal baru.</span>
+            <span>No upcoming schedules for the next 7 days. Click "+ Add Event" to create one.</span>
           </div>
         ) : (
           weeklyUpcoming.map((ev) => {
@@ -464,11 +483,11 @@ export function TeamCalendar() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-white truncate">{ev.title}</span>
                     {isOnline ? (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800/90 text-zinc-300 border border-zinc-700/60 flex items-center gap-1 shrink-0 font-medium">
                         <Video size={10} /> Online
                       </span>
                     ) : (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800/90 text-zinc-300 border border-zinc-700/60 flex items-center gap-1 shrink-0 font-medium">
                         <MapPin size={10} /> Offline
                       </span>
                     )}
@@ -513,19 +532,19 @@ export function TeamCalendar() {
                             type="button"
                             onClick={() => handleApprovalResponse(ev, "accepted")}
                             className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] flex items-center gap-1 transition shadow cursor-pointer active:scale-95"
-                            title="Terima jadwal ini"
+                            title="Accept schedule"
                           >
                             <Check size={10} />
-                            <span>Terima</span>
+                            <span>Accept</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleApprovalResponse(ev, "rejected")}
                             className="px-2 py-1 rounded bg-zinc-800 hover:bg-rose-950 hover:text-rose-300 text-zinc-400 text-[10px] flex items-center gap-1 transition cursor-pointer active:scale-95"
-                            title="Tolak jadwal ini"
+                            title="Decline schedule"
                           >
                             <X size={10} />
-                            <span>Tolak</span>
+                            <span>Decline</span>
                           </button>
                         </div>
                       );
@@ -535,7 +554,7 @@ export function TeamCalendar() {
                       return (
                         <span className="text-[10px] text-emerald-400 font-medium px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/40 flex items-center gap-1">
                           <Check size={10} />
-                          <span>Diterima</span>
+                          <span>Accepted</span>
                         </span>
                       );
                     }
@@ -598,7 +617,7 @@ export function TeamCalendar() {
                       className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
                     >
                       <Pencil size={10} />
-                      <span>{isManagingClientsModal ? "Tutup Kelola" : "Kelola Client"}</span>
+                      <span>{isManagingClientsModal ? "Close" : "Manage Clients"}</span>
                     </button>
                     {!isAddingNewClientModal && !isManagingClientsModal && !editingClientModal && (
                       <button
@@ -610,7 +629,7 @@ export function TeamCalendar() {
                         }}
                         className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
                       >
-                        <Plus size={11} /> + Client Baru
+                        <Plus size={11} /> + New Client
                       </button>
                     )}
                   </div>
@@ -672,14 +691,14 @@ export function TeamCalendar() {
                         className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
                       >
                         {isUpdatingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                        <span>Simpan Perubahan</span>
+                        <span>Save Changes</span>
                       </button>
                     </div>
                   </form>
                 ) : isAddingNewClientModal ? (
                   <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-white">Buat Client Baru</span>
+                      <span className="text-[11px] font-semibold text-white">Create New Client</span>
                       <button
                         type="button"
                         onClick={() => setIsAddingNewClientModal(false)}
@@ -693,11 +712,11 @@ export function TeamCalendar() {
                       autoFocus
                       value={newClientModalName}
                       onChange={(e) => setNewClientModalName(e.target.value)}
-                      placeholder="Nama client (misal: BABA)..."
+                      placeholder="Client name (e.g. BABA)..."
                       className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
                     />
                     <div>
-                      <span className="text-[10px] text-zinc-400 block mb-1">Pilihan Warna (Soft):</span>
+                      <span className="text-[10px] text-zinc-400 block mb-1">Color Palette:</span>
                       <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
                         {COLOR_OPTIONS_LIST.map((opt) => {
                           const isPicked = newClientModalColor === opt.key;
@@ -724,7 +743,7 @@ export function TeamCalendar() {
                         onClick={() => setIsAddingNewClientModal(false)}
                         className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
                       >
-                        Batal
+                        Cancel
                       </button>
                       <button
                         type="button"
@@ -746,12 +765,12 @@ export function TeamCalendar() {
                               setFormClient(res.client.name);
                               setNewClientModalName("");
                               setIsAddingNewClientModal(false);
-                              toast.success(`Client "${res.client.name}" berhasil ditambahkan!`);
+                              toast.success(`Client "${res.client.name}" added successfully!`);
                             } else {
-                              toast.error(res?.error || "Gagal membuat client");
+                              toast.error(res?.error || "Failed to create client");
                             }
                           } catch (e: any) {
-                            toast.error("Gagal membuat client: " + e?.message);
+                            toast.error("Failed to create client: " + e?.message);
                           } finally {
                             setIsSavingClientModal(false);
                           }
@@ -759,14 +778,14 @@ export function TeamCalendar() {
                         className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
                       >
                         {isSavingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                        <span>Simpan Client</span>
+                        <span>Save Client</span>
                       </button>
                     </div>
                   </div>
                 ) : isManagingClientsModal ? (
                   <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
                     <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
-                      <span className="text-[11px] font-semibold text-white">Daftar & Kelola Client</span>
+                      <span className="text-[11px] font-semibold text-white">Client List & Management</span>
                       <button
                         type="button"
                         onClick={() => setIsManagingClientsModal(false)}
@@ -802,7 +821,7 @@ export function TeamCalendar() {
                                 type="button"
                                 disabled={deletingClientIdModal === c.id}
                                 onClick={() => handleDeleteClientModal(c.id, c.name)}
-                                title="Hapus Client"
+                                title="Delete Client"
                                 className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
                               >
                                 {deletingClientIdModal === c.id ? (
@@ -825,7 +844,7 @@ export function TeamCalendar() {
                         }}
                         className="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center justify-center gap-1 cursor-pointer transition"
                       >
-                        <Plus size={12} /> + Tambah Client Baru
+                        <Plus size={12} /> + Add New Client
                       </button>
                     </div>
                   </div>
@@ -846,7 +865,7 @@ export function TeamCalendar() {
                         {c.name}
                       </option>
                     ))}
-                    <option value="__NEW__">+ Tambah Client Baru...</option>
+                    <option value="__NEW__">+ Add New Client...</option>
                   </select>
                 )}
               </div>
@@ -910,13 +929,13 @@ export function TeamCalendar() {
                     })}
                 </div>
                 <p className="text-[10px] text-zinc-500 mt-1">
-                  * User yang di-assign akan langsung menerima jadwal ini di beranda mereka.
+                  * Assigned team members will receive this schedule in their agenda.
                 </p>
               </div>
 
               {/* Event Format: Online vs Offline */}
               <div>
-                <label className="block text-zinc-400 mb-1.5 font-medium">Format Acara / Meeting</label>
+                <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -953,11 +972,11 @@ export function TeamCalendar() {
                 <div>
                   <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <Video size={12} className="text-indigo-400" /> Link Meeting (GMeet / Zoom) <span className="text-zinc-500">*</span>
+                      <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
                     </span>
                     {attemptedSubmit && !formMeetLink.trim() && (
                       <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                        <AlertCircle size={11} /> Wajib diisi
+                        <AlertCircle size={11} /> Required
                       </span>
                     )}
                   </label>
@@ -967,7 +986,7 @@ export function TeamCalendar() {
                     value={formMeetLink}
                     onChange={(e) => setFormMeetLink(e.target.value)}
                     placeholder="https://meet.google.com/xyz"
-                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs font-mono transition ${
+                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
                       attemptedSubmit && !formMeetLink.trim()
                         ? "border-rose-500/80 focus:border-rose-500"
                         : "border-zinc-800 focus:border-indigo-500"
@@ -978,11 +997,11 @@ export function TeamCalendar() {
                 <div>
                   <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <MapPin size={12} className="text-emerald-400" /> Lokasi / Alamat Meeting <span className="text-zinc-500">*</span>
+                      <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
                     </span>
                     {attemptedSubmit && !formLocation.trim() && (
                       <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                        <AlertCircle size={11} /> Wajib diisi
+                        <AlertCircle size={11} /> Required
                       </span>
                     )}
                   </label>
@@ -991,7 +1010,7 @@ export function TeamCalendar() {
                     required
                     value={formLocation}
                     onChange={(e) => setFormLocation(e.target.value)}
-                    placeholder="e.g. Kantor Sika, Semarang / Alamat Klien"
+                    placeholder="e.g. Sika Office, Semarang / Client Address"
                     className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
                       attemptedSubmit && !formLocation.trim()
                         ? "border-rose-500/80 focus:border-rose-500"
@@ -1012,7 +1031,7 @@ export function TeamCalendar() {
                     required
                     value={formDate}
                     onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 font-mono"
+                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs"
                   />
                 </div>
 
@@ -1025,7 +1044,7 @@ export function TeamCalendar() {
                     required
                     value={formTime}
                     onChange={(e) => setFormTime(e.target.value)}
-                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 font-mono"
+                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
                   />
                 </div>
               </div>

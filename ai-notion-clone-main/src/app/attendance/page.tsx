@@ -241,7 +241,7 @@ export default function AttendancePage() {
         <div className="bg-[#141414] border border-zinc-800 rounded-2xl p-4 space-y-3 shadow-lg">
           <div className="flex items-center justify-between text-xs font-semibold text-zinc-400 border-b border-zinc-800 pb-2">
             <span>Status Presensi Hari Ini</span>
-            <span className="font-mono text-[10px] text-zinc-500">Reset Tiap 00:00</span>
+            <span className="text-[10px] text-zinc-500 font-medium">Reset Tiap 00:00</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -363,7 +363,7 @@ export default function AttendancePage() {
         {/* Tombol Clock In & Clock Out */}
         <div className="space-y-3">
           {gettingGPS && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2 font-mono">
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2 font-medium">
               <MapPin size={14} className="animate-bounce shrink-0" />
               <span>Mengunci posisi GPS lokasi Anda...</span>
             </div>

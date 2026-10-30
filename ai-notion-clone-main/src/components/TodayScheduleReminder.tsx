@@ -95,44 +95,58 @@ export function TodayScheduleReminder() {
     };
   }, [loadEvents]);
 
-  // Filter jadwal ketat: HANYA jika user di-tag atau sebagai pembuat acara
+  // Bulletproof filter: user tagged or creator
   const isEventForCurrentUser = (ev: ScheduleEvent) => {
     if (!user) return false;
 
     const currentUserName = user.fullName || user.username || user.primaryEmailAddress?.emailAddress || "";
     const approvalsMap = (ev.approvals as Record<string, string>) || {};
-    // Jika ditolak oleh user ini, jangan tampilkan di reminder beranda
     if (approvalsMap[currentUserName] === "rejected") return false;
 
     const userIdentifiers = [
+      user.id?.toLowerCase().trim(),
       user.fullName?.toLowerCase().trim(),
       user.firstName?.toLowerCase().trim(),
+      user.lastName?.toLowerCase().trim(),
       user.username?.toLowerCase().trim(),
       user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+      "you",
+      "team",
+      "all",
+      "everyone",
+      "member",
     ].filter(Boolean) as string[];
 
-    // 1. Cek jika user adalah pembuat jadwal
     if (ev.creatorName) {
-      const creator = ev.creatorName.toLowerCase().trim();
-      if (userIdentifiers.some((id) => id === creator || creator.includes(id))) {
+      const creator = ev.creatorName.toLowerCase().replace(/^@+/, "").trim();
+      if (userIdentifiers.some((id) => id === creator || creator.includes(id) || id.includes(creator))) {
         return true;
       }
     }
 
-    // 2. Cek jika user di-tag di assignees
-    if (ev.assignees && Array.isArray(ev.assignees) && ev.assignees.length > 0) {
-      return ev.assignees.some((assignee) => {
-        const a = assignee.toLowerCase().trim();
-        return userIdentifiers.some((id) => id === a || a.includes(id));
-      });
+    const rawAssignees: string[] = [];
+    if (Array.isArray(ev.assignees)) {
+      rawAssignees.push(...ev.assignees);
+    } else if (typeof ev.assignees === "string") {
+      rawAssignees.push(...(ev.assignees as string).split(","));
     }
 
-    if (ev.assignee && typeof ev.assignee === "string") {
-      const parts = ev.assignee.split(",").map((p) => p.trim().toLowerCase());
-      return parts.some((p) => userIdentifiers.some((id) => id === p || p.includes(id)));
+    if (ev.assignee) {
+      if (typeof ev.assignee === "string") {
+        rawAssignees.push(...ev.assignee.split(","));
+      } else if (Array.isArray(ev.assignee)) {
+        rawAssignees.push(...ev.assignee);
+      }
     }
 
-    return false;
+    if (rawAssignees.length === 0) {
+      return true;
+    }
+
+    return rawAssignees.some((assignee) => {
+      const cleanA = assignee.toLowerCase().replace(/^@+/, "").trim();
+      return userIdentifiers.some((id) => cleanA === id || cleanA.includes(id) || id.includes(cleanA));
+    });
   };
 
   // Response Persetujuan Jadwal oleh Assignee
@@ -141,7 +155,7 @@ export function TodayScheduleReminder() {
     const res = await respondCalendarEventApprovalAction(ev.id, currentUserName, status);
     if (res && res.success) {
       if (status === "accepted") {
-        toast.success(`Jadwal "${ev.title}" berhasil Anda setujui!`);
+        toast.success(`Schedule "${ev.title}" accepted!`);
         // Otomatis buka Google Calendar untuk user yang menyetujui
         const gCalUrl = getGoogleCalendarUrl({
           title: ev.title,
@@ -155,12 +169,12 @@ export function TodayScheduleReminder() {
         });
         window.open(gCalUrl, "_blank");
       } else {
-        toast.info(`Anda menolak jadwal "${ev.title}".`);
+        toast.info(`Schedule "${ev.title}" declined.`);
       }
       await loadEvents();
       window.dispatchEvent(new Event("sika_schedule_updated"));
     } else {
-      toast.error("Gagal memperbarui status persetujuan.");
+      toast.error("Failed to update approval status.");
     }
   };
 
@@ -171,7 +185,7 @@ export function TodayScheduleReminder() {
     try {
       localStorage.setItem(`SIKA_DISMISSED_REMINDERS_${todayStr}`, JSON.stringify(updated));
     } catch {}
-    toast.success(`Jadwal "${title}" ditandai selesai!`);
+    toast.success(`Schedule "${title}" marked as complete!`);
   };
 
   // Filter out event yang bukan untuk user ini atau sudah ditandai Done
@@ -239,15 +253,15 @@ export function TodayScheduleReminder() {
                   {/* Badge Persetujuan Assignee */}
                   {needsApproval ? (
                     <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#24211c] text-[#ded0b6] border border-[#3d3426] flex items-center gap-1">
-                      <HelpCircle size={11} /> Menunggu Persetujuan Anda
+                      <HelpCircle size={11} /> Pending Confirmation
                     </span>
                   ) : userApprovalStatus === "accepted" ? (
                     <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#1d221f] text-[#c4d2c8] border border-[#2b352e] flex items-center gap-1">
-                      <Check size={11} /> Disetujui
+                      <Check size={11} /> Accepted
                     </span>
                   ) : userApprovalStatus === "rejected" ? (
                     <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#241e1e] text-[#d9c4c4] border border-[#3a2c2c] flex items-center gap-1">
-                      <XIcon size={11} /> Ditolak
+                      <XIcon size={11} /> Declined
                     </span>
                   ) : null}
                 </div>
@@ -259,7 +273,7 @@ export function TodayScheduleReminder() {
 
                 {/* Informasi Schedule DI BAWAH JUDUL */}
                 <div className="flex items-center gap-2.5 text-[11px] text-zinc-400 flex-wrap pt-0.5">
-                  <span className="text-xs text-zinc-200 font-mono flex items-center gap-1 bg-zinc-800/80 px-2 py-0.5 rounded border border-zinc-700/60">
+                  <span className="text-xs text-zinc-200 font-normal flex items-center gap-1 bg-zinc-800/80 px-2 py-0.5 rounded border border-zinc-700/60">
                     <Clock size={12} className="text-amber-400" /> {ev.time} WIB
                   </span>
 
@@ -269,7 +283,7 @@ export function TodayScheduleReminder() {
 
                   <span className="flex items-center gap-1 text-zinc-400">
                     <Users size={12} className="text-zinc-500" />
-                    <span>Tag: {assigneesList.join(", ")}</span>
+                    <span>Assigned: {assigneesList.join(", ")}</span>
                   </span>
 
                   {!isOnline && ev.location && (
@@ -281,7 +295,7 @@ export function TodayScheduleReminder() {
 
                   {ev.creatorName && (
                     <span className="text-[10px] text-zinc-500">
-                      (Dibuat oleh: {ev.creatorName})
+                      (Created by: {ev.creatorName})
                     </span>
                   )}
                 </div>
@@ -298,7 +312,7 @@ export function TodayScheduleReminder() {
                 className="h-8 px-3 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
               >
                 <FileText size={13} className="text-zinc-300" />
-                <span>Notulen (MoM)</span>
+                <span>MoM Notes</span>
               </Link>
 
               {/* Tombol Join GMeet - HANYA TAMPIL JIKA ONLINE */}
@@ -319,7 +333,7 @@ export function TodayScheduleReminder() {
               <button
                 type="button"
                 onClick={() => handleMarkDone(ev.id, ev.title)}
-                title="Tandai Selesai (Hilangkan reminder ini)"
+                title="Mark as complete (Dismiss this reminder)"
                 className="h-8 px-3 rounded-xl bg-zinc-900/90 hover:bg-emerald-950/60 hover:text-emerald-300 hover:border-emerald-700/60 text-zinc-400 border border-zinc-800 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
               >
                 <CheckCircle2 size={13} className="text-emerald-500" />

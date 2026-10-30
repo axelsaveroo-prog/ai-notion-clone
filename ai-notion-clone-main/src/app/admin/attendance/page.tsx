@@ -212,18 +212,18 @@ export default function AdminAttendancePage() {
 
                   {/* Waktu & Lokasi GPS Terkunci */}
                   <div className="grid grid-cols-2 gap-2 text-[11px] bg-[#181818] p-2.5 rounded-xl border border-zinc-800/80">
-                    <div className="flex items-center gap-1.5 text-zinc-300 font-mono">
+                    <div className="flex items-center gap-1.5 text-zinc-300 font-medium">
                       <Clock size={12} className="text-zinc-500" />
                       <span>{formattedTime} WIB</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-zinc-300 font-mono justify-end">
+                    <div className="flex items-center gap-1.5 text-zinc-300 font-medium justify-end">
                       <Calendar size={12} className="text-zinc-500" />
                       <span>{formattedDate}</span>
                     </div>
                   </div>
 
                   {rec.location && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 px-1 font-mono">
+                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 px-1 font-medium">
                       <MapPin size={11} className="text-zinc-500 shrink-0" />
                       <span className="truncate" title={rec.location}>{rec.location}</span>
                     </div>

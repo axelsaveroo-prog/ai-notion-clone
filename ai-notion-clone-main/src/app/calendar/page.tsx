@@ -173,7 +173,7 @@ export default function CalendarPage() {
   };
 
   const handleDeleteClientModal = async (id: string, name: string) => {
-    if (!confirm(`Hapus client "${name}" dari database?`)) return;
+    if (!confirm(`Delete client "${name}" from database?`)) return;
     setDeletingClientIdModal(id);
     try {
       const res = await deleteClientAction(id);
@@ -342,11 +342,11 @@ export default function CalendarPage() {
         setIsModalOpen(false);
         setSelectedDate(formDate);
       } else {
-        alert("Pesan Error Server: " + (res?.error || "Gagal menyimpan jadwal"));
+        alert("Server Error: " + (res?.error || "Failed to save schedule entry"));
       }
     } catch (error: any) {
-      console.error("Gagal menyimpan event:", error);
-      alert("Error Client: " + (error?.message || "Terjadi kesalahan jaringan/server"));
+      console.error("Failed to save event:", error);
+      alert("Client Error: " + (error?.message || "A network or server error occurred"));
     } finally {
       setIsSubmitting(false);
     }
@@ -361,18 +361,18 @@ export default function CalendarPage() {
           setIsModalOpen(false);
         }
       } else {
-        alert("Gagal menghapus jadwal.");
+        alert("Failed to delete schedule entry.");
       }
     } catch (error) {
-      console.error("Gagal menghapus event:", error);
+      console.error("Failed to delete event:", error);
     }
   };
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthNames = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
   ];
 
   const firstDayIndex = new Date(year, month, 1).getDay();
@@ -394,32 +394,59 @@ export default function CalendarPage() {
   next30Days.setDate(next30Days.getDate() + 30);
   const next30DaysStr = `${next30Days.getFullYear()}-${String(next30Days.getMonth() + 1).padStart(2, '0')}-${String(next30Days.getDate()).padStart(2, '0')}`;
 
-  // Helper periksa apakah user login di-tag atau creator dari event
+  // Helper to check if logged-in user is tagged or creator
   const isUserTaggedOrCreator = (ev: ScheduleEvent) => {
     if (!user) return true;
     const userIdentifiers = [
+      user.id?.toLowerCase().trim(),
       user.fullName?.toLowerCase().trim(),
       user.firstName?.toLowerCase().trim(),
+      user.lastName?.toLowerCase().trim(),
       user.username?.toLowerCase().trim(),
       user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+      "you",
+      "team",
+      "all",
+      "everyone",
+      "member",
     ].filter(Boolean) as string[];
 
+    // 1. Check if user is the creator
     if (ev.creatorName) {
-      const creator = ev.creatorName.toLowerCase().trim();
-      if (userIdentifiers.some((id) => id === creator || creator.includes(id))) return true;
+      const creator = ev.creatorName.toLowerCase().replace(/^@+/, "").trim();
+      if (userIdentifiers.some((id) => id === creator || creator.includes(id) || id.includes(creator))) {
+        return true;
+      }
     }
 
-    if (ev.assignees && Array.isArray(ev.assignees) && ev.assignees.length > 0) {
-      return ev.assignees.some((a) => {
-        const lower = a.toLowerCase().trim();
-        return userIdentifiers.some((id) => id === lower || lower.includes(id));
-      });
+    // 2. Collect all assignees from ev.assignees or ev.assignee
+    const rawAssignees: string[] = [];
+    if (Array.isArray(ev.assignees)) {
+      rawAssignees.push(...ev.assignees);
+    } else if (typeof ev.assignees === "string") {
+      rawAssignees.push(...(ev.assignees as string).split(","));
     }
 
-    return false;
+    if ((ev as any).assignee) {
+      if (typeof (ev as any).assignee === "string") {
+        rawAssignees.push(...(ev as any).assignee.split(","));
+      } else if (Array.isArray((ev as any).assignee)) {
+        rawAssignees.push(...(ev as any).assignee);
+      }
+    }
+
+    // If no specific assignees are set, default to office-wide / team
+    if (rawAssignees.length === 0) {
+      return true;
+    }
+
+    return rawAssignees.some((a) => {
+      const cleanA = a.toLowerCase().replace(/^@+/, "").trim();
+      return userIdentifiers.some((id) => cleanA === id || cleanA.includes(id) || id.includes(cleanA));
+    });
   };
 
-  // Response persetujuan jadwal (Terima / Tolak) di Upcoming List
+  // Response for schedule approval in Upcoming List
   const handleApprovalResponse = async (ev: ScheduleEvent, status: "accepted" | "rejected") => {
     const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "Member";
 
@@ -436,7 +463,7 @@ export default function CalendarPage() {
       const res = await respondCalendarEventApprovalAction(ev.id, currentUserName, status);
       if (res && res.success) {
         if (status === "accepted") {
-          toast.success(`Jadwal "${ev.title}" berhasil Anda terima!`);
+          toast.success(`Schedule "${ev.title}" accepted!`);
           const gCalUrl = getGoogleCalendarUrl({
             title: ev.title,
             date: ev.date,
@@ -449,20 +476,27 @@ export default function CalendarPage() {
           });
           window.open(gCalUrl, "_blank");
         } else {
-          toast.info(`Jadwal "${ev.title}" ditolak dan disembunyikan dari upcoming list Anda.`);
+          toast.info(`Schedule "${ev.title}" declined.`);
         }
         window.dispatchEvent(new Event("sika_schedule_updated"));
       } else {
-        toast.error("Gagal memperbarui status jadwal.");
+        toast.error("Failed to update schedule status.");
       }
     } catch {
-      toast.error("Terjadi kesalahan saat merespons jadwal.");
+      toast.error("An error occurred while updating status.");
     }
   };
 
-  // Upcoming Schedule: HANYA jadwal di mana user di-tag / creator, tidak menampilkan yang sudah di-reject
+  // Upcoming Schedule: Displays all schedules tagging the user for the currently viewed month OR upcoming in 35 days
+  const currentViewMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+
   const upcomingEvents = events
-    .filter((ev) => ev.date >= todayStr && ev.date <= next30DaysStr)
+    .filter((ev) => {
+      if (!ev.date) return false;
+      const isInCurrentViewedMonth = ev.date.startsWith(currentViewMonthPrefix);
+      const isUpcomingIn35Days = ev.date >= todayStr && ev.date <= next30DaysStr;
+      return isInCurrentViewedMonth || isUpcomingIn35Days;
+    })
     .filter((ev) => {
       if (!isUserTaggedOrCreator(ev)) return false;
       const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
@@ -471,7 +505,7 @@ export default function CalendarPage() {
       if (myStatus === "rejected") return false;
       return true;
     })
-    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""));
 
   return (
     <MobileContainer>
@@ -519,10 +553,7 @@ export default function CalendarPage() {
                 <span>Upcoming Schedule</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-zinc-400 font-medium px-1.5 py-0.5 rounded bg-zinc-800/60 border border-zinc-800">
-                  1 Bulan
-                </span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono">
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium">
                   {upcomingEvents.length}
                 </span>
               </div>
@@ -532,7 +563,7 @@ export default function CalendarPage() {
               {upcomingEvents.length === 0 ? (
                 <div className="h-40 flex flex-col items-center justify-center text-zinc-500 text-xs gap-2 text-center">
                   <CalendarIcon size={20} className="opacity-40" />
-                  <span>Tidak ada jadwal untuk 30 hari ke depan.</span>
+                  <span>No upcoming schedules found for this period.</span>
                 </div>
               ) : (
                 upcomingEvents.map((ev) => {
@@ -576,17 +607,17 @@ export default function CalendarPage() {
                             <span>{ev.client}</span>
                           </span>
                           {isOnline ? (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0">
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800/90 text-zinc-300 border border-zinc-700/60 flex items-center gap-1 shrink-0 font-medium">
                               <Video size={10} /> Online
                             </span>
                           ) : (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800/90 text-zinc-300 border border-zinc-700/60 flex items-center gap-1 shrink-0 font-medium">
                               <MapPin size={10} /> Offline
                             </span>
                           )}
                         </div>
 
-                        <span className="text-[11px] text-zinc-400 font-mono">
+                        <span className="text-xs text-zinc-400 font-normal">
                           {ev.time}
                         </span>
                       </div>
@@ -595,7 +626,7 @@ export default function CalendarPage() {
                         {ev.assignees.map((person, idx) => (
                           <span
                             key={idx}
-                            className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/80 font-mono"
+                            className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-800/90 text-zinc-300 border border-zinc-700/60 font-medium"
                           >
                             @{person}
                           </span>
@@ -603,7 +634,7 @@ export default function CalendarPage() {
                       </div>
 
                       <div className="flex items-center justify-between pt-1.5 border-t border-zinc-800/60 flex-wrap gap-1">
-                        <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
+                        <div className="text-xs text-zinc-400 font-normal flex items-center gap-1">
                           <CalendarIcon size={11} className="text-zinc-500" />
                           <span>{ev.date}</span>
                         </div>
@@ -615,7 +646,7 @@ export default function CalendarPage() {
                             className="px-2 py-1 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] font-medium transition flex items-center gap-1 cursor-pointer"
                           >
                             <FileText size={11} className="text-zinc-400" />
-                            <span>Notulen MoM</span>
+                            <span>MoM Notes</span>
                           </Link>
                         </div>
                       </div>
@@ -633,7 +664,7 @@ export default function CalendarPage() {
                         if (!isCreator && myStatus === "pending") {
                           return (
                             <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-amber-600/20 bg-amber-950/20 p-2 rounded-lg">
-                              <span className="text-[10px] text-amber-400 font-medium">Konfirmasi:</span>
+                              <span className="text-[10px] text-zinc-400 font-medium">Respond:</span>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
@@ -642,10 +673,10 @@ export default function CalendarPage() {
                                     handleApprovalResponse(ev, "accepted");
                                   }}
                                   className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] flex items-center gap-1 transition shadow cursor-pointer active:scale-95"
-                                  title="Terima jadwal ini"
+                                  title="Accept schedule"
                                 >
                                   <Check size={10} />
-                                  <span>Terima</span>
+                                  <span>Accept</span>
                                 </button>
                                 <button
                                   type="button"
@@ -654,10 +685,10 @@ export default function CalendarPage() {
                                     handleApprovalResponse(ev, "rejected");
                                   }}
                                   className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-rose-950 hover:text-rose-300 text-zinc-400 text-[10px] flex items-center gap-1 transition cursor-pointer active:scale-95"
-                                  title="Tolak jadwal ini"
+                                  title="Decline schedule"
                                 >
                                   <X size={10} />
-                                  <span>Tolak</span>
+                                  <span>Decline</span>
                                 </button>
                               </div>
                             </div>
@@ -668,7 +699,7 @@ export default function CalendarPage() {
                           return (
                             <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium pt-0.5">
                               <Check size={10} />
-                              <span>✓ Jadwal Diterima</span>
+                              <span>✓ Accepted</span>
                             </div>
                           );
                         }
@@ -801,8 +832,8 @@ export default function CalendarPage() {
 
                     <div className="h-1 flex items-center gap-1">
                       {dayEvents.length > 0 && (
-                        <span className="text-[9px] text-zinc-500 font-mono">
-                          {dayEvents.length} event
+                        <span className="text-[9px] text-zinc-500 font-medium">
+                          {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"}
                         </span>
                       )}
                     </div>
@@ -868,7 +899,7 @@ export default function CalendarPage() {
                         className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
                       >
                         <Pencil size={10} />
-                        <span>{isManagingClientsModal ? "Tutup Kelola" : "Kelola Client"}</span>
+                        <span>{isManagingClientsModal ? "Close" : "Manage Clients"}</span>
                       </button>
                       {!isAddingNewClientModal && !isManagingClientsModal && !editingClientModal && (
                         <button
@@ -880,7 +911,7 @@ export default function CalendarPage() {
                           }}
                           className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
                         >
-                          <Plus size={11} /> + Client Baru
+                          <Plus size={11} /> + New Client
                         </button>
                       )}
                     </div>
@@ -942,14 +973,14 @@ export default function CalendarPage() {
                           className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
                         >
                           {isUpdatingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                          <span>Simpan Perubahan</span>
+                          <span>Save Changes</span>
                         </button>
                       </div>
                     </form>
                   ) : isAddingNewClientModal ? (
                     <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-white">Buat Client Baru</span>
+                        <span className="text-[11px] font-semibold text-white">Create New Client</span>
                         <button
                           type="button"
                           onClick={() => setIsAddingNewClientModal(false)}
@@ -963,11 +994,11 @@ export default function CalendarPage() {
                         autoFocus
                         value={newClientModalName}
                         onChange={(e) => setNewClientModalName(e.target.value)}
-                        placeholder="Nama client (misal: BABA)..."
+                        placeholder="Client name (e.g. BABA)..."
                         className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
                       />
                       <div>
-                        <span className="text-[10px] text-zinc-400 block mb-1">Pilihan Warna (Soft):</span>
+                        <span className="text-[10px] text-zinc-400 block mb-1">Color Palette:</span>
                         <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
                           {COLOR_OPTIONS_LIST.map((opt) => {
                             const isPicked = newClientModalColor === opt.key;
@@ -994,7 +1025,7 @@ export default function CalendarPage() {
                           onClick={() => setIsAddingNewClientModal(false)}
                           className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
                         >
-                          Batal
+                          Cancel
                         </button>
                         <button
                           type="button"
@@ -1017,10 +1048,10 @@ export default function CalendarPage() {
                                 setNewClientModalName("");
                                 setIsAddingNewClientModal(false);
                               } else {
-                                alert(res?.error || "Gagal membuat client");
+                                alert(res?.error || "Failed to create client");
                               }
                             } catch (e: any) {
-                              alert("Gagal membuat client: " + e?.message);
+                              alert("Failed to create client: " + e?.message);
                             } finally {
                               setIsSavingClientModal(false);
                             }
@@ -1028,14 +1059,14 @@ export default function CalendarPage() {
                           className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
                         >
                           {isSavingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                          <span>Simpan Client</span>
+                          <span>Save Client</span>
                         </button>
                       </div>
                     </div>
                   ) : isManagingClientsModal ? (
                     <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
                       <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
-                        <span className="text-[11px] font-semibold text-white">Daftar & Kelola Client</span>
+                        <span className="text-[11px] font-semibold text-white">Client List & Management</span>
                         <button
                           type="button"
                           onClick={() => setIsManagingClientsModal(false)}
@@ -1071,7 +1102,7 @@ export default function CalendarPage() {
                                   type="button"
                                   disabled={deletingClientIdModal === c.id}
                                   onClick={() => handleDeleteClientModal(c.id, c.name)}
-                                  title="Hapus Client"
+                                  title="Delete Client"
                                   className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
                                 >
                                   {deletingClientIdModal === c.id ? (
@@ -1094,7 +1125,7 @@ export default function CalendarPage() {
                           }}
                           className="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center justify-center gap-1 cursor-pointer transition"
                         >
-                          <Plus size={12} /> + Tambah Client Baru
+                          <Plus size={12} /> + Add New Client
                         </button>
                       </div>
                     </div>
@@ -1115,7 +1146,7 @@ export default function CalendarPage() {
                           {c.name}
                         </option>
                       ))}
-                      <option value="__NEW__">+ Tambah Client Baru...</option>
+                      <option value="__NEW__">+ Add New Client...</option>
                     </select>
                   )}
                 </div>
@@ -1179,13 +1210,13 @@ export default function CalendarPage() {
                       })}
                   </div>
                   <p className="text-[10px] text-zinc-500 mt-1">
-                    * User yang di-assign akan langsung menerima jadwal ini di beranda mereka.
+                    * Assigned team members will receive this schedule in their agenda.
                   </p>
                 </div>
 
                 {/* Event Format: Online vs Offline */}
                 <div>
-                  <label className="block text-zinc-400 mb-1.5 font-medium">Format Acara / Meeting</label>
+                  <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -1195,8 +1226,8 @@ export default function CalendarPage() {
                       }}
                       className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                         formEventType === "online"
-                          ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/50 shadow-sm"
-                          : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                          ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                          : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
                       }`}
                     >
                       <Video size={13} />
@@ -1207,8 +1238,8 @@ export default function CalendarPage() {
                       onClick={() => setFormEventType("offline")}
                       className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                         formEventType === "offline"
-                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm"
-                          : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                          ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                          : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
                       }`}
                     >
                       <MapPin size={13} />
@@ -1222,11 +1253,11 @@ export default function CalendarPage() {
                   <div>
                     <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
                       <span className="flex items-center gap-1">
-                        <Video size={12} className="text-indigo-400" /> Link Meeting (GMeet / Zoom) <span className="text-zinc-500">*</span>
+                        <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
                       </span>
                       {attemptedSubmit && !formMeetLink.trim() && (
                         <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                          <AlertCircle size={11} /> Wajib diisi
+                          <AlertCircle size={11} /> Required
                         </span>
                       )}
                     </label>
@@ -1236,7 +1267,7 @@ export default function CalendarPage() {
                       value={formMeetLink}
                       onChange={(e) => setFormMeetLink(e.target.value)}
                       placeholder="https://meet.google.com/xyz"
-                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs font-mono transition ${
+                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
                         attemptedSubmit && !formMeetLink.trim()
                           ? "border-rose-500/80 focus:border-rose-500"
                           : "border-zinc-800 focus:border-indigo-500"
@@ -1247,11 +1278,11 @@ export default function CalendarPage() {
                   <div>
                     <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
                       <span className="flex items-center gap-1">
-                        <MapPin size={12} className="text-emerald-400" /> Lokasi / Alamat Meeting <span className="text-zinc-500">*</span>
+                        <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
                       </span>
                       {attemptedSubmit && !formLocation.trim() && (
                         <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                          <AlertCircle size={11} /> Wajib diisi
+                          <AlertCircle size={11} /> Required
                         </span>
                       )}
                     </label>
@@ -1260,7 +1291,7 @@ export default function CalendarPage() {
                       required
                       value={formLocation}
                       onChange={(e) => setFormLocation(e.target.value)}
-                      placeholder="e.g. Kantor Sika, Semarang / Alamat Klien"
+                      placeholder="e.g. Sika Office, Semarang / Client Address"
                       className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
                         attemptedSubmit && !formLocation.trim()
                           ? "border-rose-500/80 focus:border-rose-500"
@@ -1280,7 +1311,7 @@ export default function CalendarPage() {
                       required
                       value={formDate}
                       onChange={(e) => setFormDate(e.target.value)}
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 font-mono"
+                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs"
                     />
                   </div>
 
@@ -1293,7 +1324,7 @@ export default function CalendarPage() {
                       required
                       value={formTime}
                       onChange={(e) => setFormTime(e.target.value)}
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 font-mono"
+                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
                     />
                   </div>
                 </div>
@@ -1303,7 +1334,7 @@ export default function CalendarPage() {
                     <button
                       type="button"
                       onClick={() => handleDeleteEvent(editingId)}
-                      title="Hapus Jadwal"
+                      title="Delete Schedule"
                       className="p-2.5 rounded-xl border border-rose-900/60 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
                     >
                       <Trash2 size={16} />

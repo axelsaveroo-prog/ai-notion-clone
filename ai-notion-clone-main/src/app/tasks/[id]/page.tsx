@@ -234,13 +234,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   }, []);
 
   const handleDelete = async () => {
-    if (!confirm("Apakah Anda yakin ingin menghapus task ini?")) return;
+    if (!confirm("Are you sure you want to delete this task?")) return;
     try {
       await deleteTaskAction(taskId);
-      toast.success("Task berhasil dihapus");
+      toast.success("Task deleted successfully");
       router.push("/tasks");
     } catch {
-      toast.error("Gagal menghapus task");
+      toast.error("Failed to delete task");
     }
   };
 
@@ -317,7 +317,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   const handleDeleteClient = async (clientId: string, clientName: string) => {
-    if (!confirm(`Hapus client "${clientName}" dari database?`)) return;
+    if (!confirm(`Delete client "${clientName}" from database?`)) return;
     setDeletingClientId(clientId);
     try {
       const res = await deleteClientAction(clientId);
@@ -329,12 +329,12 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           setClient(nextClient);
           saveChanges({ client: nextClient });
         }
-        toast.success(`Client "${clientName}" berhasil dihapus.`);
+        toast.success(`Client "${clientName}" deleted successfully.`);
       } else {
-        toast.error(res?.error || "Gagal menghapus client");
+        toast.error(res?.error || "Failed to delete client");
       }
     } catch {
-      toast.error("Gagal menghapus client");
+      toast.error("Failed to delete client");
     } finally {
       setDeletingClientId(null);
     }
@@ -373,7 +373,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-[#0F0F0F] text-zinc-200 p-8 flex flex-col items-center justify-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
-        <p className="text-sm text-zinc-500">Memuat detail task realtime...</p>
+        <p className="text-sm text-zinc-500">Loading task details...</p>
       </div>
     );
   }
@@ -382,13 +382,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-[#0F0F0F] text-zinc-200 p-8 flex flex-col items-center justify-center gap-4">
         <AlertCircle className="w-10 h-10 text-rose-500" />
-        <h2 className="text-lg font-semibold text-white">Task Tidak Ditemukan</h2>
-        <p className="text-xs text-zinc-400">Task ini mungkin telah dihapus atau ID tidak valid.</p>
+        <h2 className="text-lg font-semibold text-white">Task Not Found</h2>
+        <p className="text-xs text-zinc-400">This task may have been deleted or the ID is invalid.</p>
         <Link
           href="/tasks"
           className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-medium transition cursor-pointer"
         >
-          <ArrowLeft size={14} /> Kembali ke Task Board
+          <ArrowLeft size={14} /> Back to Task Board
         </Link>
       </div>
     );
@@ -402,13 +402,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           href="/tasks"
           className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
         >
-          <ArrowLeft size={16} /> Kembali ke Task Board
+          <ArrowLeft size={16} /> Back to Task Board
         </Link>
 
         <div className="flex items-center gap-3">
           <button
             onClick={handleDelete}
-            title="Hapus Task"
+            title="Delete Task"
             className="text-zinc-500 hover:text-rose-400 p-1.5 rounded-lg border border-transparent hover:border-rose-500/20 hover:bg-rose-500/10 transition cursor-pointer"
           >
             <Trash2 size={15} />
@@ -544,7 +544,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                         onClick={() => setEditingClient(null)}
                         className="px-2.5 py-1 rounded-md text-[11px] text-zinc-400 hover:text-white transition cursor-pointer"
                       >
-                        Batal
+                        Cancel
                       </button>
                       <button
                         type="submit"
@@ -552,7 +552,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                         className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 disabled:opacity-50 transition cursor-pointer flex items-center gap-1 shadow-sm"
                       >
                         {isUpdatingClient ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                        <span>Simpan Perubahan</span>
+                        <span>Save Changes</span>
                       </button>
                     </div>
                   </form>
@@ -607,7 +607,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                                   e.stopPropagation();
                                   handleDeleteClient(item.id, item.name);
                                 }}
-                                title="Hapus Client"
+                                title="Delete Client"
                                 className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
                               >
                                 {deletingClientId === item.id ? (
@@ -632,14 +632,14 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                         className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800/70 hover:bg-zinc-700/80 text-zinc-200 border border-zinc-700/60 transition cursor-pointer"
                       >
                         <Plus size={13} />
-                        <span>+ Tambah Client & Pilih Warna</span>
+                        <span>+ Add Client & Choose Color</span>
                       </button>
                     </div>
                   </>
                 ) : (
                   <form onSubmit={handleCreateClient} className="space-y-2.5 p-1">
                     <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
-                      <span className="text-[11px] font-semibold text-white">Client Baru</span>
+                      <span className="text-[11px] font-semibold text-white">New Client</span>
                       <button
                         type="button"
                         onClick={() => {
@@ -695,7 +695,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="px-2.5 py-1 rounded-md text-[11px] text-zinc-400 hover:text-white transition cursor-pointer"
                       >
-                        Batal
+                        Cancel
                       </button>
                       <button
                         type="submit"
@@ -703,7 +703,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                         className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 disabled:opacity-50 transition cursor-pointer flex items-center gap-1 shadow-sm"
                       >
                         {isSavingNewClient ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                        <span>Simpan</span>
+                        <span>Save</span>
                       </button>
                     </div>
                   </form>
@@ -758,7 +758,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 text-xs font-medium border border-zinc-700/60 transition-colors cursor-pointer max-w-[300px]"
             >
               {selectedAssignees.length === 0 ? (
-                <span className="text-zinc-500">Pilih Assignee...</span>
+                <span className="text-zinc-500">Select Assignee...</span>
               ) : (
                 <div className="flex items-center gap-1 overflow-hidden truncate">
                   {selectedAssignees.slice(0, 2).map((a, i) => (
@@ -770,7 +770,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                     </span>
                   ))}
                   {selectedAssignees.length > 2 && (
-                    <span className="text-[10px] text-zinc-400 font-mono">+{selectedAssignees.length - 2}</span>
+                    <span className="text-[10px] text-zinc-400 ">+{selectedAssignees.length - 2}</span>
                   )}
                 </div>
               )}
@@ -780,8 +780,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             {openDropdown === "assignee" && (
               <div className="absolute left-32 top-8 z-50 w-64 max-h-64 overflow-y-auto bg-[#1F1F1F] border border-zinc-800 rounded-xl p-1.5 shadow-2xl space-y-1">
                 <div className="px-2 py-1 text-[11px] font-semibold text-zinc-400 border-b border-zinc-800/60 flex items-center justify-between">
-                  <span>Pilih Assignee</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">{selectedAssignees.length} dipilih</span>
+                  <span>Select Assignee</span>
+                  <span className="text-[10px] text-zinc-500 ">{selectedAssignees.length} selected</span>
                 </div>
                 {assigneeNames.map((name) => {
                   const isSelected = selectedAssignees.includes(name);
@@ -821,7 +821,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                 setDue(newDue);
                 saveChanges({ dueDate: newDue });
               }}
-              className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 rounded-md px-2 py-0.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 font-mono transition-colors"
+              className="bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 rounded-md px-2 py-0.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500  transition-colors"
             />
           </div>
 
@@ -845,7 +845,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             }}
             onBlur={handleBlurSave}
             rows={14}
-            className="w-full bg-[#181818] border border-zinc-800 rounded-xl p-4 text-zinc-300 font-mono text-sm leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y"
+            className="w-full bg-[#181818] border border-zinc-800 rounded-xl p-4 text-zinc-300  text-sm leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y"
           />
         </div>
       </div>
