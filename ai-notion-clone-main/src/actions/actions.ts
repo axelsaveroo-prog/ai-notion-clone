@@ -1132,7 +1132,7 @@ export async function createTaskAction(data?: {
   }
 }
 
-export async function updateTaskStatusAction(id: string, status: "todo" | "in_progress" | "done") {
+export async function updateTaskStatusAction(id: string, status: string) {
   try {
     const updated = await prisma.task.update({
       where: { id },
