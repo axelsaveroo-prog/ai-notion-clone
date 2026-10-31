@@ -102,6 +102,8 @@ export default function CalendarPage() {
   // State Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isViewOnlyModal, setIsViewOnlyModal] = useState(false);
+  const [viewOnlyCreator, setViewOnlyCreator] = useState("");
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("AKASA LAND");
   const [formDate, setFormDate] = useState(getTodayFormatted());
@@ -235,6 +237,8 @@ export default function CalendarPage() {
 
   const handleOpenAddModal = (dateStr?: string) => {
     setEditingId(null);
+    setIsViewOnlyModal(false);
+    setViewOnlyCreator("");
     setFormDate(dateStr || selectedDate);
     setFormTitle("");
     setFormClient(dbClients[0]?.name || "AKASA LAND");
@@ -249,6 +253,9 @@ export default function CalendarPage() {
   };
 
   const handleOpenEditModal = (ev: ScheduleEvent) => {
+    const canEdit = isScheduleCreator(ev);
+    setIsViewOnlyModal(!canEdit);
+    setViewOnlyCreator(ev.creatorName || "Team");
     setEditingId(ev.id);
     setFormTitle(ev.title);
     setFormClient(ev.client);
@@ -268,6 +275,7 @@ export default function CalendarPage() {
   };
 
   const toggleAssignee = (name: string) => {
+    if (isViewOnlyModal) return;
     // Pembuat acara (creator) selalu ada di daftar dan tidak bisa di-unselect
     if (name.toLowerCase() === creatorName.toLowerCase() || name.toLowerCase() === "you") return;
     setFormAssignees((prev) =>
@@ -278,6 +286,10 @@ export default function CalendarPage() {
   const handleSubmitEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     setAttemptedSubmit(true);
+    if (editingId && isViewOnlyModal) {
+      alert("Only the creator of this schedule can edit it.");
+      return;
+    }
     if (!formTitle.trim() || isSubmitting) return;
 
     // Validasi ketat link meeting & lokasi (tidak boleh kosong)
@@ -353,6 +365,11 @@ export default function CalendarPage() {
   };
 
   const handleDeleteEvent = async (id: string) => {
+    const targetEv = events.find((e) => e.id === id);
+    if (targetEv && !isScheduleCreator(targetEv)) {
+      alert("Only the creator of this schedule can delete it.");
+      return;
+    }
     try {
       const res = await deleteCalendarEvent(id);
       if (res && res.success) {
@@ -394,9 +411,31 @@ export default function CalendarPage() {
   next30Days.setDate(next30Days.getDate() + 30);
   const next30DaysStr = `${next30Days.getFullYear()}-${String(next30Days.getMonth() + 1).padStart(2, '0')}-${String(next30Days.getDate()).padStart(2, '0')}`;
 
-  // Helper to check if logged-in user is tagged or creator
-  const isUserTaggedOrCreator = (ev: ScheduleEvent) => {
-    if (!user) return true;
+  // Helper to check if logged-in user is the creator of the event
+  const isScheduleCreator = (ev: { creatorName?: string | null }) => {
+    if (!user) return false;
+    if (!ev.creatorName) return false;
+    const creator = ev.creatorName.toLowerCase().replace(/^@+/, "").trim();
+    if (!creator) return false;
+
+    const userIdentifiers = [
+      user.id?.toLowerCase().trim(),
+      user.fullName?.toLowerCase().trim(),
+      user.firstName?.toLowerCase().trim(),
+      user.lastName?.toLowerCase().trim(),
+      user.username?.toLowerCase().trim(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+      "you",
+    ].filter(Boolean) as string[];
+
+    return userIdentifiers.some(
+      (id) => id === creator || creator.includes(id) || id.includes(creator)
+    );
+  };
+
+  // Helper to check if logged-in user is explicitly tagged in assignees
+  const isUserTagged = (ev: ScheduleEvent) => {
+    if (!user) return false;
     const userIdentifiers = [
       user.id?.toLowerCase().trim(),
       user.fullName?.toLowerCase().trim(),
@@ -411,15 +450,6 @@ export default function CalendarPage() {
       "member",
     ].filter(Boolean) as string[];
 
-    // 1. Check if user is the creator
-    if (ev.creatorName) {
-      const creator = ev.creatorName.toLowerCase().replace(/^@+/, "").trim();
-      if (userIdentifiers.some((id) => id === creator || creator.includes(id) || id.includes(creator))) {
-        return true;
-      }
-    }
-
-    // 2. Collect all assignees from ev.assignees or ev.assignee
     const rawAssignees: string[] = [];
     if (Array.isArray(ev.assignees)) {
       rawAssignees.push(...ev.assignees);
@@ -435,15 +465,17 @@ export default function CalendarPage() {
       }
     }
 
-    // If no specific assignees are set, default to office-wide / team
-    if (rawAssignees.length === 0) {
-      return true;
-    }
-
     return rawAssignees.some((a) => {
       const cleanA = a.toLowerCase().replace(/^@+/, "").trim();
       return userIdentifiers.some((id) => cleanA === id || cleanA.includes(id) || id.includes(cleanA));
     });
+  };
+
+  // Helper to check if logged-in user is tagged or creator
+  const isUserTaggedOrCreator = (ev: ScheduleEvent) => {
+    if (!user) return true;
+    if (isScheduleCreator(ev)) return true;
+    return isUserTagged(ev);
   };
 
   // Response for schedule approval in Upcoming List
@@ -584,17 +616,22 @@ export default function CalendarPage() {
                       <div className="flex items-start justify-between gap-2">
                         <h4 className="text-xs font-semibold text-white leading-snug line-clamp-2 group-hover:text-zinc-100 flex items-center gap-1.5">
                           <span>{ev.title}</span>
-                          <Pencil size={11} className="opacity-0 group-hover:opacity-60 transition text-zinc-400 shrink-0" />
+                          {isScheduleCreator(ev) && (
+                            <Pencil size={11} className="opacity-0 group-hover:opacity-60 transition text-zinc-400 shrink-0" />
+                          )}
                         </h4>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteEvent(ev.id);
-                          }}
-                          className="text-zinc-500 hover:text-rose-400 transition p-0.5 cursor-pointer"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {isScheduleCreator(ev) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteEvent(ev.id);
+                            }}
+                            title="Delete Schedule"
+                            className="text-zinc-500 hover:text-rose-400 transition p-0.5 cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between flex-wrap gap-1.5">
@@ -653,15 +690,33 @@ export default function CalendarPage() {
 
                       {/* Tombol Terima / Tolak untuk Assignee yang di-tag */}
                       {(() => {
-                        const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
-                        const isCreator = ev.creatorName && (
-                          ev.creatorName.toLowerCase() === currentUserName.toLowerCase() ||
-                          (user?.fullName && ev.creatorName.toLowerCase() === user.fullName.toLowerCase())
-                        );
-                        const approvalsMap = (ev.approvals as Record<string, string>) || {};
-                        const myStatus = approvalsMap[currentUserName] || (isCreator ? "accepted" : "pending");
+                        const isCreator = isScheduleCreator(ev);
+                        // KUNCI: Pembuat jadwal TIDAK mendapat konfirmasi / respond apa-apa
+                        if (isCreator) return null;
 
-                        if (!isCreator && myStatus === "pending") {
+                        // Hanya tampilkan jika user ini ditag dalam assignees
+                        const userTagged = isUserTagged(ev);
+                        if (!userTagged) return null;
+
+                        const approvalsMap = (ev.approvals as Record<string, string>) || {};
+                        let myStatus = "pending";
+                        const userIdentifiers = [
+                          user?.fullName?.toLowerCase().trim(),
+                          user?.firstName?.toLowerCase().trim(),
+                          user?.username?.toLowerCase().trim(),
+                          user?.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+                          "you"
+                        ].filter(Boolean) as string[];
+
+                        for (const [k, v] of Object.entries(approvalsMap)) {
+                          const cleanK = k.toLowerCase().replace(/^@+/, "").trim();
+                          if (userIdentifiers.some((id) => cleanK === id || cleanK.includes(id) || id.includes(cleanK))) {
+                            myStatus = v;
+                            break;
+                          }
+                        }
+
+                        if (myStatus === "pending") {
                           return (
                             <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-amber-600/20 bg-amber-950/20 p-2 rounded-lg">
                               <span className="text-[10px] text-zinc-400 font-medium">Respond:</span>
@@ -695,7 +750,7 @@ export default function CalendarPage() {
                           );
                         }
 
-                        if (!isCreator && myStatus === "accepted") {
+                        if (myStatus === "accepted") {
                           return (
                             <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium pt-0.5">
                               <Check size={10} />
@@ -852,13 +907,24 @@ export default function CalendarPage() {
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div className="flex items-center gap-2">
                   {editingId ? (
-                    <Pencil size={16} className="text-amber-400" />
+                    isViewOnlyModal ? (
+                      <CalendarIcon size={16} className="text-zinc-400" />
+                    ) : (
+                      <Pencil size={16} className="text-amber-400" />
+                    )
                   ) : (
                     <CalendarIcon size={16} className="text-white" />
                   )}
-                  <h3 className="text-sm font-bold text-white">
-                    {editingId ? "Edit Schedule Entry" : "Create Schedule Entry"}
-                  </h3>
+                  <div>
+                    <h3 className="text-sm font-bold text-white leading-tight">
+                      {editingId ? (isViewOnlyModal ? "Schedule Details" : "Edit Schedule Entry") : "Create Schedule Entry"}
+                    </h3>
+                    {isViewOnlyModal && (
+                      <span className="text-[10px] text-zinc-400 block mt-0.5">
+                        View only • Created by {viewOnlyCreator || "Team Member"}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={() => setIsModalOpen(false)}
@@ -876,10 +942,11 @@ export default function CalendarPage() {
                   <input
                     type="text"
                     required
+                    disabled={isViewOnlyModal}
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
                     placeholder="e.g. Client Strategy Meeting"
-                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -889,19 +956,21 @@ export default function CalendarPage() {
                       <Tag size={12} /> Client Tag
                     </label>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsManagingClientsModal(!isManagingClientsModal);
-                          setIsAddingNewClientModal(false);
-                          setEditingClientModal(null);
-                        }}
-                        className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
-                      >
-                        <Pencil size={10} />
-                        <span>{isManagingClientsModal ? "Close" : "Manage Clients"}</span>
-                      </button>
-                      {!isAddingNewClientModal && !isManagingClientsModal && !editingClientModal && (
+                      {!isViewOnlyModal && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsManagingClientsModal(!isManagingClientsModal);
+                            setIsAddingNewClientModal(false);
+                            setEditingClientModal(null);
+                          }}
+                          className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Pencil size={10} />
+                          <span>{isManagingClientsModal ? "Close" : "Manage Clients"}</span>
+                        </button>
+                      )}
+                      {!isViewOnlyModal && !isAddingNewClientModal && !isManagingClientsModal && !editingClientModal && (
                         <button
                           type="button"
                           onClick={() => {
@@ -1132,6 +1201,7 @@ export default function CalendarPage() {
                   ) : (
                     <select
                       value={formClient}
+                      disabled={isViewOnlyModal}
                       onChange={(e) => {
                         if (e.target.value === "__NEW__") {
                           setIsAddingNewClientModal(true);
@@ -1139,7 +1209,7 @@ export default function CalendarPage() {
                           setFormClient(e.target.value);
                         }
                       }}
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 cursor-pointer text-xs"
+                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 cursor-pointer text-xs disabled:opacity-75 disabled:cursor-not-allowed"
                     >
                       {dbClients.map((c) => (
                         <option key={c.id || c.name} value={c.name}>
@@ -1157,7 +1227,7 @@ export default function CalendarPage() {
                     <label className="text-zinc-400 font-medium flex items-center gap-1">
                       <Users size={12} /> Assignees ({formAssignees.length} selected)
                     </label>
-                    {formAssignees.length > 1 && (
+                    {!isViewOnlyModal && formAssignees.length > 1 && (
                       <button
                         type="button"
                         onClick={() => setFormAssignees([creatorName])}
@@ -1196,8 +1266,9 @@ export default function CalendarPage() {
                           <button
                             key={u.id}
                             type="button"
+                            disabled={isViewOnlyModal}
                             onClick={() => toggleAssignee(displayName)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border disabled:cursor-not-allowed ${
                               isSelected
                                 ? "bg-white text-black border-white shadow-sm font-semibold"
                                 : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
@@ -1220,11 +1291,12 @@ export default function CalendarPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
+                      disabled={isViewOnlyModal}
                       onClick={() => {
                         setFormEventType("online");
                         if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
                       }}
-                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
                         formEventType === "online"
                           ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
                           : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
@@ -1235,8 +1307,9 @@ export default function CalendarPage() {
                     </button>
                     <button
                       type="button"
+                      disabled={isViewOnlyModal}
                       onClick={() => setFormEventType("offline")}
-                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
                         formEventType === "offline"
                           ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
                           : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
@@ -1264,10 +1337,11 @@ export default function CalendarPage() {
                     <input
                       type="url"
                       required
+                      disabled={isViewOnlyModal}
                       value={formMeetLink}
                       onChange={(e) => setFormMeetLink(e.target.value)}
                       placeholder="https://meet.google.com/xyz"
-                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
+                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
                         attemptedSubmit && !formMeetLink.trim()
                           ? "border-rose-500/80 focus:border-rose-500"
                           : "border-zinc-800 focus:border-indigo-500"
@@ -1289,10 +1363,11 @@ export default function CalendarPage() {
                     <input
                       type="text"
                       required
+                      disabled={isViewOnlyModal}
                       value={formLocation}
                       onChange={(e) => setFormLocation(e.target.value)}
                       placeholder="e.g. Sika Office, Semarang / Client Address"
-                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
+                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
                         attemptedSubmit && !formLocation.trim()
                           ? "border-rose-500/80 focus:border-rose-500"
                           : "border-zinc-800 focus:border-emerald-500"
@@ -1309,9 +1384,10 @@ export default function CalendarPage() {
                     <input
                       type="date"
                       required
+                      disabled={isViewOnlyModal}
                       value={formDate}
                       onChange={(e) => setFormDate(e.target.value)}
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs"
+                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -1322,41 +1398,54 @@ export default function CalendarPage() {
                     <input
                       type="time"
                       required
+                      disabled={isViewOnlyModal}
                       value={formTime}
                       onChange={(e) => setFormTime(e.target.value)}
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 disabled:opacity-75 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5 pt-3">
-                  {editingId && (
+                {isViewOnlyModal ? (
+                  <div className="flex items-center justify-end gap-2.5 pt-3">
                     <button
                       type="button"
-                      onClick={() => handleDeleteEvent(editingId)}
-                      title="Delete Schedule"
-                      className="p-2.5 rounded-xl border border-rose-900/60 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                      onClick={() => setIsModalOpen(false)}
+                      className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold transition cursor-pointer"
                     >
-                      <Trash2 size={16} />
+                      Close
                     </button>
-                  )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5 pt-3">
+                    {editingId && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEvent(editingId)}
+                        title="Delete Schedule"
+                        className="p-2.5 rounded-xl border border-rose-900/60 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
 
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white transition font-medium cursor-pointer"
-                  >
-                    Cancel
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="flex-1 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white transition font-medium cursor-pointer"
+                    >
+                      Cancel
+                    </button>
 
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
-                  >
-                    {isSubmitting ? "Saving..." : editingId ? "Save Changes" : "Save Schedule"}
-                  </button>
-                </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
+                    >
+                      {isSubmitting ? "Saving..." : editingId ? "Save Changes" : "Save Schedule"}
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           </div>

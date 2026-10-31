@@ -1346,3 +1346,27 @@ export async function deleteClientAction(id: string) {
     return { success: false, error: error?.message };
   }
 }
+
+export async function updateClientDescriptionAction(clientName: string, description: string) {
+  try {
+    const trimmed = clientName.trim();
+    if (!trimmed) return { success: false, error: "Client name is required" };
+
+    const client = await prisma.client.upsert({
+      where: { name: trimmed },
+      update: { description },
+      create: {
+        id: crypto.randomUUID(),
+        name: trimmed,
+        color: "slate",
+        description,
+      },
+    });
+
+    revalidatePath("/tasks");
+    return { success: true, client };
+  } catch (error: any) {
+    console.error("Failed to update client description:", error);
+    return { success: false, error: error?.message || "Failed to update description" };
+  }
+}

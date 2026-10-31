@@ -40,6 +40,7 @@ import {
   getUsersAction,
   getClientsAction,
   createClientAction,
+  updateClientDescriptionAction,
   getCalendarEvents
 } from "@/actions/actions";
 import { getClientThemeByName, COLOR_OPTIONS_LIST } from "@/lib/client-colors";
@@ -62,6 +63,7 @@ interface DbClient {
   id: string;
   name: string;
   color: string;
+  description?: string | null;
 }
 
 interface CalendarEventItem {
@@ -114,6 +116,11 @@ function TasksManagerContent() {
   // Client Drive Link Modal
   const [isEditDriveLinkOpen, setIsEditDriveLinkOpen] = useState(false);
   const [driveLinkInput, setDriveLinkInput] = useState("");
+
+  // Client Portal Description Editable State
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionInput, setDescriptionInput] = useState("");
+  const [isSavingDesc, setIsSavingDesc] = useState(false);
 
   // State Drag and Drop
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -209,35 +216,89 @@ function TasksManagerContent() {
     setIsMobileSidebarOpen(false);
     setTaskSearchQuery("");
     setSelectedTypeFilter("ALL");
+    setIsEditingDescription(false);
 
     // Update URL agar bisa di-share atau refresh
     if (view === "my_tasks") {
       router.replace("/tasks");
-    } else if (view === "all_tasks") {
-      router.replace("/tasks?view=all");
     } else {
       router.replace(`/tasks?client=${encodeURIComponent(view)}`);
     }
   };
 
   // Apakah sedang di dalam Client Page
-  const isClientPage = selectedView !== "my_tasks" && selectedView !== "all_tasks";
+  const isClientPage = selectedView !== "my_tasks";
   const activeClientName = isClientPage ? selectedView : "";
   const activeClientTheme = getClientThemeByName(activeClientName, dbClients);
 
+  // Client Portal Description State & Handlers
+  const getDefaultClientDescription = (name: string) =>
+    `Welcome to your portal, ${name}!\n\nThis is a shared workspace to store meeting minutes, project details, link to files/assets.\n\nAt the bottom of this page, you'll see a "Progress Board", where we track what we're looking on.\n\nFeel free to contact us if you have any questions.\n\n#BetterWithSika`;
+
+  const activeClientObj = useMemo(() => {
+    return dbClients.find((c) => c.name.toLowerCase() === activeClientName.toLowerCase());
+  }, [dbClients, activeClientName]);
+
+  const currentDescription = useMemo(() => {
+    if (!isClientPage) return "";
+    if (activeClientObj?.description && activeClientObj.description.trim()) {
+      return activeClientObj.description;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(`SIKA_CLIENT_DESC_${activeClientName}`);
+        if (cached && cached.trim()) return cached;
+      } catch {}
+    }
+    return getDefaultClientDescription(activeClientName);
+  }, [isClientPage, activeClientObj, activeClientName]);
+
+  const handleStartEditDescription = () => {
+    setDescriptionInput(currentDescription);
+    setIsEditingDescription(true);
+  };
+
+  const handleSaveDescription = async () => {
+    if (!activeClientName || isSavingDesc) return;
+    setIsSavingDesc(true);
+    const trimmed = descriptionInput.trim() || getDefaultClientDescription(activeClientName);
+
+    try {
+      localStorage.setItem(`SIKA_CLIENT_DESC_${activeClientName}`, trimmed);
+    } catch {}
+
+    setDbClients((prev) =>
+      prev.map((c) =>
+        c.name.toLowerCase() === activeClientName.toLowerCase()
+          ? { ...c, description: trimmed }
+          : c
+      )
+    );
+
+    try {
+      await updateClientDescriptionAction(activeClientName, trimmed);
+      toast.success("Portal description updated!");
+    } catch (e: any) {
+      console.error("Failed to save description:", e);
+      toast.error("Failed to save description to server");
+    } finally {
+      setIsSavingDesc(false);
+      setIsEditingDescription(false);
+    }
+  };
+
   // Tasks dihitung sesuai view:
   // 1. my_tasks: hanya tugas user ini
-  // 2. all_tasks: semua tugas tim
-  // 3. Client Page: SEMUA tugas client tersebut (siapapun bisa lihat tanpa filter tag)
+  // 2. Client Page: SEMUA tugas client tersebut (siapapun bisa lihat tanpa filter tag)
   const displayedTasks = useMemo(() => {
     let result = tasks;
 
     if (isClientPage) {
       // PENTING: Untuk client page, SEMUA orang bisa lihat brief client ini (tidak difilter tag)
       result = result.filter((t) => t.client.toLowerCase() === activeClientName.toLowerCase());
-    } else if (selectedView === "my_tasks") {
+    } else {
       result = result.filter(isTaskForCurrentUser);
-    } // else all_tasks: all
+    }
 
     if (taskSearchQuery.trim()) {
       const q = taskSearchQuery.toLowerCase();
@@ -254,7 +315,7 @@ function TasksManagerContent() {
     }
 
     return result;
-  }, [tasks, isClientPage, activeClientName, selectedView, isTaskForCurrentUser, taskSearchQuery, selectedTypeFilter]);
+  }, [tasks, isClientPage, activeClientName, isTaskForCurrentUser, taskSearchQuery, selectedTypeFilter]);
 
   // MoM / Agenda pertemuan untuk client aktif
   const clientMeetingNotes = useMemo(() => {
@@ -412,45 +473,57 @@ function TasksManagerContent() {
   // =========================================================
   // DEFINISI KOLOM KANBAN
   // =========================================================
-  // Untuk Client Page (Notion Progress Board): 5 Kolom ala Notion
+  // Untuk Client Page (Notion Progress Board): 7 Kolom sesuai status brief
   const notionColumns = [
     { 
       key: "todo", 
-      label: "NO STATUS / TO DO", 
-      filter: (s: string) => s === "todo" || s === "no_status" || !s,
+      label: "To Do", 
+      filter: (s: string) => !s || s.toLowerCase() === "todo" || s === "no_status",
       dotColor: "#71717a"
     },
     { 
-      key: "brief_ready", 
-      label: "BRIEF READY", 
-      filter: (s: string) => s.toLowerCase().includes("brief"),
-      dotColor: "#f59e0b"
-    },
-    { 
-      key: "editing", 
-      label: "EDITING / PROGRESS", 
-      filter: (s: string) => s === "in_progress" || s.toLowerCase().includes("edit"),
-      dotColor: "#38bdf8"
-    },
-    { 
-      key: "revisi", 
-      label: "REVISI", 
-      filter: (s: string) => s.toLowerCase().includes("revisi"),
-      dotColor: "#fb7185"
+      key: "in_progress", 
+      label: "In Progress", 
+      filter: (s: string) => s.toLowerCase() === "in_progress" || s.toLowerCase() === "in progress",
+      dotColor: "#d97706"
     },
     { 
       key: "done", 
-      label: "READY TO UPLOAD / DONE", 
-      filter: (s: string) => s === "done" || s.toLowerCase().includes("ready") || s.toLowerCase().includes("scheduled"),
-      dotColor: "#34d399"
+      label: "Done", 
+      filter: (s: string) => s.toLowerCase() === "done",
+      dotColor: "#10b981"
+    },
+    { 
+      key: "Brief Ready", 
+      label: "Brief Ready", 
+      filter: (s: string) => s.toLowerCase() === "brief ready" || s.toLowerCase() === "brief_ready",
+      dotColor: "#f43f5e"
+    },
+    { 
+      key: "Editing", 
+      label: "Editing", 
+      filter: (s: string) => s.toLowerCase() === "editing",
+      dotColor: "#38bdf8"
+    },
+    { 
+      key: "Edited", 
+      label: "Edited", 
+      filter: (s: string) => s.toLowerCase() === "edited",
+      dotColor: "#eab308"
+    },
+    { 
+      key: "Revisi", 
+      label: "Revisi", 
+      filter: (s: string) => s.toLowerCase() === "revisi" || s.toLowerCase() === "revision",
+      dotColor: "#f97316"
     },
   ];
 
   // Untuk General Task Operations: 3 Kolom Standar
   const standardColumns = [
-    { key: "todo", label: "TO DO", filter: (s: string) => s === "todo" || !s || s === "Brief Ready", dotColor: "#71717a" },
-    { key: "in_progress", label: "IN PROGRESS", filter: (s: string) => s === "in_progress" || s.toLowerCase().includes("edit") || s.toLowerCase().includes("revisi"), dotColor: "#38bdf8" },
-    { key: "done", label: "DONE", filter: (s: string) => s === "done" || s.toLowerCase().includes("ready"), dotColor: "#34d399" },
+    { key: "todo", label: "TO DO", filter: (s: string) => !s || s.toLowerCase() === "todo" || s === "no_status" || s.toLowerCase() === "brief ready", dotColor: "#71717a" },
+    { key: "in_progress", label: "IN PROGRESS", filter: (s: string) => s.toLowerCase() === "in_progress" || s.toLowerCase() === "in progress" || s.toLowerCase().includes("edit") || s.toLowerCase().includes("revisi"), dotColor: "#38bdf8" },
+    { key: "done", label: "DONE", filter: (s: string) => s.toLowerCase() === "done" || s.toLowerCase().includes("ready"), dotColor: "#34d399" },
   ];
 
   const currentColumns = isClientPage ? notionColumns : standardColumns;
@@ -474,7 +547,7 @@ function TasksManagerContent() {
         </button>
 
         <span className="text-xs text-zinc-400 font-medium">
-          {isClientPage ? `📁 ${activeClientName}` : (selectedView === "my_tasks" ? "👤 My Tasks" : "📋 All Briefs")}
+          {isClientPage ? `📁 ${activeClientName}` : "👤 My Tasks"}
         </span>
       </div>
 
@@ -517,7 +590,7 @@ function TasksManagerContent() {
           </button>
         </div>
 
-        {/* Quick Views (Tugas Saya & Semua Tugas) */}
+        {/* Quick Views (Tugas Saya) */}
         <div className="space-y-1">
           <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">
             General Views
@@ -538,24 +611,6 @@ function TasksManagerContent() {
             </div>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 ">
               {tasks.filter(isTaskForCurrentUser).length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSelectView("all_tasks")}
-            className={`w-full px-2.5 py-2 rounded-xl text-xs font-medium transition cursor-pointer flex items-center justify-between ${
-              selectedView === "all_tasks"
-                ? "bg-[#252529] text-white border border-zinc-700 shadow-xs"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-800/40"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Users size={14} className={selectedView === "all_tasks" ? "text-amber-400" : "text-zinc-400"} />
-              <span>All Team Briefs</span>
-            </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 ">
-              {tasks.length}
             </span>
           </button>
         </div>
@@ -634,31 +689,6 @@ function TasksManagerContent() {
         {/* ======================================================= */}
         {isClientPage ? (
           <div className="flex flex-col gap-6 animate-in fade-in duration-200">
-            
-            {/* Top Breadcrumbs Bar */}
-            <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-zinc-400 pb-2 border-b border-zinc-800/80">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-zinc-500">Sika Creative HQ</span>
-                <span className="text-zinc-600">/</span>
-                <span className="text-zinc-500">Client Pages</span>
-                <span className="text-zinc-600">/</span>
-                <span className="font-semibold text-white flex items-center gap-1.5">
-                  <Bookmark size={13} className="text-amber-500" />
-                  <span>{activeClientName}</span>
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSelectView("all_tasks")}
-                  className="text-xs text-zinc-400 hover:text-white px-2.5 py-1 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 transition flex items-center gap-1 cursor-pointer"
-                >
-                  <ArrowLeft size={12} />
-                  <span>All Briefs</span>
-                </button>
-              </div>
-            </div>
 
             {/* Notion Page Banner & Header */}
             <div className="flex flex-col gap-4">
@@ -672,10 +702,6 @@ function TasksManagerContent() {
                     <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white uppercase">
                       {activeClientName}
                     </h1>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border flex items-center gap-1 ${activeClientTheme.badge}`}>
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: activeClientTheme.dot }} />
-                      <span>Client Portal</span>
-                    </span>
                   </div>
 
                   <p className="text-xs text-zinc-400 mt-1">
@@ -703,19 +729,57 @@ function TasksManagerContent() {
                 </button>
               </div>
 
-              {/* Description Box (Sama persis seperti Notion pada screenshot user) */}
-              <div className="bg-[#141417] border border-[#222226] p-4 rounded-2xl text-xs leading-relaxed text-zinc-300 space-y-2">
-                <p className="font-semibold text-white">Welcome to your portal, {activeClientName}!</p>
-                <p className="text-zinc-400">
-                  This is a shared workspace to store meeting minutes, project details, link to files/assets.
-                </p>
-                <p className="text-zinc-400">
-                  At the bottom of this page, you&apos;ll see a &quot;Progress Board&quot;, where we track what we&apos;re looking on.
-                </p>
-                <p className="text-zinc-400">
-                  Feel free to contact us if you have any questions.
-                </p>
-                <p className="font-semibold text-amber-500/90 pt-1  text-[11px]">#BetterWithSika</p>
+              {/* Description Box (Editable ala Notion) */}
+              <div className="bg-[#141417] border border-[#222226] p-4 rounded-2xl text-xs leading-relaxed text-zinc-300 relative group">
+                {isEditingDescription ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                      <span className="text-[11px] font-semibold text-zinc-300">Edit Portal Description</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingDescription(false)}
+                          className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 text-[11px] transition cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveDescription}
+                          disabled={isSavingDesc}
+                          className="px-3 py-1 rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-[11px] transition cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {isSavingDesc ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                          <span>Save</span>
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      value={descriptionInput}
+                      onChange={(e) => setDescriptionInput(e.target.value)}
+                      rows={6}
+                      className="w-full bg-[#101012] border border-zinc-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-zinc-500 leading-relaxed resize-y font-normal"
+                      placeholder="Write portal description..."
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="whitespace-pre-line space-y-2 flex-1 text-zinc-300">
+                        {currentDescription}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleStartEditDescription}
+                        className="opacity-70 hover:opacity-100 p-1.5 rounded-lg text-zinc-400 hover:text-white bg-zinc-800/60 hover:bg-zinc-800 transition flex items-center gap-1 text-[11px] shrink-0 cursor-pointer"
+                        title="Edit description"
+                      >
+                        <Pencil size={11} />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -879,12 +943,10 @@ function TasksManagerContent() {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                  {selectedView === "my_tasks" ? "My Tasks" : "All Team Briefs"}
+                  My Tasks
                 </h1>
                 <p className="text-xs text-zinc-400 mt-1">
-                  {selectedView === "my_tasks" 
-                    ? "Showing briefs tagging you or created by you." 
-                    : "Showing all operational briefs across the team."}
+                  Showing briefs tagging you or created by you.
                 </p>
               </div>
 
@@ -897,7 +959,7 @@ function TasksManagerContent() {
                   {isCreating ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Membuat Brief...</span>
+                      <span>Creating Brief...</span>
                     </>
                   ) : (
                     <>
@@ -932,23 +994,26 @@ function TasksManagerContent() {
         {/* ========================================================= */}
         {/* 3. KANBAN PROGRESS BOARD (HORIZONTAL COLUMNS)             */}
         {/* ========================================================= */}
-        <div className={`grid grid-cols-1 ${isClientPage ? "sm:grid-cols-2 lg:grid-cols-5" : "md:grid-cols-3"} gap-3.5 items-start`}>
-          {currentColumns.map((col) => {
-            const colTasks = displayedTasks.filter((t) => col.filter(t.status || ""));
-            const isOver = dragOverCol === col.key;
+        <div className={isClientPage ? "w-full overflow-x-auto pb-4 no-scrollbar" : "w-full"}>
+          <div className={isClientPage ? "flex items-start gap-3.5 min-w-max" : "grid grid-cols-1 md:grid-cols-3 gap-3.5 items-start"}>
+            {currentColumns.map((col) => {
+              const colTasks = displayedTasks.filter((t) => col.filter(t.status || ""));
+              const isOver = dragOverCol === col.key;
 
-            return (
-              <div
-                key={col.key}
-                onDragOver={(e) => handleDragOver(e, col.key)}
-                onDragLeave={(e) => handleDragLeave(e, col.key)}
-                onDrop={(e) => handleDrop(e, col.key)}
-                className={`bg-[#121214] p-3 rounded-2xl border transition-all duration-200 flex flex-col gap-2.5 shadow-sm min-h-[360px] ${
-                  isOver 
-                    ? "border-zinc-500/70 bg-[#161619] ring-1 ring-zinc-500/30 scale-[1.005]" 
-                    : "border-[#222226]"
-                }`}
-              >
+              return (
+                <div
+                  key={col.key}
+                  onDragOver={(e) => handleDragOver(e, col.key)}
+                  onDragLeave={(e) => handleDragLeave(e, col.key)}
+                  onDrop={(e) => handleDrop(e, col.key)}
+                  className={`bg-[#121214] p-3 rounded-2xl border transition-all duration-200 flex flex-col gap-2.5 shadow-sm min-h-[360px] ${
+                    isClientPage ? "w-[275px] shrink-0" : "w-full"
+                  } ${
+                    isOver 
+                      ? "border-zinc-500/70 bg-[#161619] ring-1 ring-zinc-500/30 scale-[1.005]" 
+                      : "border-[#222226]"
+                  }`}
+                >
                 {/* Column Header */}
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-1.5 truncate">
@@ -1067,6 +1132,7 @@ function TasksManagerContent() {
               </div>
             );
           })}
+          </div>
         </div>
 
       </main>

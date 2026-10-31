@@ -131,7 +131,8 @@ const DDL_STATEMENTS = [
   `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "isForwarded" BOOLEAN DEFAULT false`,
   `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToSender" TEXT`,
   `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToText" TEXT`,
-  `ALTER TABLE "ChatChannel" ADD COLUMN IF NOT EXISTS "admins" TEXT[] DEFAULT ARRAY[]::TEXT[]`
+  `ALTER TABLE "ChatChannel" ADD COLUMN IF NOT EXISTS "admins" TEXT[] DEFAULT ARRAY[]::TEXT[]`,
+  `ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "description" TEXT`
 ];
 
 export async function ensureDatabaseTables(force = false) {

@@ -149,6 +149,23 @@ export function TodayScheduleReminder() {
     });
   };
 
+  const isScheduleCreator = (ev: ScheduleEvent) => {
+    if (!user) return false;
+    const userIdentifiers = [
+      user.id?.toLowerCase().trim(),
+      user.fullName?.toLowerCase().trim(),
+      user.firstName?.toLowerCase().trim(),
+      user.lastName?.toLowerCase().trim(),
+      user.username?.toLowerCase().trim(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+      "you",
+    ].filter(Boolean) as string[];
+
+    if (!ev.creatorName) return false;
+    const creator = ev.creatorName.toLowerCase().replace(/^@+/, "").trim();
+    return userIdentifiers.some((id) => id === creator || creator.includes(id) || id.includes(creator));
+  };
+
   // Response Persetujuan Jadwal oleh Assignee
   const handleApprovalResponse = async (ev: ScheduleEvent, status: "accepted" | "rejected") => {
     const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "Member";
@@ -211,11 +228,7 @@ export function TodayScheduleReminder() {
           : "https://meet.google.com/new";
 
         const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
-        const isCreator = ev.creatorName && (
-          ev.creatorName.toLowerCase() === currentUserName.toLowerCase() ||
-          (user?.fullName && ev.creatorName.toLowerCase() === user.fullName.toLowerCase()) ||
-          (user?.primaryEmailAddress?.emailAddress && ev.creatorName.toLowerCase() === user.primaryEmailAddress.emailAddress.toLowerCase())
-        );
+        const isCreator = isScheduleCreator(ev);
 
         // Ambil status persetujuan user saat ini
         const approvalsMap = (ev.approvals as Record<string, string>) || {};

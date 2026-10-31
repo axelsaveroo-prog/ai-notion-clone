@@ -364,6 +364,23 @@ export function TeamCalendar() {
     });
   };
 
+  const isScheduleCreator = (ev: EventItem) => {
+    if (!user) return false;
+    const userIdentifiers = [
+      user.id?.toLowerCase().trim(),
+      user.fullName?.toLowerCase().trim(),
+      user.firstName?.toLowerCase().trim(),
+      user.lastName?.toLowerCase().trim(),
+      user.username?.toLowerCase().trim(),
+      user.primaryEmailAddress?.emailAddress?.toLowerCase().trim(),
+      "you",
+    ].filter(Boolean) as string[];
+
+    if (!ev.creatorName) return false;
+    const creator = ev.creatorName.toLowerCase().replace(/^@+/, "").trim();
+    return userIdentifiers.some((id) => id === creator || creator.includes(id) || id.includes(creator));
+  };
+
   const handleApprovalResponse = async (ev: EventItem, status: "accepted" | "rejected") => {
     const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "Member";
 
@@ -518,12 +535,11 @@ export function TeamCalendar() {
 
                   {(() => {
                     const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
-                    const isCreator = ev.creatorName && (
-                      ev.creatorName.toLowerCase() === currentUserName.toLowerCase() ||
-                      (user?.fullName && ev.creatorName.toLowerCase() === user.fullName.toLowerCase())
-                    );
+                    const isCreator = isScheduleCreator(ev);
+                    if (isCreator) return null; // Creator never gets confirmation/approval prompt
+
                     const approvalsMap = (ev.approvals as Record<string, string>) || {};
-                    const myStatus = approvalsMap[currentUserName] || (isCreator ? "accepted" : "pending");
+                    const myStatus = approvalsMap[currentUserName] || "pending";
 
                     if (!isCreator && myStatus === "pending") {
                       return (

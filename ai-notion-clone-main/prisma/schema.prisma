@@ -104,10 +104,11 @@ model MomNote {
 }
 
 model Client {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  color     String   @default("slate")
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String   @default("slate")
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
 }
 
 model User {
