@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback, memo, type ChangeEvent, type RefObject, type ClipboardEvent } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, memo, Fragment, type ChangeEvent, type RefObject, type ClipboardEvent } from "react";
 import { useUser } from "@clerk/nextjs";
 import {
   getChatMessages,
@@ -169,6 +169,63 @@ const downloadMedia = async (url: string, filename = "file") => {
     window.open(url, "_blank");
   }
 };
+
+// ==========================================
+// 2B. HELPER: Format Tanggal & Sekat Chat (WhatsApp Style)
+// ==========================================
+function getChatDateKey(rawDate?: string | Date): string {
+  if (!rawDate) return "today";
+  const d = new Date(rawDate);
+  if (isNaN(d.getTime())) return "today";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function getChatDateSeparatorLabel(rawDate?: string | Date): string {
+  if (!rawDate) return "Today";
+  const date = new Date(rawDate);
+  if (isNaN(date.getTime())) return "Today";
+
+  const now = new Date();
+  const dDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((dNow.getTime() - dDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays >= 2 && diffDays <= 5) {
+    return date.toLocaleDateString("en-US", { weekday: "long" });
+  }
+
+  // Jika lewat 5 hari, tampilkan tanggal lengkap
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatConversationLastMsgTime(msg?: Message): string {
+  if (!msg) return "";
+  if (!msg.createdAtRaw) return msg.time || "";
+  const d = new Date(msg.createdAtRaw);
+  if (isNaN(d.getTime())) return msg.time || "";
+
+  const now = new Date();
+  const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((dNow.getTime() - dDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) {
+    return msg.time || d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  if (diffDays === 1) {
+    return "Yesterday";
+  }
+  if (diffDays >= 2 && diffDays <= 5) {
+    return d.toLocaleDateString("en-US", { weekday: "short" });
+  }
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "numeric", year: "2-digit" });
+}
 
 // ==========================================
 // 3. HELPER: Auto-linkify URLs dalam Pesan Chat
@@ -2050,9 +2107,9 @@ export function TeamChatSidebar() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1 mb-0.5">
                           <h5 className="text-xs font-semibold text-white truncate">{item.name}</h5>
-                          {item.lastMsg?.time && (
+                          {item.lastMsg && (
                             <span className="text-[10px] text-zinc-500 shrink-0 font-medium">
-                              {item.lastMsg.time}
+                              {formatConversationLastMsgTime(item.lastMsg)}
                             </span>
                           )}
                         </div>
@@ -2426,14 +2483,33 @@ export function TeamChatSidebar() {
                         </span>
                       </div>
                     ) : (
-                      activeMessages.map((msg) => {
+                      activeMessages.map((msg, index) => {
+                        const prevMsg = index > 0 ? activeMessages[index - 1] : null;
+                        const prevKey = prevMsg ? getChatDateKey(prevMsg.createdAtRaw) : null;
+                        const currKey = getChatDateKey(msg.createdAtRaw);
+                        const showDateDivider = currKey !== prevKey;
+                        const dateLabel = showDateDivider ? getChatDateSeparatorLabel(msg.createdAtRaw) : null;
+
+                        const dateDividerElement = showDateDivider ? (
+                          <div className="flex items-center justify-center my-3.5 select-none w-full">
+                            <div className="h-[1px] flex-1 bg-zinc-800/70" />
+                            <span className="text-[10px] font-medium tracking-wide px-3 py-0.5 rounded-full bg-[#161619] text-zinc-400 border border-zinc-800 shadow-xs mx-3">
+                              {dateLabel}
+                            </span>
+                            <div className="h-[1px] flex-1 bg-zinc-800/70" />
+                          </div>
+                        ) : null;
+
                         if (msg.senderId === "system" || msg.sender === "System") {
                           return (
-                            <div key={msg.id} className="flex justify-center my-2 select-none">
-                              <span className="text-[10.5px] px-3.5 py-0.5 rounded-full bg-[#1b1b1f] text-zinc-400 border border-zinc-800/80 shadow-xs max-w-[85%] text-center">
-                                {msg.text}
-                              </span>
-                            </div>
+                            <Fragment key={msg.id}>
+                              {dateDividerElement}
+                              <div className="flex justify-center my-2 select-none">
+                                <span className="text-[10.5px] px-3.5 py-0.5 rounded-full bg-[#1b1b1f] text-zinc-400 border border-zinc-800/80 shadow-xs max-w-[85%] text-center">
+                                  {msg.text}
+                                </span>
+                              </div>
+                            </Fragment>
                           );
                         }
 
@@ -2441,10 +2517,11 @@ export function TeamChatSidebar() {
                         const isMenuOpen = contextMenuMsg?.id === msg.id;
 
                         return (
-                          <div
-                            key={msg.id}
-                            className={`group relative flex flex-col ${msg.isSelf ? "items-end" : "items-start"}`}
-                          >
+                          <Fragment key={msg.id}>
+                            {dateDividerElement}
+                            <div
+                              className={`group relative flex flex-col ${msg.isSelf ? "items-end" : "items-start"}`}
+                            >
                             {/* Sender Name in Group */}
                             {!msg.isSelf && activeChannel.type === "group" && (
                               <div className="flex items-center gap-1.5 mb-0.5 ml-2">
@@ -2633,8 +2710,9 @@ export function TeamChatSidebar() {
                               </div>
                             )}
                           </div>
-                        );
-                      })
+                        </Fragment>
+                      );
+                    })
                     )}
                     <div ref={chatBottomRef} />
                   </div>

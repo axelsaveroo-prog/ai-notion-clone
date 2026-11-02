@@ -27,7 +27,6 @@ import {
   X,
   Sparkles,
   HelpCircle,
-  FileCheck2,
   Layers
 } from "lucide-react";
 import Link from "next/link";
@@ -311,7 +310,7 @@ function TasksManagerContent() {
     }
 
     if (selectedTypeFilter !== "ALL") {
-      result = result.filter((t) => (t.type || "Feeds") === selectedTypeFilter);
+      result = result.filter((t) => (t.type || "Feeds").toLowerCase() === selectedTypeFilter.toLowerCase());
     }
 
     return result;
@@ -783,8 +782,8 @@ function TasksManagerContent() {
               </div>
             </div>
 
-            {/* Notion Quick Sections (LINKS, NOTES, FILES - persis layout Notion) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            {/* Notion Quick Sections (LINKS & NOTES) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               
               {/* 1. LINKS SECTION */}
               <div className="bg-[#141416] border border-[#222226] p-4 rounded-2xl flex flex-col gap-2.5">
@@ -867,25 +866,6 @@ function TasksManagerContent() {
                 </div>
               </div>
 
-              {/* 3. FILES / GUIDELINES SECTION */}
-              <div className="bg-[#141416] border border-[#222226] p-4 rounded-2xl flex flex-col gap-2.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                    <FileCheck2 size={13} className="text-emerald-400" />
-                    <span>GUIDELINES & ASSETS</span>
-                  </h4>
-                </div>
-
-                <div className="space-y-1.5 flex-1 text-xs text-zinc-400">
-                  <div className="p-2.5 rounded-xl bg-[#1a1a1e] border border-zinc-800 space-y-1">
-                    <span className="text-[11px] font-semibold text-white block">📌 Brand Guidelines</span>
-                    <p className="text-[10px] text-zinc-400">
-                      Visual standards, typography, tone of voice, and brief guidelines for {activeClientName}.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
             </div>
 
             {/* Notion Board Header & Filter */}
@@ -900,10 +880,10 @@ function TasksManagerContent() {
                 </span>
               </div>
 
-              {/* Filter Type (Feeds, Story, Reels, Carousel) & Search */}
+              {/* Filter Type (Feeds, Story, Reels, Carousel, Others) & Search */}
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1 bg-[#161619] p-1 rounded-xl border border-zinc-800 text-[11px]">
-                  {["ALL", "Feeds", "Story", "Reels", "Carousel"].map((t) => (
+                  {["ALL", "Feeds", "Story", "Reels", "Carousel", "Others"].map((t) => (
                     <button
                       key={t}
                       type="button"

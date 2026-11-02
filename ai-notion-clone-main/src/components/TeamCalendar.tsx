@@ -3,15 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
-import { 
-  Calendar as CalendarIcon, 
-  Plus, 
-  Users, 
-  ExternalLink, 
-  Video, 
-  MapPin, 
-  Clock, 
-  Tag, 
+import {
+  Calendar as CalendarIcon,
+  Plus,
+  Users,
+  ExternalLink,
+  Video,
+  MapPin,
+  Clock,
+  Tag,
   X,
   ArrowRight,
   Sparkles,
@@ -21,9 +21,9 @@ import {
   Pencil,
   Trash2
 } from "lucide-react";
-import { 
-  getCalendarEvents, 
-  createCalendarEvent, 
+import {
+  getCalendarEvents,
+  createCalendarEvent,
   getUsersAction,
   getClientsAction,
   createClientAction,
@@ -32,9 +32,9 @@ import {
   respondCalendarEventApprovalAction
 } from "@/actions/actions";
 import { getGoogleCalendarUrl } from "@/lib/utils";
-import { 
-  getClientThemeByName, 
-  COLOR_OPTIONS_LIST 
+import {
+  getClientThemeByName,
+  COLOR_OPTIONS_LIST
 } from "@/lib/client-colors";
 import { toast } from "sonner";
 
@@ -82,7 +82,7 @@ export function TeamCalendar() {
       try {
         const cached = localStorage.getItem("SIKA_CALENDAR_EVENTS");
         if (cached) return JSON.parse(cached);
-      } catch {}
+      } catch { }
     }
     return [];
   });
@@ -200,7 +200,7 @@ export function TeamCalendar() {
         setEvents(eventsData);
         try {
           localStorage.setItem("SIKA_CALENDAR_EVENTS", JSON.stringify(eventsData));
-        } catch {}
+        } catch { }
       }
       if (usersData && Array.isArray(usersData)) {
         setDbUsers(usersData);
@@ -285,7 +285,7 @@ export function TeamCalendar() {
 
       if (res && res.success) {
         toast.success("New schedule entry saved & opened in Google Calendar!");
-        
+
         // Otomatis buka Google Calendar di tab baru saat event dibuat tanpa perlu klik tombol manual
         const autoGCalUrl = getGoogleCalendarUrl({
           title: formTitle.trim(),
@@ -402,7 +402,7 @@ export function TeamCalendar() {
         }
         window.dispatchEvent(new Event("sika_schedule_updated"));
       }
-    } catch {}
+    } catch { }
   };
 
   // Filter ketat semingguan: HANYA jadwal di mana user di-tag / creator, jadwal lewat atau ditolak disembunyikan
@@ -485,8 +485,8 @@ export function TeamCalendar() {
           </div>
         ) : (
           weeklyUpcoming.map((ev) => {
-            const assigneesList = ev.assignees && ev.assignees.length > 0 
-              ? ev.assignees 
+            const assigneesList = ev.assignees && ev.assignees.length > 0
+              ? ev.assignees
               : (ev.assignee ? [ev.assignee] : ["Team"]);
             const isOnline = ev.eventType !== "offline";
             const clientTheme = getClientThemeByName(ev.client, dbClients);
@@ -682,9 +682,8 @@ export function TeamCalendar() {
                               type="button"
                               onClick={() => setEditClientModalColor(opt.key)}
                               title={opt.label}
-                              className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${
-                                isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
-                              }`}
+                              className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
+                                }`}
                               style={{ backgroundColor: opt.dot }}
                             >
                               {isPicked && <Check size={12} className="text-black font-bold" />}
@@ -742,9 +741,8 @@ export function TeamCalendar() {
                               type="button"
                               onClick={() => setNewClientModalColor(opt.key)}
                               title={opt.label}
-                              className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${
-                                isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
-                              }`}
+                              className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
+                                }`}
                               style={{ backgroundColor: opt.dot }}
                             >
                               {isPicked && <Check size={12} className="text-black font-bold" />}
@@ -932,11 +930,10 @@ export function TeamCalendar() {
                           key={u.id}
                           type="button"
                           onClick={() => toggleAssignee(displayName)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${
-                            isSelected
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${isSelected
                               ? "bg-white text-black border-white shadow-sm font-semibold"
                               : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
-                          }`}
+                            }`}
                         >
                           <span>{displayName}</span>
                           {isSelected && <Check size={11} className="font-bold" />}
@@ -959,11 +956,10 @@ export function TeamCalendar() {
                       setFormEventType("online");
                       if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
                     }}
-                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                      formEventType === "online"
+                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "online"
                         ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/50 shadow-sm"
                         : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                    }`}
+                      }`}
                   >
                     <Video size={13} />
                     <span>Online Meeting</span>
@@ -971,11 +967,10 @@ export function TeamCalendar() {
                   <button
                     type="button"
                     onClick={() => setFormEventType("offline")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                      formEventType === "offline"
+                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "offline"
                         ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm"
                         : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                    }`}
+                      }`}
                   >
                     <MapPin size={13} />
                     <span>Offline Meeting</span>
@@ -1002,11 +997,10 @@ export function TeamCalendar() {
                     value={formMeetLink}
                     onChange={(e) => setFormMeetLink(e.target.value)}
                     placeholder="https://meet.google.com/xyz"
-                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
-                      attemptedSubmit && !formMeetLink.trim()
+                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formMeetLink.trim()
                         ? "border-rose-500/80 focus:border-rose-500"
                         : "border-zinc-800 focus:border-indigo-500"
-                    }`}
+                      }`}
                   />
                 </div>
               ) : (
@@ -1027,11 +1021,10 @@ export function TeamCalendar() {
                     value={formLocation}
                     onChange={(e) => setFormLocation(e.target.value)}
                     placeholder="e.g. Sika Office, Semarang / Client Address"
-                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
-                      attemptedSubmit && !formLocation.trim()
+                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formLocation.trim()
                         ? "border-rose-500/80 focus:border-rose-500"
                         : "border-zinc-800 focus:border-emerald-500"
-                    }`}
+                      }`}
                   />
                 </div>
               )}
