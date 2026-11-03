@@ -1452,6 +1452,7 @@ export async function getAdminEmailsAction(): Promise<string[]> {
       .filter(Boolean);
 
     const defaultSupervisors = [
+      "bintangeben17@gmail.com",
       "ben@sikacreative.com",
       "axelsaveroo@gmail.com",
       "admin@sikacreative.com",
@@ -1460,7 +1461,7 @@ export async function getAdminEmailsAction(): Promise<string[]> {
 
     return Array.from(new Set([...defaultSupervisors, ...envEmails, ...dbEmails]));
   } catch (err) {
-    return ["ben@sikacreative.com", "axelsaveroo@gmail.com", "admin@sikacreative.com"];
+    return ["bintangeben17@gmail.com", "ben@sikacreative.com", "axelsaveroo@gmail.com", "admin@sikacreative.com"];
   }
 }
 
