@@ -132,7 +132,13 @@ const DDL_STATEMENTS = [
   `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToSender" TEXT`,
   `ALTER TABLE "ChatMessage" ADD COLUMN IF NOT EXISTS "replyToText" TEXT`,
   `ALTER TABLE "ChatChannel" ADD COLUMN IF NOT EXISTS "admins" TEXT[] DEFAULT ARRAY[]::TEXT[]`,
-  `ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "description" TEXT`
+  `ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "description" TEXT`,
+  `CREATE TABLE IF NOT EXISTS "AdminAccess" (
+    "email" TEXT NOT NULL PRIMARY KEY,
+    "role" TEXT NOT NULL DEFAULT 'admin',
+    "addedBy" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`
 ];
 
 export async function ensureDatabaseTables(force = false) {

@@ -5,6 +5,7 @@ import { auth, currentUser, createClerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { ensureDatabaseTables } from "@/lib/ensure-db";
+import { sendMentionEmailNotification } from "@/lib/email-notifications";
 
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
@@ -769,6 +770,24 @@ export async function sendChatMessage(data: {
         replyToText: data.replyToText || null,
       },
     });
+
+    // Check for @mentions in chat text and notify users
+    if (data.text && data.text.includes("@")) {
+      const mentions = data.text.match(/@([a-zA-Z0-9_]+(?:\s+[a-zA-Z0-9_]+)?)/g);
+      if (mentions && mentions.length > 0) {
+        const cleanNames = mentions.map((m) => m.replace(/^@/, "").trim());
+        sendMentionEmailNotification({
+          type: "chat",
+          authorName: data.sender || "Team Member",
+          authorImage: data.senderImage,
+          itemTitle: "Team Chat Mention",
+          itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/`,
+          assignees: cleanNames,
+          snippetText: data.text,
+        }).catch((e) => console.warn("Email notify error:", e));
+      }
+    }
+
     return { success: true, message: newMsg };
   } catch (error: any) {
     console.warn("Gagal menyimpan chat dengan create(), mencoba self-healing tabel & retry:", error);
@@ -959,6 +978,18 @@ export async function createCalendarEvent(data: {
       },
     });
 
+    // Send Notion-style mention email to tagged assignees
+    if (data.assignees && data.assignees.length > 0) {
+      sendMentionEmailNotification({
+        type: "schedule",
+        authorName: data.creatorName || "Sika Creative Team",
+        itemTitle: `${data.title} (${data.date} • ${data.time})`,
+        itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/calendar`,
+        assignees: data.assignees,
+        snippetText: `${data.client} • ${data.eventType === "offline" ? "Offline Meeting" : "Online Meeting"}`
+      }).catch((e) => console.warn("Email notify error:", e));
+    }
+
     revalidatePath("/calendar");
     revalidatePath("/");
     return { success: true, event };
@@ -1125,6 +1156,20 @@ export async function createTaskAction(data?: {
 
     revalidatePath("/tasks");
     revalidatePath("/");
+
+    // Send Notion-style mention email to tagged task assignees
+    if (data?.assignee) {
+      const parts = data.assignee.split(",").map((p) => p.trim()).filter(Boolean);
+      sendMentionEmailNotification({
+        type: "task",
+        authorName: data.assignedBy || "Sika Creative Team",
+        itemTitle: newTask.title || "Untitled Task",
+        itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${newTask.id}`,
+        assignees: parts,
+        snippetText: `Client: ${newTask.client} • Status: ${newTask.status}`
+      }).catch((e) => console.warn("Email notify error:", e));
+    }
+
     return { success: true, task: newTask };
   } catch (error: any) {
     console.error("Gagal membuat task baru:", error);
@@ -1175,6 +1220,19 @@ export async function updateTaskAction(
     });
 
     revalidatePath("/tasks");
+
+    if (data.assignee) {
+      const parts = data.assignee.split(",").map((p) => p.trim()).filter(Boolean);
+      sendMentionEmailNotification({
+        type: "task",
+        authorName: updated.assignedBy || "Sika Creative Team",
+        itemTitle: updated.title || "Task Brief",
+        itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${updated.id}`,
+        assignees: parts,
+        snippetText: `Client: ${updated.client} • Status: ${updated.status}`
+      }).catch((e) => console.warn("Email notify error:", e));
+    }
+
     return { success: true, task: updated };
   } catch (error: any) {
     console.error("Gagal update task:", error);
@@ -1368,5 +1426,75 @@ export async function updateClientDescriptionAction(clientName: string, descript
   } catch (error: any) {
     console.error("Failed to update client description:", error);
     return { success: false, error: error?.message || "Failed to update description" };
+  }
+}
+
+// ==========================================
+// 6. ADMIN & SUPERVISOR ACCESS ACTIONS
+// ==========================================
+
+export async function getAdminEmailsAction(): Promise<string[]> {
+  try {
+    await ensureDatabaseTables();
+    let dbEmails: string[] = [];
+    try {
+      const rows = await prisma.$queryRawUnsafe<{ email: string }[]>(
+        'SELECT "email" FROM "AdminAccess"'
+      );
+      if (Array.isArray(rows)) {
+        dbEmails = rows.map((r) => r.email.toLowerCase().trim());
+      }
+    } catch {}
+
+    const envEmails = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map((e) => e.toLowerCase().trim())
+      .filter(Boolean);
+
+    const defaultSupervisors = [
+      "ben@sikacreative.com",
+      "axelsaveroo@gmail.com",
+      "admin@sikacreative.com",
+      "admin@app.sikacreative.com"
+    ];
+
+    return Array.from(new Set([...defaultSupervisors, ...envEmails, ...dbEmails]));
+  } catch (err) {
+    return ["ben@sikacreative.com", "axelsaveroo@gmail.com", "admin@sikacreative.com"];
+  }
+}
+
+export async function addAdminEmailAction(email: string, addedBy: string) {
+  try {
+    const trimmed = email.toLowerCase().trim();
+    if (!trimmed || !trimmed.includes("@")) {
+      return { success: false, error: "Format email tidak valid" };
+    }
+    await ensureDatabaseTables();
+    await prisma.$executeRawUnsafe(
+      'INSERT INTO "AdminAccess" ("email", "role", "addedBy", "createdAt") VALUES ($1, $2, $3, NOW()) ON CONFLICT ("email") DO NOTHING;',
+      trimmed,
+      "admin",
+      addedBy || "Supervisor"
+    );
+    revalidatePath("/admin/attendance");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Gagal menambahkan admin" };
+  }
+}
+
+export async function removeAdminEmailAction(email: string) {
+  try {
+    const trimmed = email.toLowerCase().trim();
+    await ensureDatabaseTables();
+    await prisma.$executeRawUnsafe(
+      'DELETE FROM "AdminAccess" WHERE "email" = $1;',
+      trimmed
+    );
+    revalidatePath("/admin/attendance");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Gagal menghapus admin" };
   }
 }

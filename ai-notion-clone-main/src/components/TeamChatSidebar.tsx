@@ -258,28 +258,91 @@ function renderMessageTextWithLinks(text: string, isSelf: boolean) {
 }
 
 // ==========================================
-// 4. HELPER: Notifikasi Chime (Web Audio API)
+// 4. HELPER: Notifikasi Chime & Background Tab Audio
 // ==========================================
+let sharedAudioCtx: AudioContext | null = null;
+
+function getSharedAudioContext() {
+  if (typeof window === "undefined") return null;
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
+    sharedAudioCtx = new AudioCtx();
+  }
+  return sharedAudioCtx;
+}
+
+if (typeof window !== "undefined") {
+  const unlockAudio = () => {
+    const ctx = getSharedAudioContext();
+    if (ctx && ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+  };
+  window.addEventListener("click", unlockAudio, { passive: true });
+  window.addEventListener("keydown", unlockAudio, { passive: true });
+  window.addEventListener("touchstart", unlockAudio, { passive: true });
+}
+
+let originalTabTitle = typeof document !== "undefined" ? document.title : "Sika Creative OS";
+let tabBlinkTimer: any = null;
+
+function flashTabNotification(senderName: string) {
+  if (typeof document === "undefined") return;
+  if (!originalTabTitle || originalTabTitle.includes("💬")) {
+    originalTabTitle = "Sika Creative OS";
+  }
+  if (document.hidden) {
+    clearInterval(tabBlinkTimer);
+    let showMsg = true;
+    tabBlinkTimer = setInterval(() => {
+      if (!document.hidden) {
+        clearInterval(tabBlinkTimer);
+        document.title = originalTabTitle;
+        return;
+      }
+      document.title = showMsg ? `💬 Pesan dari ${senderName}` : originalTabTitle;
+      showMsg = !showMsg;
+    }, 1200);
+  }
+}
+
+if (typeof window !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      clearInterval(tabBlinkTimer);
+      if (originalTabTitle) document.title = originalTabTitle;
+    }
+  });
+}
+
 const playNotificationChime = () => {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
     if (ctx.state === "suspended") {
-      ctx.resume().catch(() => { });
+      ctx.resume().catch(() => {});
     }
+    const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+
     osc.type = "sine";
-    osc.frequency.setValueAtTime(750, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    // Melodic dual-tone chime (780Hz -> 1060Hz) audible even in background tabs
+    osc.frequency.setValueAtTime(780, now);
+    osc.frequency.exponentialRampToValueAtTime(1060, now + 0.1);
+
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.25);
-  } catch { }
+
+    osc.start(now);
+    osc.stop(now + 0.39);
+  } catch (err) {
+    console.warn("Could not play notification chime:", err);
+  }
 };
 
 // ==========================================
@@ -882,11 +945,16 @@ export function TeamChatSidebar() {
 
       // Notifikasi suara & popup jika ada pesan baru dari orang lain
       if (hasNewIncoming && lastIncomingMsg) {
-        const isCurrentActive = isOpenRef.current && activeChannelIdRef.current === lastIncomingMsg.channelId;
+        const isTabFocused = typeof document !== "undefined" && !document.hidden && document.hasFocus();
+        const isCurrentActive = isTabFocused && isOpenRef.current && activeChannelIdRef.current === lastIncomingMsg.channelId;
+
+        // Tetap bunyikan suara & beri alert jika user sedang buka tab lain (!isTabFocused) atau berada di channel lain
         if (!isCurrentActive) {
           playNotificationChime();
           const targetCh = channelsRef.current.find((c) => c.id === lastIncomingMsg.channelId);
           const targetName = targetCh ? getChannelDisplayName(targetCh) : lastIncomingMsg.sender || "Team Chat";
+
+          flashTabNotification(targetName);
 
           setUnreadNotification({
             id: lastIncomingMsg.id,
@@ -898,7 +966,7 @@ export function TeamChatSidebar() {
             time: "Just now",
           });
         } else {
-          // Jika channel yang aktif sedang dibuka, langsung tandai telah dibaca
+          // Jika channel yang aktif sedang dibuka dan tab sedang aktif dilihat, langsung tandai telah dibaca
           updateLastRead(activeChannelIdRef.current);
         }
       }
