@@ -100,6 +100,7 @@ export function TeamCalendar() {
   const [formEventType, setFormEventType] = useState<"online" | "offline">("online");
   const [formMeetLink, setFormMeetLink] = useState("https://meet.google.com/new");
   const [formLocation, setFormLocation] = useState("");
+  const [directToGCal, setDirectToGCal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // State validasi & pembuatan client baru di modal
@@ -284,20 +285,22 @@ export function TeamCalendar() {
       });
 
       if (res && res.success) {
-        toast.success("New schedule entry saved & opened in Google Calendar!");
-
-        // Otomatis buka Google Calendar di tab baru saat event dibuat tanpa perlu klik tombol manual
-        const autoGCalUrl = getGoogleCalendarUrl({
-          title: formTitle.trim(),
-          client: formClient,
-          date: formDate,
-          time: formTime,
-          assignees: finalAssignees,
-          eventType: formEventType,
-          meetLink: formEventType === "online" ? formMeetLink.trim() : null,
-          location: formEventType === "offline" ? formLocation.trim() : null,
-        });
-        window.open(autoGCalUrl, "_blank");
+        if (directToGCal) {
+          toast.success("New schedule entry saved & opened in Google Calendar!");
+          const autoGCalUrl = getGoogleCalendarUrl({
+            title: formTitle.trim(),
+            client: formClient,
+            date: formDate,
+            time: formTime,
+            assignees: finalAssignees,
+            eventType: formEventType,
+            meetLink: formEventType === "online" ? formMeetLink.trim() : null,
+            location: formEventType === "offline" ? formLocation.trim() : null,
+          });
+          window.open(autoGCalUrl, "_blank");
+        } else {
+          toast.success("New schedule entry saved successfully!");
+        }
 
         setQuickTitle("");
         setFormTitle("");
@@ -1058,8 +1061,22 @@ export function TeamCalendar() {
                 </div>
               </div>
 
+              {/* Option to direct to Google Calendar */}
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none">
+                <input
+                  type="checkbox"
+                  checked={directToGCal}
+                  onChange={(e) => setDirectToGCal(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#C65921] accent-[#C65921] cursor-pointer"
+                />
+                <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                  <ExternalLink size={13} className="text-[#C65921]" />
+                  <span>Direct ke Google Calendar setelah disimpan</span>
+                </div>
+              </label>
+
               {/* Buttons */}
-              <div className="flex items-center gap-2.5 pt-3">
+              <div className="flex items-center gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

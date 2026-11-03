@@ -55,6 +55,7 @@ import {
   Check,
   ArrowLeft
 } from "lucide-react";
+import { showMobileNotification } from "@/lib/mobile-notifications";
 
 interface Attachment {
   name: string;
@@ -382,6 +383,7 @@ const ChatInputBar = memo(function ChatInputBar({
   cameraInputRef,
 }: ChatInputBarProps) {
   const [inputText, setInputText] = useState("");
+  const [isInputDragOver, setIsInputDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -421,8 +423,54 @@ const ChatInputBar = memo(function ChatInputBar({
     }
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsInputDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsInputDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsInputDragOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (file.type.indexOf("image") !== -1 || file.type.startsWith("image/")) {
+        onPasteImage(file);
+      } else {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        if (fileInputRef.current) {
+          fileInputRef.current.files = dt.files;
+          fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    }
+  };
+
   return (
-    <div className="p-2 sm:p-2.5 bg-[#18181c] border-t border-zinc-800 shrink-0">
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`p-2 sm:p-2.5 bg-[#18181c] border-t shrink-0 transition relative ${
+        isInputDragOver ? "border-[#C65921] bg-[#221f1d]" : "border-zinc-800"
+      }`}
+    >
+      {/* Drop Zone Indicator */}
+      {isInputDragOver && (
+        <div className="mb-2 p-2 rounded-xl bg-[#C65921]/15 border border-[#C65921]/40 text-[#C65921] flex items-center justify-center gap-2 text-xs font-semibold animate-pulse">
+          <ImageIcon size={15} />
+          <span>Lepaskan foto untuk dilampirkan ke chat</span>
+        </div>
+      )}
       {/* Replying Banner */}
       {replyingMessage && (
         <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-[#C65921] flex items-center justify-between text-xs">
@@ -575,6 +623,7 @@ export function TeamChatSidebar() {
   // Input & Upload State
   const [pendingFile, setPendingFile] = useState<Attachment | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isChatAreaDragOver, setIsChatAreaDragOver] = useState(false);
 
   // Edit Message State
   const [editingMessage, setEditingMessage] = useState<{ id: string; text: string } | null>(null);
@@ -955,6 +1004,15 @@ export function TeamChatSidebar() {
           const targetName = targetCh ? getChannelDisplayName(targetCh) : lastIncomingMsg.sender || "Team Chat";
 
           flashTabNotification(targetName);
+
+          // Tampilkan notifikasi native di HP (Android / iOS PWA / Desktop) dengan getar & suara
+          showMobileNotification(`💬 ${lastIncomingMsg.sender || "Pesan Baru"}`, {
+            body: lastIncomingMsg.text || (lastIncomingMsg.fileType === "image" ? "📷 Mengirim foto" : "📎 Mengirim lampiran"),
+            icon: lastIncomingMsg.senderImage || "/touch icon sika-04.png",
+            tag: `chat-${lastIncomingMsg.channelId}`,
+            url: `/?chat=${lastIncomingMsg.channelId}`,
+            vibrate: [200, 100, 200],
+          });
 
           setUnreadNotification({
             id: lastIncomingMsg.id,
@@ -2538,8 +2596,47 @@ export function TeamChatSidebar() {
                   <div
                     ref={messagesContainerRef}
                     onPaste={handlePaste}
-                    className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0 bg-[#0e0e11] overscroll-contain"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!isChatAreaDragOver) setIsChatAreaDragOver(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                      setIsChatAreaDragOver(false);
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsChatAreaDragOver(false);
+                      const files = e.dataTransfer?.files;
+                      if (files && files.length > 0) {
+                        const file = files[0];
+                        if (file.type.indexOf("image") !== -1 || file.type.startsWith("image/")) {
+                          await handlePasteImage(file);
+                        } else {
+                          const dt = new DataTransfer();
+                          dt.items.add(file);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.files = dt.files;
+                            fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+                          }
+                        }
+                      }
+                    }}
+                    className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-0 bg-[#0e0e11] overscroll-contain relative"
                   >
+                    {isChatAreaDragOver && (
+                      <div className="absolute inset-4 z-30 bg-[#0e0e11]/90 backdrop-blur-xs flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#C65921] rounded-2xl pointer-events-none animate-in fade-in duration-150">
+                        <div className="w-12 h-12 rounded-xl bg-[#C65921]/20 text-[#C65921] flex items-center justify-center mb-2">
+                          <ImageIcon size={24} />
+                        </div>
+                        <p className="text-xs font-bold text-white">Lepaskan foto di sini</p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">Foto akan langsung siap dikirim di chatbox</p>
+                      </div>
+                    )}
                     {activeMessages.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-xs gap-2 text-center px-6">
                         <div className="w-12 h-12 rounded-2xl bg-[#1c1c20] border border-zinc-800 flex items-center justify-center text-[#C65921]">

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { BottomNav } from "@/components/BottomNav";
 import { TeamChatSidebar } from "@/components/TeamChatSidebar";
+import { MobileNotificationListener } from "@/components/MobileNotificationListener";
 import { syncUserAction } from "@/actions/actions";
 
 export function MobileContainer({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export function MobileContainer({ children }: { children: React.ReactNode }) {
                 {children}
             </div>
             <TeamChatSidebar/>
+            <MobileNotificationListener />
             <BottomNav />
         </div>
     );

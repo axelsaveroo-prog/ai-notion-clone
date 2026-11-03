@@ -112,6 +112,7 @@ export default function CalendarPage() {
   const [formEventType, setFormEventType] = useState<"online" | "offline">("online");
   const [formMeetLink, setFormMeetLink] = useState("https://meet.google.com/new");
   const [formLocation, setFormLocation] = useState("");
+  const [directToGCal, setDirectToGCal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // State validasi & pembuatan client baru di modal
@@ -334,8 +335,8 @@ export default function CalendarPage() {
       }
 
       if (res && res.success) {
-        // Otomatis buka Google Calendar di tab baru saat jadwal baru dibuat
-        if (!editingId) {
+        // Buka Google Calendar di tab baru hanya jika opsi directToGCal dipilih
+        if (!editingId && directToGCal) {
           const autoGCalUrl = getGoogleCalendarUrl({
             title: formTitle.trim(),
             client: formClient,
@@ -1417,7 +1418,23 @@ export default function CalendarPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2.5 pt-3">
+                  <>
+                    {!editingId && (
+                      <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none mt-2">
+                        <input
+                          type="checkbox"
+                          checked={directToGCal}
+                          onChange={(e) => setDirectToGCal(e.target.checked)}
+                          className="w-4 h-4 rounded text-[#C65921] accent-[#C65921] cursor-pointer"
+                        />
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                          <ExternalLink size={13} className="text-[#C65921]" />
+                          <span>Direct ke Google Calendar setelah disimpan</span>
+                        </div>
+                      </label>
+                    )}
+
+                    <div className="flex items-center gap-2.5 pt-2">
                     {editingId && (
                       <button
                         type="button"
@@ -1445,6 +1462,7 @@ export default function CalendarPage() {
                       {isSubmitting ? "Saving..." : editingId ? "Save Changes" : "Save Schedule"}
                     </button>
                   </div>
+                  </>
                 )}
               </form>
             </div>
