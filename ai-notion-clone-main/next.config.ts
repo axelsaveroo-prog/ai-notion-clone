@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["web-push"],
   typescript: {
     // Mengabaikan error tipe saat build produksi di Vercel
     ignoreBuildErrors: true,

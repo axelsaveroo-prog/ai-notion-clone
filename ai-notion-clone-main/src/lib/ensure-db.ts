@@ -138,7 +138,17 @@ const DDL_STATEMENTS = [
     "role" TEXT NOT NULL DEFAULT 'admin',
     "addedBy" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`
+  )`,
+  `CREATE TABLE IF NOT EXISTS "PushSubscription" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "userEmail" TEXT,
+    "endpoint" TEXT NOT NULL UNIQUE,
+    "keys" JSONB NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS "PushSubscription_userId_idx" ON "PushSubscription"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "PushSubscription_userEmail_idx" ON "PushSubscription"("userEmail")`
 ];
 
 export async function ensureDatabaseTables(force = false) {

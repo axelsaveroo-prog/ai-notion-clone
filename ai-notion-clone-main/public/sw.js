@@ -9,14 +9,47 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Listener untuk pesan dari client window untuk menampilkan notifikasi HP
+// Listener PUSH NOTIFICATION (Saat aplikasi DITUTUP / CLOSE APPS di HP)
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  try {
+    const data = event.data.json();
+    const title = data.title || 'Sika Creative OS';
+    const options = {
+      body: data.body || '',
+      icon: data.icon || '/touch icon sika-04.png',
+      badge: data.badge || '/touch icon sika-03.png',
+      // Pola getar berulang agar terasa jelas di HP
+      vibrate: [300, 100, 300, 100, 300],
+      // Tag unik memicu heads-up popup banner di atas layar Android
+      tag: data.tag || `heads-up-${Date.now()}`,
+      renotify: true,
+      requireInteraction: true,
+      silent: false,
+      data: {
+        url: data.url || '/',
+      },
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
+  } catch (err) {
+    console.error('Error handling push notification:', err);
+  }
+});
+
+// Listener untuk pesan dari client window untuk menampilkan notifikasi HP saat terbuka
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
     self.registration.showNotification(title, {
       icon: '/touch icon sika-04.png',
       badge: '/touch icon sika-03.png',
-      vibrate: [200, 100, 200],
+      vibrate: [300, 100, 300, 100, 300],
+      tag: `heads-up-${Date.now()}`,
+      renotify: true,
+      requireInteraction: true,
+      silent: false,
       ...options,
     });
   }
@@ -39,11 +72,10 @@ self.addEventListener('notificationclick', (event) => {
           return;
         }
       }
-      // Jika belum ada tab yang terbuka, buka jendela baru
+      // Jika belum ada tab yang terbuka (aplikasi tertutup), buka jendela baru
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
     })
   );
 });
-

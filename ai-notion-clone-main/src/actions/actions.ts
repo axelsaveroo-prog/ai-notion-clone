@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { ensureDatabaseTables } from "@/lib/ensure-db";
 import { sendMentionEmailNotification } from "@/lib/email-notifications";
+import { sendWebPushNotification, savePushSubscription } from "@/lib/web-push-sender";
 
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
@@ -788,6 +789,27 @@ export async function sendChatMessage(data: {
       }
     }
 
+    // Kirim Web Push Notification langsung ke HP anggota channel lain (meskipun aplikasi ditutup)
+    try {
+      const ch = await prisma.chatChannel.findUnique({
+        where: { id: data.channelId },
+        select: { members: true },
+      });
+      if (ch && Array.isArray(ch.members)) {
+        const otherMembers = ch.members.filter(
+          (m: string) => m && m !== data.senderId && m !== data.sender
+        );
+        sendWebPushNotification({
+          userIds: otherMembers,
+          excludeUserId: data.senderId || "",
+          title: `💬 ${data.sender}`,
+          body: data.text || (data.fileType === "image" ? "📷 Mengirim foto" : "📎 Mengirim lampiran"),
+          url: `/?chat=${data.channelId}`,
+          tag: `chat-${data.channelId}`,
+        }).catch(() => {});
+      }
+    } catch {}
+
     return { success: true, message: newMsg };
   } catch (error: any) {
     console.warn("Gagal menyimpan chat dengan create(), mencoba self-healing tabel & retry:", error);
@@ -988,6 +1010,16 @@ export async function createCalendarEvent(data: {
         assignees: data.assignees,
         snippetText: `${data.client} • ${data.eventType === "offline" ? "Offline Meeting" : "Online Meeting"}`
       }).catch((e) => console.warn("Email notify error:", e));
+
+      // Kirim Web Push ke HP yang di-tag meskipun aplikasi ditutup
+      sendWebPushNotification({
+        userEmails: data.assignees,
+        excludeEmail: data.creatorName || "",
+        title: `🗓️ Jadwal Baru: ${data.title}`,
+        body: `${data.creatorName || "Tim"} menandai kamu di jadwal [${data.client}] (${data.date})`,
+        url: "/calendar",
+        tag: `schedule-${event.id}`,
+      }).catch(() => {});
     }
 
     revalidatePath("/calendar");
@@ -1168,6 +1200,15 @@ export async function createTaskAction(data?: {
         assignees: parts,
         snippetText: `Client: ${newTask.client} • Status: ${newTask.status}`
       }).catch((e) => console.warn("Email notify error:", e));
+
+      // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup
+      sendWebPushNotification({
+        userEmails: parts,
+        title: `📌 Tagged in Brief: ${newTask.title}`,
+        body: `${data?.assignedBy || "Tim"} menugaskan kamu di brief [${newTask.client}]`,
+        url: `/tasks`,
+        tag: `task-${newTask.id}`,
+      }).catch(() => {});
     }
 
     return { success: true, task: newTask };
@@ -1231,6 +1272,15 @@ export async function updateTaskAction(
         assignees: parts,
         snippetText: `Client: ${updated.client} • Status: ${updated.status}`
       }).catch((e) => console.warn("Email notify error:", e));
+
+      // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup
+      sendWebPushNotification({
+        userEmails: parts,
+        title: `📌 Update Brief: ${updated.title}`,
+        body: `${updated.assignedBy || "Tim"} menandai kamu di brief [${updated.client}]`,
+        url: `/tasks`,
+        tag: `task-${updated.id}`,
+      }).catch(() => {});
     }
 
     return { success: true, task: updated };
@@ -1497,5 +1547,21 @@ export async function removeAdminEmailAction(email: string) {
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || "Gagal menghapus admin" };
+  }
+}
+
+export async function savePushSubscriptionAction(
+  subscription: any,
+  userId: string,
+  userEmail?: string
+) {
+  try {
+    return await savePushSubscription({
+      userId,
+      userEmail,
+      subscription,
+    });
+  } catch (err: any) {
+    return { success: false, error: err?.message };
   }
 }

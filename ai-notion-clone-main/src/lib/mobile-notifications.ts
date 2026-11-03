@@ -3,6 +3,9 @@
  * Mendukung notifikasi status bar / tray HP (Android & iOS PWA) dan desktop browser
  */
 
+import { savePushSubscriptionAction } from "@/actions/actions";
+import { VAPID_PUBLIC_KEY } from "@/lib/vapid-keys";
+
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return null;
@@ -16,7 +19,47 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
   }
 }
 
-export async function requestMobileNotificationPermission(): Promise<NotificationPermission> {
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+export async function subscribeToPushNotifications(userId: string, userEmail?: string) {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return null;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const convertedVapidKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedVapidKey,
+      });
+    }
+
+    if (sub) {
+      const rawSub = JSON.parse(JSON.stringify(sub));
+      await savePushSubscriptionAction(rawSub, userId, userEmail);
+    }
+    return sub;
+  } catch (err) {
+    console.warn("Could not subscribe to push notifications:", err);
+    return null;
+  }
+}
+
+export async function requestMobileNotificationPermission(
+  userId?: string,
+  userEmail?: string
+): Promise<NotificationPermission> {
   if (typeof window === "undefined" || !("Notification" in window)) {
     return "denied";
   }
@@ -26,6 +69,10 @@ export async function requestMobileNotificationPermission(): Promise<Notificatio
 
   try {
     const permission = await Notification.requestPermission();
+    if (permission === "granted" && userId) {
+      // Daftarkan push subscription ke server agar HP tetap dapat notif saat apps ditutup
+      await subscribeToPushNotifications(userId, userEmail);
+    }
     return permission;
   } catch (err) {
     console.warn("Error requesting notification permission:", err);
@@ -69,9 +116,11 @@ export async function showMobileNotification(
     body: options.body,
     icon: options.icon || "/touch icon sika-04.png",
     badge: options.badge || "/touch icon sika-03.png",
-    tag: options.tag || "sika-notification",
-    vibrate: options.vibrate || [300, 100, 300],
+    tag: options.tag || `heads-up-${Date.now()}`,
+    vibrate: options.vibrate || [300, 100, 300, 100, 300],
     renotify: true,
+    requireInteraction: true,
+    silent: false,
     data: {
       url: options.url || "/",
     },
