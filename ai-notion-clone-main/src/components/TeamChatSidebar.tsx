@@ -55,7 +55,7 @@ import {
   Check,
   ArrowLeft
 } from "lucide-react";
-import { showMobileNotification } from "@/lib/mobile-notifications";
+import { showMobileNotification, triggerHapticFeedback } from "@/lib/mobile-notifications";
 
 interface Attachment {
   name: string;
@@ -1004,6 +1004,7 @@ export function TeamChatSidebar() {
           const targetName = targetCh ? getChannelDisplayName(targetCh) : lastIncomingMsg.sender || "Team Chat";
 
           flashTabNotification(targetName);
+          triggerHapticFeedback([250, 100, 250]);
 
           // Tampilkan notifikasi native di HP (Android / iOS PWA / Desktop) dengan getar & suara
           showMobileNotification(`💬 ${lastIncomingMsg.sender || "Pesan Baru"}`, {
@@ -1011,7 +1012,7 @@ export function TeamChatSidebar() {
             icon: lastIncomingMsg.senderImage || "/touch icon sika-04.png",
             tag: `chat-${lastIncomingMsg.channelId}`,
             url: `/?chat=${lastIncomingMsg.channelId}`,
-            vibrate: [200, 100, 200],
+            vibrate: [250, 100, 250],
           });
 
           setUnreadNotification({
@@ -1983,40 +1984,40 @@ export function TeamChatSidebar() {
   return (
     <>
       {/* ========================================================= */}
-      {/* 1. NOTIFIKASI POPUP MINIMALIS DI POJOK KIRI BAWAH         */}
+      {/* 1. NOTIFIKASI POPUP IN-APP ALA WHATSAPP DI ATAS LAYAR      */}
       {/* ========================================================= */}
       {unreadNotification && !isOpen && (
-        <div className="fixed bottom-36 left-4 sm:bottom-20 sm:left-5 z-50 max-w-sm w-auto animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="fixed top-3 left-3 right-3 sm:top-4 sm:right-5 sm:left-auto sm:max-w-sm z-[70] animate-in slide-in-from-top-4 fade-in duration-300">
           <div
             onClick={() => handleOpenFromNotification(unreadNotification.channelId)}
-            className="bg-[#18181b] border border-zinc-800 text-white p-3.5 rounded-2xl shadow-xl flex items-start gap-3 cursor-pointer transition hover:border-[#C65921]"
+            className="bg-[#16171d]/95 backdrop-blur-md border border-zinc-800 text-white p-3 rounded-2xl shadow-2xl flex items-center gap-3 cursor-pointer transition hover:border-[#C65921]/60"
           >
             <div className="relative shrink-0">
               {unreadNotification.senderImage ? (
                 <img
                   src={unreadNotification.senderImage}
                   alt={unreadNotification.sender}
-                  className="w-10 h-10 rounded-full object-cover"
+                  className="w-10 h-10 rounded-full object-cover border border-zinc-700/60"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-[#C65921] flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-10 h-10 rounded-full bg-[#C65921] flex items-center justify-center text-white font-bold text-xs border border-[#C65921]/50">
                   {(unreadNotification.sender || "U").slice(0, 1).toUpperCase()}
                 </div>
               )}
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#C65921] ring-2 ring-[#18181b]" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-[#16171d]" />
             </div>
 
             <div className="flex-1 min-w-0 pr-1">
               <div className="flex items-center justify-between gap-2">
-                <h5 className="text-xs font-semibold text-white truncate">{unreadNotification.sender}</h5>
-                <span className="text-[10px] text-zinc-400 shrink-0">{unreadNotification.time}</span>
+                <h5 className="text-xs font-bold text-white truncate">{unreadNotification.sender}</h5>
+                <span className="text-[10px] text-zinc-500 shrink-0">{unreadNotification.time}</span>
               </div>
               {unreadNotification.channelName && (
-                <span className="text-[10px] text-[#C65921] font-semibold block truncate">
+                <span className="text-[10px] text-[#e58a5c] font-semibold block truncate">
                   {unreadNotification.channelName}
                 </span>
               )}
-              <p className="text-xs text-zinc-300 line-clamp-2 mt-0.5 break-words">
+              <p className="text-xs text-zinc-300 line-clamp-1 mt-0.5 break-words">
                 {unreadNotification.text}
               </p>
             </div>
@@ -2027,9 +2028,9 @@ export function TeamChatSidebar() {
                 e.stopPropagation();
                 setUnreadNotification(null);
               }}
-              className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition -mr-1 -mt-1 cursor-pointer"
+              className="text-zinc-500 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer shrink-0 -mr-1"
             >
-              <X size={13} />
+              <X size={14} />
             </button>
           </div>
         </div>

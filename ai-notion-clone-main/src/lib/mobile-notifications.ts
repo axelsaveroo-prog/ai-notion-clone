@@ -42,10 +42,21 @@ export interface MobileNotificationOptions {
   vibrate?: number[];
 }
 
+export async function triggerHapticFeedback(pattern: number[] = [300, 100, 300]) {
+  if (typeof window !== "undefined" && typeof navigator !== "undefined" && "vibrate" in navigator) {
+    try {
+      navigator.vibrate(pattern);
+    } catch {}
+  }
+}
+
 export async function showMobileNotification(
   title: string,
   options: MobileNotificationOptions
 ) {
+  // Selalu getarkan HP jika didukung oleh browser/perangkat
+  triggerHapticFeedback(options.vibrate || [300, 100, 300]);
+
   if (typeof window === "undefined" || !("Notification" in window)) {
     return;
   }
@@ -59,7 +70,8 @@ export async function showMobileNotification(
     icon: options.icon || "/touch icon sika-04.png",
     badge: options.badge || "/touch icon sika-03.png",
     tag: options.tag || "sika-notification",
-    vibrate: options.vibrate || [250, 100, 250],
+    vibrate: options.vibrate || [300, 100, 300],
+    renotify: true,
     data: {
       url: options.url || "/",
     },
@@ -95,4 +107,3 @@ export async function showMobileNotification(
     console.warn("Desktop notification error:", notifErr);
   }
 }
-
