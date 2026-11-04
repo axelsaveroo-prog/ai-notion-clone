@@ -140,3 +140,15 @@ model UsersToDocument {
 
   @@unique([documentId, userId])
 }
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  userEmail String?
+  endpoint  String   @unique
+  keys      Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userEmail])
+}

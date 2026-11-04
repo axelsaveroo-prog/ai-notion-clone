@@ -112,9 +112,9 @@ export default function Home() {
       return (
         <div className="fixed inset-0 bg-[#0b0b0c] flex items-center justify-center z-50 transition-opacity duration-500">
           <img
-            src="/touch icon sika-04.png"
-            alt="Loading..."
-            className="w-32 h-32 md:w-40 md:h-40 object-contain animate-pulse rounded-3xl drop-shadow-2xl"
+            src="/Asset 2@1080x.png"
+            alt="Sika Creative"
+            className="h-10 sm:h-12 w-auto object-contain animate-pulse select-none"
           />
         </div>
       );

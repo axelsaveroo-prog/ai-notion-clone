@@ -1,6 +1,5 @@
 import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
-import { ensureDatabaseTables } from "@/lib/ensure-db";
 import { VAPID_PUBLIC_KEY } from "@/lib/vapid-keys";
 
 export const VAPID_PRIVATE_KEY =
@@ -38,26 +37,25 @@ export async function savePushSubscription(data: {
   };
 }) {
   try {
-    await ensureDatabaseTables();
     const endpoint = data.subscription.endpoint;
-    const keysJson = JSON.stringify(data.subscription.keys);
+    const keys = data.subscription.keys;
     const userId = data.userId;
     const userEmail = (data.userEmail || "").toLowerCase().trim();
-    const id = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "PushSubscription" ("id", "userId", "userEmail", "endpoint", "keys", "createdAt")
-       VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
-       ON CONFLICT ("endpoint") DO UPDATE SET
-         "userId" = EXCLUDED."userId",
-         "userEmail" = EXCLUDED."userEmail",
-         "keys" = EXCLUDED."keys";`,
-      id,
-      userId,
-      userEmail,
-      endpoint,
-      keysJson
-    );
+    await prisma.pushSubscription.upsert({
+      where: { endpoint },
+      create: {
+        userId,
+        userEmail: userEmail || null,
+        endpoint,
+        keys: keys as any,
+      },
+      update: {
+        userId,
+        userEmail: userEmail || null,
+        keys: keys as any,
+      },
+    });
 
     return { success: true };
   } catch (error) {
@@ -77,29 +75,81 @@ export async function sendWebPushNotification(params: {
   tag?: string;
 }) {
   try {
-    await ensureDatabaseTables();
+    const rawEmails = params.userEmails || [];
+    const rawUserIds = params.userIds || [];
 
-    const normalizedEmails = (params.userEmails || [])
-      .map((e) => e.toLowerCase().trim())
-      .filter((e) => Boolean(e) && e !== (params.excludeEmail || "").toLowerCase().trim());
+    const excludeId = params.excludeUserId || "";
+    const excludeEmail = (params.excludeEmail || "").toLowerCase().trim();
 
-    const targetUserIds = (params.userIds || [])
-      .filter((id) => Boolean(id) && id !== params.excludeUserId);
+    // 1. Ambil seluruh data user untuk resolusi fleksibel (ID, nama panggilan, email)
+    const targetUserIds = new Set<string>();
+    const targetEmails = new Set<string>();
 
-    if (normalizedEmails.length === 0 && targetUserIds.length === 0) {
+    // Tambahkan input awal jika tampak sebagai ID atau email
+    for (const id of rawUserIds) {
+      if (id && id !== excludeId) targetUserIds.add(id);
+    }
+    for (const em of rawEmails) {
+      const clean = em.toLowerCase().trim();
+      if (clean && clean !== excludeEmail) {
+        if (clean.includes("@")) {
+          targetEmails.add(clean);
+        }
+      }
+    }
+
+    // Resolusi nama assignees atau display names (misal "Bintang Ebenheazer", "@Bintang", dsb.)
+    try {
+      const dbUsers = await prisma.user.findMany({
+        select: { id: true, name: true, email: true },
+      });
+
+      const allInputs = [...rawEmails, ...rawUserIds];
+
+      for (const rawInput of allInputs) {
+        const clean = rawInput.toLowerCase().replace(/^@+/, "").trim();
+        if (!clean || clean === "you" || clean === "all" || clean === "team") continue;
+
+        for (const u of dbUsers) {
+          const uName = (u.name || "").toLowerCase().trim();
+          const uEmail = (u.email || "").toLowerCase().trim();
+          const uId = u.id;
+
+          const isMatch =
+            uId === clean ||
+            uEmail === clean ||
+            uName === clean ||
+            (clean.length > 2 && (uName.includes(clean) || clean.includes(uName)));
+
+          if (isMatch) {
+            if (uId && uId !== excludeId) targetUserIds.add(uId);
+            if (uEmail && uEmail !== excludeEmail) targetEmails.add(uEmail);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not resolve users for web push:", e);
+    }
+
+    // Jika tidak ada target yang valid setelah resolusi
+    if (targetUserIds.size === 0 && targetEmails.size === 0) {
       return { success: true, count: 0 };
     }
 
-    // Ambil subscriptions dari database yang cocok
-    const subs = await prisma.$queryRawUnsafe<
-      { id: string; endpoint: string; keys: any; userId: string; userEmail: string }[]
-    >(
-      `SELECT "id", "endpoint", "keys", "userId", "userEmail"
-       FROM "PushSubscription"
-       WHERE "userEmail" = ANY($1::text[]) OR "userId" = ANY($2::text[]);`,
-      normalizedEmails,
-      targetUserIds
-    );
+    // 2. Query subscriptions yang tersimpan di Supabase
+    const orConditions: any[] = [];
+    if (targetUserIds.size > 0) {
+      orConditions.push({ userId: { in: Array.from(targetUserIds) } });
+    }
+    if (targetEmails.size > 0) {
+      orConditions.push({ userEmail: { in: Array.from(targetEmails) } });
+    }
+
+    const subs = await prisma.pushSubscription.findMany({
+      where: {
+        OR: orConditions,
+      },
+    });
 
     if (!subs || subs.length === 0) {
       return { success: true, count: 0 };
@@ -111,28 +161,27 @@ export async function sendWebPushNotification(params: {
       icon: "/touch icon sika-04.png",
       badge: "/touch icon sika-03.png",
       url: params.url || "/",
-      tag: params.tag || `heads-up-${Date.now()}`,
+      tag: params.tag || `heads-up-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     });
 
     const sendPromises = subs.map(async (sub) => {
       try {
         const pushSubscription = {
           endpoint: sub.endpoint,
-          keys: typeof sub.keys === "string" ? JSON.parse(sub.keys) : sub.keys,
+          keys: typeof sub.keys === "string" ? JSON.parse(sub.keys) : (sub.keys as any),
         };
 
         await webpush.sendNotification(pushSubscription, payloadString, {
-          urgency: "high", // Memicu heads-up popup di HP Android
+          urgency: "high", // Memicu heads-up banner di Android
           TTL: 60 * 60 * 24, // 24 jam
         });
       } catch (err: any) {
-        // Jika subscription sudah tidak aktif (status 404 / 410 Gone), bersihkan dari DB
-        if (err.statusCode === 404 || err.statusCode === 410) {
+        // Hapus subscription yang sudah tidak valid/expired di push service
+        if (err?.statusCode === 404 || err?.statusCode === 410) {
           try {
-            await prisma.$executeRawUnsafe(
-              `DELETE FROM "PushSubscription" WHERE "endpoint" = $1;`,
-              sub.endpoint
-            );
+            await prisma.pushSubscription.delete({
+              where: { endpoint: sub.endpoint },
+            });
           } catch {}
         }
       }

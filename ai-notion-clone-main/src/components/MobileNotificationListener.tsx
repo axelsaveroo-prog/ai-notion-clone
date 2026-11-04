@@ -18,6 +18,7 @@ export function MobileNotificationListener() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const isCheckingRef = useRef(false);
+  const isInitialRunRef = useRef(true);
 
   // Inisialisasi Service Worker & Cek Izin Notifikasi
   useEffect(() => {
@@ -38,17 +39,22 @@ export function MobileNotificationListener() {
   // Daftarkan Web Push Subscription saat user login & izin granted
   // Ini kunci agar notifikasi tetap POP UP di HP meskipun aplikasi/browser ditutup (close apps)
   useEffect(() => {
-    if (isLoaded && user && permission === "granted") {
-      subscribeToPushNotifications(
-        user.id,
-        user.primaryEmailAddress?.emailAddress
-      );
+    if (!isLoaded || !user) return;
+
+    if (typeof window !== "undefined" && "Notification" in window) {
+      const currentPerm = Notification.permission;
+      setPermission(currentPerm);
+      if (currentPerm === "granted") {
+        subscribeToPushNotifications(
+          user.id,
+          user.primaryEmailAddress?.emailAddress
+        );
+      }
     }
-  }, [isLoaded, user, permission]);
+  }, [isLoaded, user]);
 
   // Handler saat user mengizinkan notifikasi
   const handleEnableNotifications = async () => {
-    triggerHapticFeedback([100, 50, 100]);
     const res = await requestMobileNotificationPermission(
       user?.id,
       user?.primaryEmailAddress?.emailAddress
@@ -91,8 +97,29 @@ export function MobileNotificationListener() {
           storedNotified ? JSON.parse(storedNotified) : []
         );
 
-        // 1. Cek Tag Brief / Task
         const tasks = await getTasksAction();
+        const events: any = await getCalendarEvents();
+
+        // PENTING: Saat pertama kali dibuka / dimuat, indeks semua task & event yang ada tanpa getar & tanpa notif
+        // Ini memastikan HP TIDAK AKAN PERNAH GETAR hanya karena aplikasi baru dibuka!
+        if (isInitialRunRef.current) {
+          if (tasks && Array.isArray(tasks)) {
+            for (const task of tasks) {
+              notifiedSet.add(`task-${task.id}`);
+            }
+          }
+          if (events && Array.isArray(events)) {
+            for (const ev of events) {
+              notifiedSet.add(`event-${ev.id}`);
+            }
+          }
+          const updatedArray = Array.from(notifiedSet).slice(-200);
+          localStorage.setItem("SIKA_NOTIFIED_ITEMS", JSON.stringify(updatedArray));
+          isInitialRunRef.current = false;
+          return;
+        }
+
+        // 1. Cek Tag Brief / Task BARU yang masuk setelah aplikasi dibuka
         if (tasks && Array.isArray(tasks)) {
           for (const task of tasks) {
             if (notifiedSet.has(`task-${task.id}`)) continue;
@@ -102,16 +129,10 @@ export function MobileNotificationListener() {
               (name) => name && (assigneeLower.includes(name) || assigneeLower === "you")
             );
 
-            // Data pertama kali di-load tidak dispam
-            if (!storedNotified) {
-              notifiedSet.add(`task-${task.id}`);
-              continue;
-            }
-
             if (isUserAssigned) {
               notifiedSet.add(`task-${task.id}`);
 
-              // Getar HP dan tampilkan notifikasi sistem/tray HP
+              // Getar HP dan tampilkan notifikasi sistem/tray HP untuk task baru
               triggerHapticFeedback([300, 150, 300]);
               showMobileNotification(`📌 Tagged in Brief: ${task.title}`, {
                 body: `${task.assignedBy || "Tim"} menugaskan kamu di brief [${task.client}]`,
@@ -119,12 +140,13 @@ export function MobileNotificationListener() {
                 url: "/tasks",
                 vibrate: [300, 150, 300],
               });
+            } else {
+              notifiedSet.add(`task-${task.id}`);
             }
           }
         }
 
-        // 2. Cek Tag Jadwal Kalender
-        const events: any = await getCalendarEvents();
+        // 2. Cek Tag Jadwal Kalender BARU yang masuk setelah aplikasi dibuka
         if (events && Array.isArray(events)) {
           for (const ev of events) {
             if (notifiedSet.has(`event-${ev.id}`)) continue;
@@ -135,15 +157,10 @@ export function MobileNotificationListener() {
               return userNames.some((uName) => uName && aLower.includes(uName));
             });
 
-            if (!storedNotified) {
-              notifiedSet.add(`event-${ev.id}`);
-              continue;
-            }
-
             if (isUserTagged) {
               notifiedSet.add(`event-${ev.id}`);
 
-              // Getar HP dan tampilkan notifikasi sistem/tray HP
+              // Getar HP dan tampilkan notifikasi sistem/tray HP untuk event baru
               triggerHapticFeedback([300, 150, 300]);
               showMobileNotification(`🗓️ New Schedule: ${ev.title}`, {
                 body: `${ev.creatorName || "Tim"} menandai kamu di jadwal ${ev.client} (${ev.date})`,
@@ -151,6 +168,8 @@ export function MobileNotificationListener() {
                 url: "/calendar",
                 vibrate: [300, 150, 300],
               });
+            } else {
+              notifiedSet.add(`event-${ev.id}`);
             }
           }
         }

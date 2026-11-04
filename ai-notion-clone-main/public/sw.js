@@ -27,6 +27,9 @@ self.addEventListener('push', (event) => {
       renotify: true,
       requireInteraction: true,
       silent: false,
+      actions: [
+        { action: 'open', title: 'Buka' }
+      ],
       data: {
         url: data.url || '/',
       },
@@ -50,6 +53,9 @@ self.addEventListener('message', (event) => {
       renotify: true,
       requireInteraction: true,
       silent: false,
+      actions: [
+        { action: 'open', title: 'Buka' }
+      ],
       ...options,
     });
   }

@@ -35,6 +35,7 @@ export async function subscribeToPushNotifications(userId: string, userEmail?: s
     return null;
   }
   try {
+    await registerServiceWorker();
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
