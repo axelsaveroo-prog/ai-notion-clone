@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useUser } from "@clerk/nextjs";
 import { 
@@ -309,12 +309,79 @@ export default function CalendarPage() {
 
   const toggleAssignee = (name: string) => {
     if (isViewOnlyModal) return;
-    // Pembuat acara (creator) selalu ada di daftar dan tidak bisa di-unselect
-    if (name.toLowerCase() === creatorName.toLowerCase() || name.toLowerCase() === "you") return;
-    setFormAssignees((prev) =>
-      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
-    );
+    const currentNorm = (creatorName || "").toLowerCase().trim();
+    const targetNorm = name.toLowerCase().trim();
+
+    setFormAssignees((prev) => {
+      const exists = prev.some((n) => {
+        const nNorm = (n || "").toLowerCase().trim();
+        return nNorm === targetNorm || (targetNorm === currentNorm && nNorm === "you");
+      });
+
+      if (exists) {
+        return prev.filter((n) => {
+          const nNorm = (n || "").toLowerCase().trim();
+          return !(nNorm === targetNorm || (targetNorm === currentNorm && nNorm === "you"));
+        });
+      } else {
+        return [...prev, name];
+      }
+    });
   };
+
+  // Consolidated list of users for assignee selection
+  const displayAssigneesList = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; isCurrentUser: boolean }>();
+    const currentNorm = (creatorName || "").toLowerCase().trim();
+
+    if (currentNorm && currentNorm !== "you") {
+      map.set(currentNorm, {
+        id: "current-user",
+        name: creatorName,
+        isCurrentUser: true,
+      });
+    }
+
+    dbUsers.forEach((u) => {
+      const name = (u.name || u.email || "").trim();
+      if (!name) return;
+      const norm = name.toLowerCase();
+      const isCurrent = norm === currentNorm || (user?.primaryEmailAddress?.emailAddress?.toLowerCase() === norm);
+      map.set(norm, {
+        id: u.id,
+        name: isCurrent ? creatorName : name,
+        isCurrentUser: isCurrent,
+      });
+    });
+
+    formAssignees.forEach((assigneeName) => {
+      const name = (assigneeName || "").trim();
+      if (!name) return;
+      const norm = name.toLowerCase();
+      const isCurrent = norm === currentNorm || norm === "you";
+      if (!map.has(norm)) {
+        map.set(norm, {
+          id: `assignee-${norm}`,
+          name: isCurrent ? creatorName : name,
+          isCurrentUser: isCurrent,
+        });
+      }
+    });
+
+    if (viewOnlyCreator && !map.has(viewOnlyCreator.toLowerCase())) {
+      map.set(viewOnlyCreator.toLowerCase(), {
+        id: `creator-${viewOnlyCreator}`,
+        name: viewOnlyCreator,
+        isCurrentUser: viewOnlyCreator.toLowerCase() === currentNorm,
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.isCurrentUser) return -1;
+      if (b.isCurrentUser) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [dbUsers, creatorName, formAssignees, viewOnlyCreator, user]);
 
   const handleSubmitEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1368,44 +1435,35 @@ export default function CalendarPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5 p-2.5 bg-[#1c1c1f] border border-zinc-800 rounded-xl max-h-32 overflow-y-auto">
-                      <button
-                        type="button"
-                        disabled
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-black border border-white flex items-center gap-1.5 shadow-sm opacity-95 cursor-default"
-                        title="Creator is automatically assigned to this event"
-                      >
-                        <span>{creatorName} (You)</span>
-                        <Check size={11} className="font-bold" />
-                      </button>
+                      {displayAssigneesList.map((u) => {
+                        const currentNorm = (creatorName || "").toLowerCase().trim();
+                        const uNorm = u.name.toLowerCase().trim();
+                        const isSelected = formAssignees.some((a) => {
+                          const aNorm = (a || "").toLowerCase().trim();
+                          if (aNorm === uNorm) return true;
+                          if (u.isCurrentUser && (aNorm === "you" || aNorm === currentNorm)) return true;
+                          return false;
+                        });
 
-                      {dbUsers
-                        .filter((u) => {
-                          const name = u.name || u.email;
-                          return (
-                            name.toLowerCase() !== creatorName.toLowerCase() &&
-                            name.toLowerCase() !== "you"
-                          );
-                        })
-                        .map((u) => {
-                          const displayName = u.name || u.email;
-                          const isSelected = formAssignees.includes(displayName);
-                          return (
-                            <button
-                              key={u.id}
-                              type="button"
-                              disabled={isViewOnlyModal}
-                              onClick={() => toggleAssignee(displayName)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border disabled:cursor-not-allowed ${
-                                isSelected
-                                  ? "bg-white text-black border-white shadow-sm font-semibold"
-                                  : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
-                              }`}
-                            >
-                              <span>{displayName}</span>
-                              {isSelected && <Check size={11} className="font-bold" />}
-                            </button>
-                          );
-                        })}
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            disabled={isViewOnlyModal}
+                            onClick={() => toggleAssignee(u.name)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border ${
+                              isViewOnlyModal ? "cursor-default opacity-90" : "cursor-pointer"
+                            } ${
+                              isSelected
+                                ? "bg-white text-black border-white shadow-sm font-semibold"
+                                : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
+                            }`}
+                          >
+                            <span>{u.isCurrentUser ? `${u.name} (You)` : u.name}</span>
+                            {isSelected && <Check size={11} className="font-bold" />}
+                          </button>
+                        );
+                      })}
                     </div>
                     <p className="text-[10px] text-zinc-500 mt-1">
                       * Assigned team members will receive this schedule in their agenda.
