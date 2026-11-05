@@ -39,7 +39,8 @@ import {
   ExternalLink,
   Check,
   AlertCircle,
-  Loader2
+  Loader2,
+  Rocket
 } from "lucide-react";
 import { MobileContainer } from "@/components/MobileContainer";
 
@@ -54,6 +55,7 @@ interface ScheduleEvent {
   meetLink?: string | null;
   location?: string | null;
   creatorName?: string | null;
+  category?: "schedule" | "published_content" | string | null;
   approvals?: Record<string, string> | any;
 }
 
@@ -103,6 +105,7 @@ export default function CalendarPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isViewOnlyModal, setIsViewOnlyModal] = useState(false);
+  const [formCategory, setFormCategory] = useState<"schedule" | "published_content">("schedule");
   const [viewOnlyCreator, setViewOnlyCreator] = useState("");
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("AKASA LAND");
@@ -240,6 +243,7 @@ export default function CalendarPage() {
     setEditingId(null);
     setIsViewOnlyModal(false);
     setViewOnlyCreator("");
+    setFormCategory("schedule");
     setFormDate(dateStr || selectedDate);
     setFormTitle("");
     setFormClient(dbClients[0]?.name || "AKASA LAND");
@@ -258,6 +262,7 @@ export default function CalendarPage() {
     setIsViewOnlyModal(!canEdit);
     setViewOnlyCreator(ev.creatorName || "Team");
     setEditingId(ev.id);
+    setFormCategory(ev.category === "published_content" ? "published_content" : "schedule");
     setFormTitle(ev.title);
     setFormClient(ev.client);
     setFormDate(ev.date);
@@ -293,12 +298,14 @@ export default function CalendarPage() {
     }
     if (!formTitle.trim() || isSubmitting) return;
 
-    // Validasi ketat link meeting & lokasi (tidak boleh kosong)
-    if (formEventType === "online" && !formMeetLink.trim()) {
-      return;
-    }
-    if (formEventType === "offline" && !formLocation.trim()) {
-      return;
+    // Validasi ketat link meeting & lokasi HANYA jika opsi 1 (Jadwal biasa)
+    if (formCategory === "schedule") {
+      if (formEventType === "online" && !formMeetLink.trim()) {
+        return;
+      }
+      if (formEventType === "offline" && !formLocation.trim()) {
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -317,8 +324,9 @@ export default function CalendarPage() {
           assignees: finalAssignees,
           eventType: formEventType,
           meetLink: formEventType === "online" ? formMeetLink.trim() : null,
-          location: formEventType === "offline" ? formLocation.trim() : null,
+          location: formCategory === "schedule" ? (formEventType === "offline" ? formLocation.trim() : null) : null,
           creatorName: creatorName,
+          category: formCategory,
         });
       } else {
         res = await createCalendarEvent({
@@ -329,8 +337,9 @@ export default function CalendarPage() {
           assignees: finalAssignees,
           eventType: formEventType,
           meetLink: formEventType === "online" ? formMeetLink.trim() : null,
-          location: formEventType === "offline" ? formLocation.trim() : null,
+          location: formCategory === "schedule" ? (formEventType === "offline" ? formLocation.trim() : null) : null,
           creatorName: creatorName,
+          category: formCategory,
         });
       }
 
@@ -526,6 +535,8 @@ export default function CalendarPage() {
   const upcomingEvents = events
     .filter((ev) => {
       if (!ev.date) return false;
+      // Penanda konten tayang TIDAK masuk ke upcoming list
+      if (ev.category === "published_content") return false;
       const isInCurrentViewedMonth = ev.date.startsWith(currentViewMonthPrefix);
       const isUpcomingIn35Days = ev.date >= todayStr && ev.date <= next30DaysStr;
       return isInCurrentViewedMonth || isUpcomingIn35Days;
@@ -867,6 +878,7 @@ export default function CalendarPage() {
                       {dayEvents.map((ev) => {
                         const theme = getClientThemeByName(ev.client, dbClients);
 
+                        const isPublished = ev.category === "published_content";
                         return (
                           <div
                             key={ev.id}
@@ -874,13 +886,25 @@ export default function CalendarPage() {
                               e.stopPropagation();
                               handleOpenEditModal(ev);
                             }}
-                            className={`text-[10px] px-1.5 py-0.5 rounded border truncate font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${theme.badge}`}
+                            className={`text-[10px] px-1.5 py-0.5 rounded border truncate font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${theme.badge} ${
+                              isPublished ? "ring-1 ring-emerald-500/40 border-emerald-500/30" : ""
+                            }`}
+                            title={isPublished ? `🚀 Konten Tayang: ${ev.title} (${ev.client})` : `${ev.title} (${ev.client})`}
                           >
-                            <span 
-                              className="w-1.5 h-1.5 rounded-full shrink-0" 
-                              style={{ backgroundColor: theme.dot }} 
-                            />
+                            {isPublished ? (
+                              <span className="text-[10px] leading-none shrink-0" title="Konten Tayang">🚀</span>
+                            ) : (
+                              <span 
+                                className="w-1.5 h-1.5 rounded-full shrink-0" 
+                                style={{ backgroundColor: theme.dot }} 
+                              />
+                            )}
                             <span className="truncate">{ev.title}</span>
+                            {isPublished && (
+                              <span className="text-[8px] uppercase tracking-wider text-emerald-400 font-mono ml-auto shrink-0 hidden sm:inline">
+                                Tayang
+                              </span>
+                            )}
                           </div>
                         );
                       })}
@@ -909,16 +933,32 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-2">
                   {editingId ? (
                     isViewOnlyModal ? (
-                      <CalendarIcon size={16} className="text-zinc-400" />
+                      formCategory === "published_content" ? (
+                        <Rocket size={16} className="text-emerald-400" />
+                      ) : (
+                        <CalendarIcon size={16} className="text-zinc-400" />
+                      )
                     ) : (
                       <Pencil size={16} className="text-amber-400" />
                     )
+                  ) : formCategory === "published_content" ? (
+                    <Rocket size={16} className="text-[#C65921]" />
                   ) : (
                     <CalendarIcon size={16} className="text-white" />
                   )}
                   <div>
                     <h3 className="text-sm font-bold text-white leading-tight">
-                      {editingId ? (isViewOnlyModal ? "Schedule Details" : "Edit Schedule Entry") : "Create Schedule Entry"}
+                      {editingId
+                        ? isViewOnlyModal
+                          ? formCategory === "published_content"
+                            ? "Detail Konten Tayang"
+                            : "Schedule Details"
+                          : formCategory === "published_content"
+                          ? "Edit Konten Tayang"
+                          : "Edit Schedule Entry"
+                        : formCategory === "published_content"
+                        ? "Tandai Konten Tayang"
+                        : "Create Schedule Entry"}
                     </h3>
                     {isViewOnlyModal && (
                       <span className="text-[10px] text-zinc-400 block mt-0.5">
@@ -936,17 +976,84 @@ export default function CalendarPage() {
               </div>
 
               <form onSubmit={handleSubmitEvent} className="space-y-4 text-xs">
+                {/* 2 Opsi Utama: 1. Buat Jadwal vs 2. Penanda Konten Tayang */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl">
+                  <button
+                    type="button"
+                    disabled={isViewOnlyModal}
+                    onClick={() => setFormCategory("schedule")}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer disabled:cursor-not-allowed ${
+                      formCategory === "schedule"
+                        ? "bg-[#C65921] text-white shadow-sm"
+                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                    }`}
+                  >
+                    <CalendarIcon size={13} />
+                    <span>1. Buat Jadwal</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isViewOnlyModal}
+                    onClick={() => {
+                      setFormCategory("published_content");
+                      if (formMeetLink === "https://meet.google.com/new") setFormMeetLink("");
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer disabled:cursor-not-allowed ${
+                      formCategory === "published_content"
+                        ? "bg-[#C65921] text-white shadow-sm"
+                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                    }`}
+                  >
+                    <Rocket size={13} />
+                    <span>2. Konten Tayang</span>
+                  </button>
+                </div>
+
+                {formCategory === "published_content" && (
+                  <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-800/40 text-[11px] text-emerald-300/90 flex items-center gap-2">
+                    <Rocket size={14} className="shrink-0 text-emerald-400" />
+                    <span>
+                      Penanda konten/brief yang sudah live di sosial media. Tetap terlihat di tanggalan kalender dan tidak masuk ke upcoming list.
+                    </span>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-zinc-400 mb-1.5 font-medium">
-                    Event Title <span className="text-rose-400">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-zinc-400 font-medium">
+                      {formCategory === "published_content" ? "Judul Konten / Brief Tayang" : "Event Title"} <span className="text-rose-400">*</span>
+                    </label>
+                  </div>
+                  {formCategory === "published_content" && !isViewOnlyModal && (
+                    <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 scrollbar-none">
+                      <span className="text-[10px] text-zinc-500 font-medium shrink-0">Format:</span>
+                      {["Feeds", "Reels", "Story", "Carousel", "TikTok"].map((fmt) => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          onClick={() => {
+                            if (!formTitle.includes(`[${fmt}]`)) {
+                              setFormTitle(`[${fmt}] ${formTitle.replace(/^\[[^\]]+\]\s*/, "")}`.trim());
+                            }
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] border border-zinc-700/60 transition cursor-pointer shrink-0"
+                        >
+                          +{fmt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <input
                     type="text"
                     required
                     disabled={isViewOnlyModal}
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
-                    placeholder="e.g. Client Strategy Meeting"
+                    placeholder={
+                      formCategory === "published_content"
+                        ? "e.g. [Reels] Promo Launching Brand / Tips Feeds"
+                        : "e.g. Client Strategy Meeting"
+                    }
                     className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
@@ -1286,93 +1393,111 @@ export default function CalendarPage() {
                   </p>
                 </div>
 
-                {/* Event Format: Online vs Offline */}
-                <div>
-                  <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      disabled={isViewOnlyModal}
-                      onClick={() => {
-                        setFormEventType("online");
-                        if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
-                      }}
-                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
-                        formEventType === "online"
-                          ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
-                          : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
-                      }`}
-                    >
-                      <Video size={13} />
-                      <span>Online Meeting</span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isViewOnlyModal}
-                      onClick={() => setFormEventType("offline")}
-                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
-                        formEventType === "offline"
-                          ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
-                          : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
-                      }`}
-                    >
-                      <MapPin size={13} />
-                      <span>Offline Meeting</span>
-                    </button>
-                  </div>
-                </div>
+                {formCategory === "schedule" ? (
+                  <>
+                    {/* Event Format: Online vs Offline */}
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={isViewOnlyModal}
+                          onClick={() => {
+                            setFormEventType("online");
+                            if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
+                          }}
+                          className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
+                            formEventType === "online"
+                              ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                              : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
+                          }`}
+                        >
+                          <Video size={13} />
+                          <span>Online Meeting</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isViewOnlyModal}
+                          onClick={() => setFormEventType("offline")}
+                          className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
+                            formEventType === "offline"
+                              ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                              : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
+                          }`}
+                        >
+                          <MapPin size={13} />
+                          <span>Offline Meeting</span>
+                        </button>
+                      </div>
+                    </div>
 
-                {/* Conditional Field: Meet Link jika Online, Lokasi jika Offline - Peringatan Wajib Diisi hanya muncul saat dikosongkan */}
-                {formEventType === "online" ? (
+                    {/* Conditional Field: Meet Link jika Online, Lokasi jika Offline */}
+                    {formEventType === "online" ? (
+                      <div>
+                        <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
+                          </span>
+                          {attemptedSubmit && !formMeetLink.trim() && (
+                            <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
+                              <AlertCircle size={11} /> Required
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          disabled={isViewOnlyModal}
+                          value={formMeetLink}
+                          onChange={(e) => setFormMeetLink(e.target.value)}
+                          placeholder="https://meet.google.com/xyz"
+                          className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
+                            attemptedSubmit && !formMeetLink.trim()
+                              ? "border-rose-500/80 focus:border-rose-500"
+                              : "border-zinc-800 focus:border-indigo-500"
+                          }`}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
+                          </span>
+                          {attemptedSubmit && !formLocation.trim() && (
+                            <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
+                              <AlertCircle size={11} /> Required
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          disabled={isViewOnlyModal}
+                          value={formLocation}
+                          onChange={(e) => setFormLocation(e.target.value)}
+                          placeholder="e.g. Sika Office, Semarang / Client Address"
+                          className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
+                            attemptedSubmit && !formLocation.trim()
+                              ? "border-rose-500/80 focus:border-rose-500"
+                              : "border-zinc-800 focus:border-emerald-500"
+                          }`}
+                        />
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <div>
-                    <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
-                      <span className="flex items-center gap-1">
-                        <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
-                      </span>
-                      {attemptedSubmit && !formMeetLink.trim() && (
-                        <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                          <AlertCircle size={11} /> Required
-                        </span>
-                      )}
+                    <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
+                      <ExternalLink size={12} className="text-zinc-400" /> Link Postingan / Asset (Opsional)
                     </label>
                     <input
                       type="url"
-                      required
                       disabled={isViewOnlyModal}
-                      value={formMeetLink}
+                      value={formMeetLink === "https://meet.google.com/new" ? "" : formMeetLink}
                       onChange={(e) => setFormMeetLink(e.target.value)}
-                      placeholder="https://meet.google.com/xyz"
-                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
-                        attemptedSubmit && !formMeetLink.trim()
-                          ? "border-rose-500/80 focus:border-rose-500"
-                          : "border-zinc-800 focus:border-indigo-500"
-                      }`}
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
-                      <span className="flex items-center gap-1">
-                        <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
-                      </span>
-                      {attemptedSubmit && !formLocation.trim() && (
-                        <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                          <AlertCircle size={11} /> Required
-                        </span>
-                      )}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      disabled={isViewOnlyModal}
-                      value={formLocation}
-                      onChange={(e) => setFormLocation(e.target.value)}
-                      placeholder="e.g. Sika Office, Semarang / Client Address"
-                      className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
-                        attemptedSubmit && !formLocation.trim()
-                          ? "border-rose-500/80 focus:border-rose-500"
-                          : "border-zinc-800 focus:border-emerald-500"
-                      }`}
+                      placeholder="https://instagram.com/p/... atau link Google Drive"
+                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 text-xs transition disabled:opacity-75 disabled:cursor-not-allowed"
                     />
                   </div>
                 )}
@@ -1419,7 +1544,7 @@ export default function CalendarPage() {
                   </div>
                 ) : (
                   <>
-                    {!editingId && (
+                    {!editingId && formCategory === "schedule" && (
                       <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none mt-2">
                         <input
                           type="checkbox"
@@ -1459,7 +1584,13 @@ export default function CalendarPage() {
                       disabled={isSubmitting}
                       className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
                     >
-                      {isSubmitting ? "Saving..." : editingId ? "Save Changes" : "Save Schedule"}
+                      {isSubmitting
+                        ? "Saving..."
+                        : editingId
+                        ? "Save Changes"
+                        : formCategory === "published_content"
+                        ? "Tandai Konten Tayang"
+                        : "Save Schedule"}
                     </button>
                   </div>
                   </>

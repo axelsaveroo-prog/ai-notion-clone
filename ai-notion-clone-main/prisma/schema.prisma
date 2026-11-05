@@ -76,6 +76,7 @@ model CalendarEvent {
   meetLink    String?
   location    String?
   creatorName String?
+  category    String?  @default("schedule")
   approvals   Json?    // Menyimpan status persetujuan assignee: { [userName]: "pending" | "accepted" | "rejected" }
   createdAt   DateTime @default(now())
 }

@@ -30,6 +30,7 @@ export interface ScheduleEvent {
   meetLink?: string | null;
   location?: string | null;
   creatorName?: string | null;
+  category?: "schedule" | "published_content" | string | null;
   approvals?: Record<string, string> | any;
 }
 
@@ -67,7 +68,7 @@ export function TodayScheduleReminder() {
     try {
       const events: any = await getCalendarEvents();
       if (events && Array.isArray(events)) {
-        const filtered = events.filter((ev: ScheduleEvent) => ev.date === todayStr);
+        const filtered = events.filter((ev: ScheduleEvent) => ev.date === todayStr && ev.category !== "published_content");
         setTodayEvents(filtered);
 
         // Sync ke localStorage agar komponen offline/MoM tetap sinkron

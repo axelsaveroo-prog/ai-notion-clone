@@ -971,18 +971,23 @@ export async function createCalendarEvent(data: {
   meetLink?: string | null;
   location?: string | null;
   creatorName?: string | null;
+  category?: "schedule" | "published_content" | string | null;
 }) {
   try {
+    const isPublishedContent = data.category === "published_content";
+
     // Siapkan initial approval status
     const initialApprovals: Record<string, string> = {};
     if (data.creatorName) {
       initialApprovals[data.creatorName] = "accepted";
     }
-    data.assignees.forEach((assignee) => {
-      if (assignee !== data.creatorName && assignee !== "You") {
-        initialApprovals[assignee] = "pending";
-      }
-    });
+    if (!isPublishedContent) {
+      data.assignees.forEach((assignee) => {
+        if (assignee !== data.creatorName && assignee !== "You") {
+          initialApprovals[assignee] = "pending";
+        }
+      });
+    }
 
     const event = await prisma.calendarEvent.create({
       data: {
@@ -990,33 +995,43 @@ export async function createCalendarEvent(data: {
         title: data.title,
         client: data.client,
         date: data.date,
-        time: data.time,
+        time: data.time || "10:00",
         assignees: data.assignees,
         eventType: data.eventType || "online",
         meetLink: data.meetLink || null,
         location: data.location || null,
         creatorName: data.creatorName || null,
+        category: data.category || "schedule",
         approvals: initialApprovals,
       },
     });
 
     // Send Notion-style mention email to tagged assignees
     if (data.assignees && data.assignees.length > 0) {
+      const emailTitle = isPublishedContent
+        ? `🚀 Konten Tayang: ${data.title}`
+        : `${data.title} (${data.date} • ${data.time})`;
+      const snippet = isPublishedContent
+        ? `${data.client} • Penanda Konten/Brief Tayang`
+        : `${data.client} • ${data.eventType === "offline" ? "Offline Meeting" : "Online Meeting"}`;
+
       sendMentionEmailNotification({
         type: "schedule",
         authorName: data.creatorName || "Sika Creative Team",
-        itemTitle: `${data.title} (${data.date} • ${data.time})`,
+        itemTitle: emailTitle,
         itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/calendar`,
         assignees: data.assignees,
-        snippetText: `${data.client} • ${data.eventType === "offline" ? "Offline Meeting" : "Online Meeting"}`
+        snippetText: snippet
       }).catch((e) => console.warn("Email notify error:", e));
 
       // Kirim Web Push ke HP yang di-tag meskipun aplikasi ditutup
       sendWebPushNotification({
         userEmails: data.assignees,
         excludeEmail: data.creatorName || "",
-        title: `🗓️ Jadwal Baru: ${data.title}`,
-        body: `${data.creatorName || "Tim"} menandai kamu di jadwal [${data.client}] (${data.date})`,
+        title: isPublishedContent ? `🚀 Konten Tayang: ${data.title}` : `🗓️ Jadwal Baru: ${data.title}`,
+        body: isPublishedContent
+          ? `${data.creatorName || "Tim"} menandai konten tayang [${data.client}] (${data.date})`
+          : `${data.creatorName || "Tim"} menandai kamu di jadwal [${data.client}] (${data.date})`,
         url: "/calendar",
         tag: `schedule-${event.id}`,
       }).catch(() => {});
@@ -1046,6 +1061,7 @@ export async function updateCalendarEvent(
     meetLink?: string | null;
     location?: string | null;
     creatorName?: string | null;
+    category?: "schedule" | "published_content" | string | null;
   }
 ) {
   try {
@@ -1061,6 +1077,7 @@ export async function updateCalendarEvent(
         meetLink: data.meetLink || null,
         location: data.location || null,
         ...(data.creatorName ? { creatorName: data.creatorName } : {}),
+        ...(data.category ? { category: data.category } : {}),
       },
     });
 

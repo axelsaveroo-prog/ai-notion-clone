@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Loader2,
   Pencil,
-  Trash2
+  Trash2,
+  Rocket
 } from "lucide-react";
 import {
   getCalendarEvents,
@@ -50,6 +51,7 @@ interface EventItem {
   meetLink?: string | null;
   location?: string | null;
   creatorName?: string | null;
+  category?: "schedule" | "published_content" | string | null;
   approvals?: Record<string, string> | any;
 }
 
@@ -92,6 +94,7 @@ export function TeamCalendar() {
 
   // State Modal Add Schedule
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formCategory, setFormCategory] = useState<"schedule" | "published_content">("schedule");
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("AKASA LAND");
   const [formDate, setFormDate] = useState(getTodayFormatted());
@@ -234,6 +237,7 @@ export function TeamCalendar() {
     if (quickTitle.trim()) {
       setFormTitle(quickTitle.trim());
     }
+    setFormCategory("schedule");
     setFormDate(getTodayFormatted());
     setFormTime("10:00");
     setFormClient(dbClients[0]?.name || "AKASA LAND");
@@ -259,12 +263,14 @@ export function TeamCalendar() {
     setAttemptedSubmit(true);
     if (!formTitle.trim() || isSubmitting) return;
 
-    // Validasi wajib diisi untuk link meeting atau lokasi
-    if (formEventType === "online" && !formMeetLink.trim()) {
-      return;
-    }
-    if (formEventType === "offline" && !formLocation.trim()) {
-      return;
+    // Validasi wajib diisi untuk link meeting atau lokasi HANYA jika opsi 1 (Jadwal biasa)
+    if (formCategory === "schedule") {
+      if (formEventType === "online" && !formMeetLink.trim()) {
+        return;
+      }
+      if (formEventType === "offline" && !formLocation.trim()) {
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -279,13 +285,14 @@ export function TeamCalendar() {
         time: formTime,
         assignees: finalAssignees,
         eventType: formEventType,
-        meetLink: formEventType === "online" ? formMeetLink.trim() : null,
-        location: formEventType === "offline" ? formLocation.trim() : null,
+        meetLink: formCategory === "schedule" ? (formEventType === "online" ? formMeetLink.trim() : null) : (formMeetLink.trim() || null),
+        location: formCategory === "schedule" ? (formEventType === "offline" ? formLocation.trim() : null) : null,
         creatorName: creatorName,
+        category: formCategory,
       });
 
       if (res && res.success) {
-        if (directToGCal) {
+        if (directToGCal && formCategory === "schedule") {
           toast.success("New schedule entry saved & opened in Google Calendar!");
           const autoGCalUrl = getGoogleCalendarUrl({
             title: formTitle.trim(),
@@ -416,6 +423,7 @@ export function TeamCalendar() {
 
   const weeklyUpcoming = [...events]
     .filter((ev) => ev.date >= todayStr && ev.date <= next7DaysStr)
+    .filter((ev) => ev.category !== "published_content")
     .filter((ev) => {
       if (!isUserTaggedOrCreator(ev)) return false;
       const currentUserName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
@@ -593,8 +601,14 @@ export function TeamCalendar() {
           <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
-                <CalendarIcon size={16} className="text-white" />
-                <h3 className="text-sm font-bold text-white">Create Schedule Entry</h3>
+                {formCategory === "published_content" ? (
+                  <Rocket size={16} className="text-[#C65921]" />
+                ) : (
+                  <CalendarIcon size={16} className="text-white" />
+                )}
+                <h3 className="text-sm font-bold text-white">
+                  {formCategory === "published_content" ? "Tandai Konten Tayang" : "Create Schedule Entry"}
+                </h3>
               </div>
               <button
                 type="button"
@@ -949,85 +963,102 @@ export function TeamCalendar() {
                 </p>
               </div>
 
-              {/* Event Format: Online vs Offline */}
-              <div>
-                <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormEventType("online");
-                      if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
-                    }}
-                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "online"
-                        ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/50 shadow-sm"
-                        : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                      }`}
-                  >
-                    <Video size={13} />
-                    <span>Online Meeting</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormEventType("offline")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "offline"
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm"
-                        : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                      }`}
-                  >
-                    <MapPin size={13} />
-                    <span>Offline Meeting</span>
-                  </button>
-                </div>
-              </div>
+              {formCategory === "schedule" ? (
+                <>
+                  {/* Event Format: Online vs Offline */}
+                  <div>
+                    <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormEventType("online");
+                          if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
+                        }}
+                        className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "online"
+                            ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                            : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                          }`}
+                      >
+                        <Video size={13} />
+                        <span>Online Meeting</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormEventType("offline")}
+                        className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "offline"
+                            ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                            : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                          }`}
+                      >
+                        <MapPin size={13} />
+                        <span>Offline Meeting</span>
+                      </button>
+                    </div>
+                  </div>
 
-              {/* Conditional Field: Meet Link jika Online, Lokasi jika Offline - Peringatan Wajib Diisi hanya muncul saat dikosongkan */}
-              {formEventType === "online" ? (
+                  {/* Conditional Field: Meet Link jika Online, Lokasi jika Offline */}
+                  {formEventType === "online" ? (
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
+                        </span>
+                        {attemptedSubmit && !formMeetLink.trim() && (
+                          <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
+                            <AlertCircle size={11} /> Required
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={formMeetLink}
+                        onChange={(e) => setFormMeetLink(e.target.value)}
+                        placeholder="https://meet.google.com/xyz"
+                        className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formMeetLink.trim()
+                            ? "border-rose-500/80 focus:border-rose-500"
+                            : "border-zinc-800 focus:border-indigo-500"
+                          }`}
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
+                        </span>
+                        {attemptedSubmit && !formLocation.trim() && (
+                          <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
+                            <AlertCircle size={11} /> Required
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formLocation}
+                        onChange={(e) => setFormLocation(e.target.value)}
+                        placeholder="e.g. Sika Office, Semarang / Client Address"
+                        className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formLocation.trim()
+                            ? "border-rose-500/80 focus:border-rose-500"
+                            : "border-zinc-800 focus:border-emerald-500"
+                          }`}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
                 <div>
-                  <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
-                    </span>
-                    {attemptedSubmit && !formMeetLink.trim() && (
-                      <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                        <AlertCircle size={11} /> Required
-                      </span>
-                    )}
+                  <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
+                    <ExternalLink size={12} className="text-zinc-400" /> Link Postingan / Asset (Opsional)
                   </label>
                   <input
                     type="url"
-                    required
-                    value={formMeetLink}
+                    value={formMeetLink === "https://meet.google.com/new" ? "" : formMeetLink}
                     onChange={(e) => setFormMeetLink(e.target.value)}
-                    placeholder="https://meet.google.com/xyz"
-                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formMeetLink.trim()
-                        ? "border-rose-500/80 focus:border-rose-500"
-                        : "border-zinc-800 focus:border-indigo-500"
-                      }`}
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
-                    </span>
-                    {attemptedSubmit && !formLocation.trim() && (
-                      <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                        <AlertCircle size={11} /> Required
-                      </span>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formLocation}
-                    onChange={(e) => setFormLocation(e.target.value)}
-                    placeholder="e.g. Sika Office, Semarang / Client Address"
-                    className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formLocation.trim()
-                        ? "border-rose-500/80 focus:border-rose-500"
-                        : "border-zinc-800 focus:border-emerald-500"
-                      }`}
+                    placeholder="https://instagram.com/p/... atau link Google Drive"
+                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 text-xs transition"
                   />
                 </div>
               )}
@@ -1061,19 +1092,21 @@ export function TeamCalendar() {
                 </div>
               </div>
 
-              {/* Option to direct to Google Calendar */}
-              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none">
-                <input
-                  type="checkbox"
-                  checked={directToGCal}
-                  onChange={(e) => setDirectToGCal(e.target.checked)}
-                  className="w-4 h-4 rounded text-[#C65921] accent-[#C65921] cursor-pointer"
-                />
-                <div className="flex items-center gap-1.5 text-xs text-zinc-300">
-                  <ExternalLink size={13} className="text-[#C65921]" />
-                  <span>Direct ke Google Calendar setelah disimpan</span>
-                </div>
-              </label>
+              {/* Option to direct to Google Calendar (Hanya jika jadwal agenda) */}
+              {formCategory === "schedule" && (
+                <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none">
+                  <input
+                    type="checkbox"
+                    checked={directToGCal}
+                    onChange={(e) => setDirectToGCal(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#C65921] accent-[#C65921] cursor-pointer"
+                  />
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                    <ExternalLink size={13} className="text-[#C65921]" />
+                    <span>Direct ke Google Calendar setelah disimpan</span>
+                  </div>
+                </label>
+              )}
 
               {/* Buttons */}
               <div className="flex items-center gap-2.5 pt-1">
@@ -1090,7 +1123,11 @@ export function TeamCalendar() {
                   disabled={isSubmitting}
                   className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
                 >
-                  {isSubmitting ? "Saving..." : "Save Schedule"}
+                  {isSubmitting
+                    ? "Saving..."
+                    : formCategory === "published_content"
+                    ? "Tandai Konten Tayang"
+                    : "Save Schedule"}
                 </button>
               </div>
             </form>

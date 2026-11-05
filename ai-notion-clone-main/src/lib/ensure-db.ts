@@ -55,6 +55,7 @@ const DDL_STATEMENTS = [
     "meetLink" TEXT,
     "location" TEXT,
     "creatorName" TEXT,
+    "category" TEXT DEFAULT 'schedule',
     "approvals" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
@@ -123,6 +124,7 @@ const DDL_STATEMENTS = [
   `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "meetLink" TEXT`,
   `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "location" TEXT`,
   `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "creatorName" TEXT`,
+  `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "category" TEXT DEFAULT 'schedule'`,
   `ALTER TABLE "CalendarEvent" ADD COLUMN IF NOT EXISTS "approvals" JSONB`,
   `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "assignedBy" TEXT`,
   `ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "dueDate" TEXT`,
