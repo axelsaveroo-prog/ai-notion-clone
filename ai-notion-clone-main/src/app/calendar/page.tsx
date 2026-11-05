@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useUser } from "@clerk/nextjs";
 import { 
   getCalendarEvents, 
@@ -103,6 +104,32 @@ export default function CalendarPage() {
 
   // State Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Sync body modal class & dispatch event so BottomNav hides automatically
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (isModalOpen) {
+      document.body.classList.add("modal-open");
+      document.body.setAttribute("data-modal-open", "true");
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.classList.remove("modal-open");
+      document.body.removeAttribute("data-modal-open");
+      document.body.style.overflow = "";
+    }
+    window.dispatchEvent(new CustomEvent("sika_modal_change", { detail: { open: isModalOpen } }));
+    return () => {
+      document.body.classList.remove("modal-open");
+      document.body.removeAttribute("data-modal-open");
+      document.body.style.overflow = "";
+      window.dispatchEvent(new CustomEvent("sika_modal_change", { detail: { open: false } }));
+    };
+  }, [isModalOpen]);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isViewOnlyModal, setIsViewOnlyModal] = useState(false);
   const [formCategory, setFormCategory] = useState<"schedule" | "published_content">("schedule");
@@ -889,7 +916,7 @@ export default function CalendarPage() {
                             className={`text-[10px] px-1.5 py-0.5 rounded border truncate font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${theme.badge} ${
                               isPublished ? "ring-1 ring-emerald-500/40 border-emerald-500/30" : ""
                             }`}
-                            title={isPublished ? `Konten Tayang: ${ev.title} (${ev.client})` : `${ev.title} (${ev.client})`}
+                            title={isPublished ? `Published Content: ${ev.title} (${ev.client})` : `${ev.title} (${ev.client})`}
                           >
                             <span 
                               className={`w-1.5 h-1.5 rounded-full shrink-0 ${isPublished ? "bg-emerald-400" : ""}`} 
@@ -898,7 +925,7 @@ export default function CalendarPage() {
                             <span className="truncate">{ev.title}</span>
                             {isPublished && (
                               <span className="text-[8px] uppercase tracking-wider text-emerald-400 font-mono ml-auto shrink-0 hidden sm:inline">
-                                Tayang
+                                Live
                               </span>
                             )}
                           </div>
@@ -922,11 +949,12 @@ export default function CalendarPage() {
         </div>
 
         {/* MODAL SCHEDULE (ADD & EDIT) */}
-        {isModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-            <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div className="flex items-center gap-2">
+        {mounted && isModalOpen && typeof document !== "undefined" && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6">
+            <div className="bg-[#141416] border border-zinc-800/80 rounded-3xl max-w-md w-full shadow-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-zinc-800/80 shrink-0">
+                <div className="flex items-center gap-2.5">
                   {editingId ? (
                     isViewOnlyModal ? (
                       formCategory === "published_content" ? (
@@ -947,13 +975,13 @@ export default function CalendarPage() {
                       {editingId
                         ? isViewOnlyModal
                           ? formCategory === "published_content"
-                            ? "Detail Konten Tayang"
+                            ? "Published Content Details"
                             : "Schedule Details"
                           : formCategory === "published_content"
-                          ? "Edit Konten Tayang"
+                          ? "Edit Published Content"
                           : "Edit Schedule Entry"
                         : formCategory === "published_content"
-                        ? "Tandai Konten Tayang"
+                        ? "Mark Published Content"
                         : "Create Schedule Entry"}
                     </h3>
                     {isViewOnlyModal && (
@@ -965,636 +993,635 @@ export default function CalendarPage() {
                 </div>
                 <button
                   onClick={() => setIsModalOpen(false)}
-                  className="text-zinc-400 hover:text-white transition cursor-pointer"
+                  className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+                  title="Close"
                 >
                   <X size={16} />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmitEvent} className="space-y-4 text-xs">
-                {/* 2 Opsi Utama: 1. Buat Jadwal vs 2. Penanda Konten Tayang */}
-                <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl">
-                  <button
-                    type="button"
-                    disabled={isViewOnlyModal}
-                    onClick={() => setFormCategory("schedule")}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer disabled:cursor-not-allowed ${
-                      formCategory === "schedule"
-                        ? "bg-[#C65921] text-white shadow-sm"
-                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
-                    }`}
-                  >
-                    <CalendarIcon size={13} />
-                    <span>1. Buat Jadwal</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isViewOnlyModal}
-                    onClick={() => {
-                      setFormCategory("published_content");
-                      if (formMeetLink === "https://meet.google.com/new") setFormMeetLink("");
-                    }}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer disabled:cursor-not-allowed ${
-                      formCategory === "published_content"
-                        ? "bg-[#C65921] text-white shadow-sm"
-                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
-                    }`}
-                  >
-                    <CheckCircle2 size={13} />
-                    <span>2. Konten Tayang</span>
-                  </button>
-                </div>
-
-                {formCategory === "published_content" && (
-                  <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-800/40 text-[11px] text-emerald-300/90 flex items-center gap-2">
-                    <CheckCircle2 size={14} className="shrink-0 text-emerald-400" />
-                    <span>
-                      Penanda konten/brief yang sudah live di sosial media. Tetap terlihat di tanggalan kalender dan tidak masuk ke upcoming list.
-                    </span>
-                  </div>
-                )}
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-zinc-400 font-medium">
-                      {formCategory === "published_content" ? "Judul Konten / Brief Tayang" : "Event Title"} <span className="text-rose-400">*</span>
-                    </label>
-                  </div>
-                  {formCategory === "published_content" && !isViewOnlyModal && (
-                    <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 scrollbar-none">
-                      <span className="text-[10px] text-zinc-500 font-medium shrink-0">Format:</span>
-                      {["Feeds", "Reels", "Story", "Carousel", "TikTok"].map((fmt) => (
-                        <button
-                          key={fmt}
-                          type="button"
-                          onClick={() => {
-                            if (!formTitle.includes(`[${fmt}]`)) {
-                              setFormTitle(`[${fmt}] ${formTitle.replace(/^\[[^\]]+\]\s*/, "")}`.trim());
-                            }
-                          }}
-                          className="px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] border border-zinc-700/60 transition cursor-pointer shrink-0"
-                        >
-                          +{fmt}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <input
-                    type="text"
-                    required
-                    disabled={isViewOnlyModal}
-                    value={formTitle}
-                    onChange={(e) => setFormTitle(e.target.value)}
-                    placeholder={
-                      formCategory === "published_content"
-                        ? "e.g. [Reels] Promo Launching Brand / Tips Feeds"
-                        : "e.g. Client Strategy Meeting"
-                    }
-                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-zinc-400 font-medium flex items-center gap-1">
-                      <Tag size={12} /> Client Tag
-                    </label>
-                    <div className="flex items-center gap-2">
-                      {!isViewOnlyModal && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsManagingClientsModal(!isManagingClientsModal);
-                            setIsAddingNewClientModal(false);
-                            setEditingClientModal(null);
-                          }}
-                          className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <Pencil size={10} />
-                          <span>{isManagingClientsModal ? "Close" : "Manage Clients"}</span>
-                        </button>
-                      )}
-                      {!isViewOnlyModal && !isAddingNewClientModal && !isManagingClientsModal && !editingClientModal && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddingNewClientModal(true);
-                            setIsManagingClientsModal(false);
-                            setEditingClientModal(null);
-                          }}
-                          className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <Plus size={11} /> + New Client
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {editingClientModal ? (
-                    <form onSubmit={handleUpdateClientModal} className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-white">Edit Client</span>
-                        <button
-                          type="button"
-                          onClick={() => setEditingClientModal(null)}
-                          className="text-zinc-400 hover:text-white p-0.5 cursor-pointer"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        autoFocus
-                        value={editClientModalName}
-                        onChange={(e) => setEditClientModalName(e.target.value)}
-                        placeholder="Nama client..."
-                        className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
-                      />
-                      <div>
-                        <span className="text-[10px] text-zinc-400 block mb-1">Pilihan Warna (Soft):</span>
-                        <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                          {COLOR_OPTIONS_LIST.map((opt) => {
-                            const isPicked = editClientModalColor === opt.key;
-                            return (
-                              <button
-                                key={opt.key}
-                                type="button"
-                                onClick={() => setEditClientModalColor(opt.key)}
-                                title={opt.label}
-                                className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${
-                                  isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
-                                }`}
-                                style={{ backgroundColor: opt.dot }}
-                              >
-                                {isPicked && <Check size={12} className="text-black font-bold" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingClientModal(null)}
-                          className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
-                        >
-                          Batal
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={!editClientModalName.trim() || isUpdatingClientModal}
-                          className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
-                        >
-                          {isUpdatingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                          <span>Save Changes</span>
-                        </button>
-                      </div>
-                    </form>
-                  ) : isAddingNewClientModal ? (
-                    <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-white">Create New Client</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingNewClientModal(false)}
-                          className="text-zinc-400 hover:text-white p-0.5 cursor-pointer"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        autoFocus
-                        value={newClientModalName}
-                        onChange={(e) => setNewClientModalName(e.target.value)}
-                        placeholder="Client name (e.g. BABA)..."
-                        className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
-                      />
-                      <div>
-                        <span className="text-[10px] text-zinc-400 block mb-1">Color Palette:</span>
-                        <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                          {COLOR_OPTIONS_LIST.map((opt) => {
-                            const isPicked = newClientModalColor === opt.key;
-                            return (
-                              <button
-                                key={opt.key}
-                                type="button"
-                                onClick={() => setNewClientModalColor(opt.key)}
-                                title={opt.label}
-                                className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${
-                                  isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
-                                }`}
-                                style={{ backgroundColor: opt.dot }}
-                              >
-                                {isPicked && <Check size={12} className="text-black font-bold" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingNewClientModal(false)}
-                          className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!newClientModalName.trim() || isSavingClientModal}
-                          onClick={async () => {
-                            const trimmed = newClientModalName.trim();
-                            if (!trimmed || isSavingClientModal) return;
-                            setIsSavingClientModal(true);
-                            try {
-                              const res = await createClientAction({
-                                name: trimmed,
-                                color: newClientModalColor,
-                              });
-                              if (res && res.success && res.client) {
-                                setDbClients((prev) => {
-                                  const filtered = prev.filter((c) => c.name.toLowerCase() !== trimmed.toLowerCase());
-                                  return [...filtered, res.client].sort((a, b) => a.name.localeCompare(b.name));
-                                });
-                                setFormClient(res.client.name);
-                                setNewClientModalName("");
-                                setIsAddingNewClientModal(false);
-                              } else {
-                                alert(res?.error || "Failed to create client");
-                              }
-                            } catch (e: any) {
-                              alert("Failed to create client: " + e?.message);
-                            } finally {
-                              setIsSavingClientModal(false);
-                            }
-                          }}
-                          className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
-                        >
-                          {isSavingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                          <span>Save Client</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : isManagingClientsModal ? (
-                    <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
-                        <span className="text-[11px] font-semibold text-white">Client List & Management</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsManagingClientsModal(false)}
-                          className="text-zinc-400 hover:text-white p-0.5 cursor-pointer"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                      <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                        {dbClients.map((c) => {
-                          const theme = getClientThemeByName(c.name, dbClients);
-                          return (
-                            <div
-                              key={c.id || c.name}
-                              className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#141416] border border-zinc-800/80 text-xs"
-                            >
-                              <div className="flex items-center gap-2 truncate">
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: theme.dot }} />
-                                <span className={`px-2 py-0.5 rounded border text-[11px] font-medium truncate ${theme.badge}`}>
-                                  {c.name}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0 ml-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEditClientModal(c)}
-                                  title="Edit Client"
-                                  className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
-                                >
-                                  <Pencil size={11} />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={deletingClientIdModal === c.id}
-                                  onClick={() => handleDeleteClientModal(c.id, c.name)}
-                                  title="Delete Client"
-                                  className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
-                                >
-                                  {deletingClientIdModal === c.id ? (
-                                    <Loader2 size={11} className="animate-spin text-rose-400" />
-                                  ) : (
-                                    <Trash2 size={11} />
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="pt-1.5 border-t border-zinc-800">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddingNewClientModal(true);
-                            setIsManagingClientsModal(false);
-                          }}
-                          className="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center justify-center gap-1 cursor-pointer transition"
-                        >
-                          <Plus size={12} /> + Add New Client
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <select
-                      value={formClient}
-                      disabled={isViewOnlyModal}
-                      onChange={(e) => {
-                        if (e.target.value === "__NEW__") {
-                          setIsAddingNewClientModal(true);
-                        } else {
-                          setFormClient(e.target.value);
-                        }
-                      }}
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 cursor-pointer text-xs disabled:opacity-75 disabled:cursor-not-allowed"
-                    >
-                      {dbClients.map((c) => (
-                        <option key={c.id || c.name} value={c.name}>
-                          {c.name}
-                        </option>
-                      ))}
-                      <option value="__NEW__">+ Add New Client...</option>
-                    </select>
-                  )}
-                </div>
-
-                {/* Assignees */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-zinc-400 font-medium flex items-center gap-1">
-                      <Users size={12} /> Assignees ({formAssignees.length} selected)
-                    </label>
-                    {!isViewOnlyModal && formAssignees.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setFormAssignees([creatorName])}
-                        className="text-[10px] text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
-                      >
-                        Reset to You
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-[#1c1c1f] border border-zinc-800 rounded-xl max-h-32 overflow-y-auto">
-                    {/* Pembuat jadwal terkunci otomatis sebagai assignee */}
+              {/* Form with scrollable body & sticky footer */}
+              <form onSubmit={handleSubmitEvent} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+                  {/* Segmented Switch: Schedule / Meeting vs Published Content */}
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl">
                     <button
                       type="button"
-                      disabled
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-black border border-white flex items-center gap-1.5 shadow-sm opacity-95 cursor-default"
-                      title="Pembuat acara otomatis selalu masuk sebagai assignee"
+                      disabled={isViewOnlyModal}
+                      onClick={() => setFormCategory("schedule")}
+                      className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer disabled:cursor-not-allowed ${
+                        formCategory === "schedule"
+                          ? "bg-[#C65921] text-white shadow-sm"
+                          : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                      }`}
                     >
-                      <span>{creatorName} (You)</span>
-                      <Check size={11} className="font-bold" />
+                      <CalendarIcon size={13} />
+                      <span>Schedule / Meeting</span>
                     </button>
-
-                    {/* Hanya tampilkan user terdaftar di database */}
-                    {dbUsers
-                      .filter((u) => {
-                        const name = u.name || u.email;
-                        return (
-                          name.toLowerCase() !== creatorName.toLowerCase() &&
-                          name.toLowerCase() !== "you"
-                        );
-                      })
-                      .map((u) => {
-                        const displayName = u.name || u.email;
-                        const isSelected = formAssignees.includes(displayName);
-                        return (
-                          <button
-                            key={u.id}
-                            type="button"
-                            disabled={isViewOnlyModal}
-                            onClick={() => toggleAssignee(displayName)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border disabled:cursor-not-allowed ${
-                              isSelected
-                                ? "bg-white text-black border-white shadow-sm font-semibold"
-                                : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
-                            }`}
-                          >
-                            <span>{displayName}</span>
-                            {isSelected && <Check size={11} className="font-bold" />}
-                          </button>
-                        );
-                      })}
+                    <button
+                      type="button"
+                      disabled={isViewOnlyModal}
+                      onClick={() => {
+                        setFormCategory("published_content");
+                        if (formMeetLink === "https://meet.google.com/new") setFormMeetLink("");
+                      }}
+                      className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer disabled:cursor-not-allowed ${
+                        formCategory === "published_content"
+                          ? "bg-[#C65921] text-white shadow-sm"
+                          : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                      }`}
+                    >
+                      <CheckCircle2 size={13} />
+                      <span>Published Content</span>
+                    </button>
                   </div>
-                  <p className="text-[10px] text-zinc-500 mt-1">
-                    * Assigned team members will receive this schedule in their agenda.
-                  </p>
-                </div>
 
-                {formCategory === "schedule" ? (
-                  <>
-                    {/* Event Format: Online vs Offline */}
-                    <div>
-                      <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          disabled={isViewOnlyModal}
-                          onClick={() => {
-                            setFormEventType("online");
-                            if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
-                          }}
-                          className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
-                            formEventType === "online"
-                              ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
-                              : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
-                          }`}
-                        >
-                          <Video size={13} />
-                          <span>Online Meeting</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isViewOnlyModal}
-                          onClick={() => setFormEventType("offline")}
-                          className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
-                            formEventType === "offline"
-                              ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
-                              : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
-                          }`}
-                        >
-                          <MapPin size={13} />
-                          <span>Offline Meeting</span>
-                        </button>
-                      </div>
+                  {/* Title Field */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-zinc-400 font-medium">
+                        {formCategory === "published_content" ? "Content Title" : "Event Title"} <span className="text-rose-400">*</span>
+                      </label>
                     </div>
-
-                    {/* Conditional Field: Meet Link jika Online, Lokasi jika Offline */}
-                    {formEventType === "online" ? (
-                      <div>
-                        <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
-                          <span className="flex items-center gap-1">
-                            <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
-                          </span>
-                          {attemptedSubmit && !formMeetLink.trim() && (
-                            <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                              <AlertCircle size={11} /> Required
-                            </span>
-                          )}
-                        </label>
-                        <input
-                          type="url"
-                          required
-                          disabled={isViewOnlyModal}
-                          value={formMeetLink}
-                          onChange={(e) => setFormMeetLink(e.target.value)}
-                          placeholder="https://meet.google.com/xyz"
-                          className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
-                            attemptedSubmit && !formMeetLink.trim()
-                              ? "border-rose-500/80 focus:border-rose-500"
-                              : "border-zinc-800 focus:border-indigo-500"
-                          }`}
-                        />
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
-                          <span className="flex items-center gap-1">
-                            <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
-                          </span>
-                          {attemptedSubmit && !formLocation.trim() && (
-                            <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
-                              <AlertCircle size={11} /> Required
-                            </span>
-                          )}
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isViewOnlyModal}
-                          value={formLocation}
-                          onChange={(e) => setFormLocation(e.target.value)}
-                          placeholder="e.g. Sika Office, Semarang / Client Address"
-                          className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
-                            attemptedSubmit && !formLocation.trim()
-                              ? "border-rose-500/80 focus:border-rose-500"
-                              : "border-zinc-800 focus:border-emerald-500"
-                          }`}
-                        />
+                    {formCategory === "published_content" && !isViewOnlyModal && (
+                      <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 scrollbar-none">
+                        <span className="text-[10px] text-zinc-500 font-medium shrink-0">Format:</span>
+                        {["Feeds", "Reels", "Story", "Carousel", "TikTok"].map((fmt) => (
+                          <button
+                            key={fmt}
+                            type="button"
+                            onClick={() => {
+                              if (!formTitle.includes(`[${fmt}]`)) {
+                                setFormTitle(`[${fmt}] ${formTitle.replace(/^\[[^\]]+\]\s*/, "")}`.trim());
+                              }
+                            }}
+                            className="px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] border border-zinc-700/60 transition cursor-pointer shrink-0"
+                          >
+                            +{fmt}
+                          </button>
+                        ))}
                       </div>
                     )}
-                  </>
-                ) : (
-                  <div>
-                    <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
-                      <ExternalLink size={12} className="text-zinc-400" /> Link Postingan / Asset (Opsional)
-                    </label>
                     <input
-                      type="url"
-                      disabled={isViewOnlyModal}
-                      value={formMeetLink === "https://meet.google.com/new" ? "" : formMeetLink}
-                      onChange={(e) => setFormMeetLink(e.target.value)}
-                      placeholder="https://instagram.com/p/... atau link Google Drive"
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 text-xs transition disabled:opacity-75 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
-                      <CalendarIcon size={12} /> Date
-                    </label>
-                    <input
-                      type="date"
+                      type="text"
                       required
                       disabled={isViewOnlyModal}
-                      value={formDate}
-                      onChange={(e) => setFormDate(e.target.value)}
-                      className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
-                      <Clock size={12} /> Time
-                    </label>
-                    <input
-                      type="time"
-                      required
-                      disabled={isViewOnlyModal}
-                      value={formTime}
-                      onChange={(e) => setFormTime(e.target.value)}
+                      value={formTitle}
+                      onChange={(e) => setFormTitle(e.target.value)}
+                      placeholder={
+                        formCategory === "published_content"
+                          ? "e.g. [Reels] Brand Launching Campaign"
+                          : "e.g. Client Strategy Meeting"
+                      }
                       className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 disabled:opacity-75 disabled:cursor-not-allowed"
                     />
                   </div>
+
+                  {/* Client Tag */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-zinc-400 font-medium flex items-center gap-1">
+                        <Tag size={12} /> Client Tag
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {!isViewOnlyModal && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsManagingClientsModal(!isManagingClientsModal);
+                              setIsAddingNewClientModal(false);
+                              setEditingClientModal(null);
+                            }}
+                            className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <Pencil size={10} />
+                            <span>{isManagingClientsModal ? "Close" : "Manage Clients"}</span>
+                          </button>
+                        )}
+                        {!isViewOnlyModal && !isAddingNewClientModal && !isManagingClientsModal && !editingClientModal && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingNewClientModal(true);
+                              setIsManagingClientsModal(false);
+                              setEditingClientModal(null);
+                            }}
+                            className="text-[11px] text-zinc-400 hover:text-white transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus size={11} /> + New Client
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {editingClientModal ? (
+                      <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-white">Edit Client</span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingClientModal(null)}
+                            className="text-zinc-400 hover:text-white p-0.5 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editClientModalName}
+                          onChange={(e) => setEditClientModalName(e.target.value)}
+                          placeholder="Client name..."
+                          className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                        />
+                        <div>
+                          <span className="text-[10px] text-zinc-400 block mb-1">Color Palette:</span>
+                          <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                            {COLOR_OPTIONS_LIST.map((opt) => {
+                              const isPicked = editClientModalColor === opt.key;
+                              return (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => setEditClientModalColor(opt.key)}
+                                  title={opt.label}
+                                  className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${
+                                    isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
+                                  }`}
+                                  style={{ backgroundColor: opt.dot }}
+                                >
+                                  {isPicked && <Check size={12} className="text-black font-bold" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingClientModal(null)}
+                            className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!editClientModalName.trim() || isUpdatingClientModal}
+                            onClick={handleUpdateClientModal}
+                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
+                          >
+                            {isUpdatingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            <span>Save Changes</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : isAddingNewClientModal ? (
+                      <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-white">Create New Client</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingNewClientModal(false)}
+                            className="text-zinc-400 hover:text-white p-0.5 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          autoFocus
+                          value={newClientModalName}
+                          onChange={(e) => setNewClientModalName(e.target.value)}
+                          placeholder="Client name (e.g. BABA)..."
+                          className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                        />
+                        <div>
+                          <span className="text-[10px] text-zinc-400 block mb-1">Color Palette:</span>
+                          <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                            {COLOR_OPTIONS_LIST.map((opt) => {
+                              const isPicked = newClientModalColor === opt.key;
+                              return (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => setNewClientModalColor(opt.key)}
+                                  title={opt.label}
+                                  className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${
+                                    isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
+                                  }`}
+                                  style={{ backgroundColor: opt.dot }}
+                                >
+                                  {isPicked && <Check size={12} className="text-black font-bold" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingNewClientModal(false)}
+                            className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!newClientModalName.trim() || isSavingClientModal}
+                            onClick={async () => {
+                              const trimmed = newClientModalName.trim();
+                              if (!trimmed || isSavingClientModal) return;
+                              setIsSavingClientModal(true);
+                              try {
+                                const res = await createClientAction({
+                                  name: trimmed,
+                                  color: newClientModalColor,
+                                });
+                                if (res && res.success && res.client) {
+                                  setDbClients((prev) => {
+                                    const filtered = prev.filter((c) => c.name.toLowerCase() !== trimmed.toLowerCase());
+                                    return [...filtered, res.client].sort((a, b) => a.name.localeCompare(b.name));
+                                  });
+                                  setFormClient(res.client.name);
+                                  setNewClientModalName("");
+                                  setIsAddingNewClientModal(false);
+                                } else {
+                                  alert(res?.error || "Failed to create client");
+                                }
+                              } catch (e: any) {
+                                alert("Failed to create client: " + e?.message);
+                              } finally {
+                                setIsSavingClientModal(false);
+                              }
+                            }}
+                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
+                          >
+                            {isSavingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            <span>Save Client</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : isManagingClientsModal ? (
+                      <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
+                          <span className="text-[11px] font-semibold text-white">Client List & Management</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsManagingClientsModal(false)}
+                            className="text-zinc-400 hover:text-white p-0.5 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                        <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                          {dbClients.map((c) => {
+                            const theme = getClientThemeByName(c.name, dbClients);
+                            return (
+                              <div
+                                key={c.id || c.name}
+                                className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#141416] border border-zinc-800/80 text-xs"
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: theme.dot }} />
+                                  <span className={`px-2 py-0.5 rounded border text-[11px] font-medium truncate ${theme.badge}`}>
+                                    {c.name}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 ml-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditClientModal(c)}
+                                    title="Edit Client"
+                                    className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                                  >
+                                    <Pencil size={11} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={deletingClientIdModal === c.id}
+                                    onClick={() => handleDeleteClientModal(c.id, c.name)}
+                                    title="Delete Client"
+                                    className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                                  >
+                                    {deletingClientIdModal === c.id ? (
+                                      <Loader2 size={11} className="animate-spin text-rose-400" />
+                                    ) : (
+                                      <Trash2 size={11} />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="pt-1.5 border-t border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingNewClientModal(true);
+                              setIsManagingClientsModal(false);
+                            }}
+                            className="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center justify-center gap-1 cursor-pointer transition"
+                          >
+                            <Plus size={12} /> + Add New Client
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <select
+                        value={formClient}
+                        disabled={isViewOnlyModal}
+                        onChange={(e) => {
+                          if (e.target.value === "__NEW__") {
+                            setIsAddingNewClientModal(true);
+                          } else {
+                            setFormClient(e.target.value);
+                          }
+                        }}
+                        className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 cursor-pointer text-xs disabled:opacity-75 disabled:cursor-not-allowed"
+                      >
+                        {dbClients.map((c) => (
+                          <option key={c.id || c.name} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                        <option value="__NEW__">+ Add New Client...</option>
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Assignees */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-zinc-400 font-medium flex items-center gap-1">
+                        <Users size={12} /> Assignees ({formAssignees.length} selected)
+                      </label>
+                      {!isViewOnlyModal && formAssignees.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setFormAssignees([creatorName])}
+                          className="text-[10px] text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
+                        >
+                          Reset to You
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-[#1c1c1f] border border-zinc-800 rounded-xl max-h-32 overflow-y-auto">
+                      <button
+                        type="button"
+                        disabled
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-black border border-white flex items-center gap-1.5 shadow-sm opacity-95 cursor-default"
+                        title="Creator is automatically assigned to this event"
+                      >
+                        <span>{creatorName} (You)</span>
+                        <Check size={11} className="font-bold" />
+                      </button>
+
+                      {dbUsers
+                        .filter((u) => {
+                          const name = u.name || u.email;
+                          return (
+                            name.toLowerCase() !== creatorName.toLowerCase() &&
+                            name.toLowerCase() !== "you"
+                          );
+                        })
+                        .map((u) => {
+                          const displayName = u.name || u.email;
+                          const isSelected = formAssignees.includes(displayName);
+                          return (
+                            <button
+                              key={u.id}
+                              type="button"
+                              disabled={isViewOnlyModal}
+                              onClick={() => toggleAssignee(displayName)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border disabled:cursor-not-allowed ${
+                                isSelected
+                                  ? "bg-white text-black border-white shadow-sm font-semibold"
+                                  : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
+                              }`}
+                            >
+                              <span>{displayName}</span>
+                              {isSelected && <Check size={11} className="font-bold" />}
+                            </button>
+                          );
+                        })}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      * Assigned team members will receive this schedule in their agenda.
+                    </p>
+                  </div>
+
+                  {formCategory === "schedule" ? (
+                    <>
+                      {/* Meeting Format: Online vs Offline */}
+                      <div>
+                        <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            disabled={isViewOnlyModal}
+                            onClick={() => {
+                              setFormEventType("online");
+                              if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
+                            }}
+                            className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
+                              formEventType === "online"
+                                ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                                : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
+                            }`}
+                          >
+                            <Video size={13} />
+                            <span>Online Meeting</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isViewOnlyModal}
+                            onClick={() => setFormEventType("offline")}
+                            className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed ${
+                              formEventType === "offline"
+                                ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
+                                : "bg-[#161619] text-zinc-400 border-zinc-800/80 hover:text-zinc-200"
+                            }`}
+                          >
+                            <MapPin size={13} />
+                            <span>Offline Meeting</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Online Meet Link vs Offline Address */}
+                      {formEventType === "online" ? (
+                        <div>
+                          <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
+                            </span>
+                            {attemptedSubmit && !formMeetLink.trim() && (
+                              <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
+                                <AlertCircle size={11} /> Required
+                              </span>
+                            )}
+                          </label>
+                          <input
+                            type="url"
+                            required
+                            disabled={isViewOnlyModal}
+                            value={formMeetLink}
+                            onChange={(e) => setFormMeetLink(e.target.value)}
+                            placeholder="https://meet.google.com/xyz"
+                            className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
+                              attemptedSubmit && !formMeetLink.trim()
+                                ? "border-rose-500/80 focus:border-rose-500"
+                                : "border-zinc-800 focus:border-indigo-500"
+                            }`}
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <MapPin size={12} className="text-zinc-400" /> Location / Address <span className="text-zinc-500">*</span>
+                            </span>
+                            {attemptedSubmit && !formLocation.trim() && (
+                              <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
+                                <AlertCircle size={11} /> Required
+                              </span>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            disabled={isViewOnlyModal}
+                            value={formLocation}
+                            onChange={(e) => setFormLocation(e.target.value)}
+                            placeholder="e.g. Sika Office, Semarang / Client Address"
+                            className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition disabled:opacity-75 disabled:cursor-not-allowed ${
+                              attemptedSubmit && !formLocation.trim()
+                                ? "border-rose-500/80 focus:border-rose-500"
+                                : "border-zinc-800 focus:border-emerald-500"
+                            }`}
+                          />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
+                        <ExternalLink size={12} className="text-zinc-400" /> Live URL or Drive Asset Link (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        disabled={isViewOnlyModal}
+                        value={formMeetLink === "https://meet.google.com/new" ? "" : formMeetLink}
+                        onChange={(e) => setFormMeetLink(e.target.value)}
+                        placeholder="https://instagram.com/p/... or Google Drive asset link"
+                        className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 text-xs transition disabled:opacity-75 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                  )}
+
+                  {/* Date & Time */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
+                        <CalendarIcon size={12} /> {formCategory === "published_content" ? "Publish Date" : "Date"}
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        disabled={isViewOnlyModal}
+                        value={formDate}
+                        onChange={(e) => setFormDate(e.target.value)}
+                        className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
+                        <Clock size={12} /> Time
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        disabled={isViewOnlyModal}
+                        value={formTime}
+                        onChange={(e) => setFormTime(e.target.value)}
+                        className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 disabled:opacity-75 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sync to Google Calendar */}
+                  {!editingId && formCategory === "schedule" && (
+                    <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none">
+                      <input
+                        type="checkbox"
+                        checked={directToGCal}
+                        onChange={(e) => setDirectToGCal(e.target.checked)}
+                        className="w-4 h-4 rounded text-[#C65921] accent-[#C65921] cursor-pointer"
+                      />
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                        <ExternalLink size={13} className="text-[#C65921]" />
+                        <span>Redirect to Google Calendar after saving</span>
+                      </div>
+                    </label>
+                  )}
                 </div>
 
-                {isViewOnlyModal ? (
-                  <div className="flex items-center justify-end gap-2.5 pt-3">
+                {/* Sticky Action Footer */}
+                <div className="p-4 border-t border-zinc-800/80 flex items-center gap-2.5 shrink-0 bg-[#141416]">
+                  {isViewOnlyModal ? (
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold transition cursor-pointer"
+                      className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold transition cursor-pointer text-xs"
                     >
                       Close
                     </button>
-                  </div>
-                ) : (
-                  <>
-                    {!editingId && formCategory === "schedule" && (
-                      <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none mt-2">
-                        <input
-                          type="checkbox"
-                          checked={directToGCal}
-                          onChange={(e) => setDirectToGCal(e.target.checked)}
-                          className="w-4 h-4 rounded text-[#C65921] accent-[#C65921] cursor-pointer"
-                        />
-                        <div className="flex items-center gap-1.5 text-xs text-zinc-300">
-                          <ExternalLink size={13} className="text-[#C65921]" />
-                          <span>Direct ke Google Calendar setelah disimpan</span>
-                        </div>
-                      </label>
-                    )}
+                  ) : (
+                    <>
+                      {editingId && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEvent(editingId)}
+                          title="Delete Schedule"
+                          className="p-2.5 rounded-xl border border-rose-900/60 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
 
-                    <div className="flex items-center gap-2.5 pt-2">
-                    {editingId && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteEvent(editingId)}
-                        title="Delete Schedule"
-                        className="p-2.5 rounded-xl border border-rose-900/60 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                        onClick={() => setIsModalOpen(false)}
+                        className="flex-1 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white transition font-medium cursor-pointer text-xs"
                       >
-                        <Trash2 size={16} />
+                        Cancel
                       </button>
-                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="flex-1 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white transition font-medium cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
-                    >
-                      {isSubmitting
-                        ? "Saving..."
-                        : editingId
-                        ? "Save Changes"
-                        : formCategory === "published_content"
-                        ? "Tandai Konten Tayang"
-                        : "Save Schedule"}
-                    </button>
-                  </div>
-                  </>
-                )}
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50 text-xs"
+                      >
+                        {isSubmitting
+                          ? "Saving..."
+                          : editingId
+                          ? "Save Changes"
+                          : formCategory === "published_content"
+                          ? "Save Published Content"
+                          : "Save Schedule"}
+                      </button>
+                    </>
+                  )}
+                </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
+
       </div>
     </MobileContainer>
   );

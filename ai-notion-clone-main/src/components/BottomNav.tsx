@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, CheckSquare, Sparkles, Calendar, User, X } from "lucide-react";
@@ -9,6 +9,28 @@ export function BottomNav() {
   const pathname = usePathname();
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [isModalActive, setIsModalActive] = useState(false);
+
+  useEffect(() => {
+    const updateModalState = () => {
+      if (typeof document === "undefined") return;
+      setIsModalActive(
+        document.body.classList.contains("modal-open") ||
+        document.body.getAttribute("data-modal-open") === "true"
+      );
+    };
+
+    updateModalState();
+    const observer = new MutationObserver(updateModalState);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class", "data-modal-open"] });
+    window.addEventListener("sika_modal_change", updateModalState);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("sika_modal_change", updateModalState);
+    };
+  }, []);
+
+  if (isModalActive) return null;
 
   return (
     <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
@@ -41,7 +63,7 @@ export function BottomNav() {
           </form>
         ) : (
           <>
-            <Link href="/" className={`p-3 rounded-full transition-colors ${pathname === "/" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Beranda">
+            <Link href="/" className={`p-3 rounded-full transition-colors ${pathname === "/" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Home">
               <Home className="w-5 h-5" />
             </Link>
             <Link href="/tasks" className={`p-3 rounded-full transition-colors ${pathname === "/tasks" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Tasks">
@@ -55,10 +77,10 @@ export function BottomNav() {
             >
               <Sparkles className="w-5 h-5" />
             </button>
-            <Link href="/calendar" className={`p-3 rounded-full transition-colors ${pathname === "/calendar" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Kalender">
+            <Link href="/calendar" className={`p-3 rounded-full transition-colors ${pathname === "/calendar" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Calendar">
               <Calendar className="w-5 h-5" />
             </Link>
-            <Link href="/user" className={`p-3 rounded-full transition-colors ${pathname === "/user" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Profil / Absensi">
+            <Link href="/user" className={`p-3 rounded-full transition-colors ${pathname === "/user" ? "bg-[#222226] text-white" : "text-gray-400 hover:text-white hover:bg-[#1a1a1e]"}`} title="Profile & Attendance">
               <User className="w-5 h-5" />
             </Link>
           </>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import {
@@ -94,6 +95,33 @@ export function TeamCalendar() {
 
   // State Modal Add Schedule
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (isModalOpen) {
+      document.body.classList.add("modal-open");
+      document.body.setAttribute("data-modal-open", "true");
+      document.body.style.overflow = "hidden";
+      window.dispatchEvent(new Event("sika_modal_change"));
+    } else {
+      document.body.classList.remove("modal-open");
+      document.body.removeAttribute("data-modal-open");
+      document.body.style.overflow = "";
+      window.dispatchEvent(new Event("sika_modal_change"));
+    }
+    return () => {
+      document.body.classList.remove("modal-open");
+      document.body.removeAttribute("data-modal-open");
+      document.body.style.overflow = "";
+      window.dispatchEvent(new Event("sika_modal_change"));
+    };
+  }, [isModalOpen]);
+
   const [formCategory, setFormCategory] = useState<"schedule" | "published_content">("schedule");
   const [formTitle, setFormTitle] = useState("");
   const [formClient, setFormClient] = useState("AKASA LAND");
@@ -595,44 +623,52 @@ export function TeamCalendar() {
         )}
       </div>
 
-      {/* MODAL FULL ADD SCHEDULE (Sama dengan Kalender) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                {formCategory === "published_content" ? (
-                  <CheckCircle2 size={16} className="text-[#C65921]" />
-                ) : (
-                  <CalendarIcon size={16} className="text-white" />
-                )}
-                <h3 className="text-sm font-bold text-white">
-                  {formCategory === "published_content" ? "Tandai Konten Tayang" : "Create Schedule Entry"}
-                </h3>
+      {/* MODAL FULL ADD SCHEDULE (English, Clean SaaS Design, Portaled to Body) */}
+      {isModalOpen && mounted && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[#141416] border border-zinc-800 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[85vh] sm:max-h-[88vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3.5 mb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center text-zinc-300">
+                  <CalendarIcon size={14} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-tight">
+                    {formCategory === "published_content" ? "Mark Published Content" : "Create Schedule Entry"}
+                  </h3>
+                  <p className="text-[10px] text-zinc-400">
+                    {formCategory === "published_content" ? "Record live content published on social media" : "Plan a team or client meeting agenda"}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-zinc-400 hover:text-white transition cursor-pointer"
+                className="w-7 h-7 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+                title="Close"
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEvent} className="space-y-4 text-xs">
-              {/* 2 Opsi Utama: 1. Buat Jadwal vs 2. Penanda Konten Tayang */}
-              <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl">
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSaveEvent} className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+              
+              {/* Type Switcher: Schedule / Meeting vs Published Content */}
+              <div className="grid grid-cols-2 p-1 bg-zinc-900/90 border border-zinc-800 rounded-xl">
                 <button
                   type="button"
                   onClick={() => setFormCategory("schedule")}
-                  className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
+                  className={`py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer ${
                     formCategory === "schedule"
-                      ? "bg-[#C65921] text-white shadow-sm"
-                      : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                      ? "bg-[#C65921] text-white shadow-sm font-semibold"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
                   }`}
                 >
                   <CalendarIcon size={13} />
-                  <span>1. Buat Jadwal</span>
+                  <span>Schedule / Meeting</span>
                 </button>
                 <button
                   type="button"
@@ -640,30 +676,22 @@ export function TeamCalendar() {
                     setFormCategory("published_content");
                     if (formMeetLink === "https://meet.google.com/new") setFormMeetLink("");
                   }}
-                  className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
+                  className={`py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition cursor-pointer ${
                     formCategory === "published_content"
-                      ? "bg-[#C65921] text-white shadow-sm"
-                      : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                      ? "bg-[#C65921] text-white shadow-sm font-semibold"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
                   }`}
                 >
                   <CheckCircle2 size={13} />
-                  <span>2. Konten Tayang</span>
+                  <span>Published Content</span>
                 </button>
               </div>
 
-              {formCategory === "published_content" && (
-                <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-800/40 text-[11px] text-emerald-300/90 flex items-center gap-2">
-                  <CheckCircle2 size={14} className="shrink-0 text-emerald-400" />
-                  <span>
-                    Penanda konten/brief yang sudah live di sosial media. Tetap terlihat di tanggalan kalender dan tidak masuk ke upcoming list.
-                  </span>
-                </div>
-              )}
-
+              {/* Title Input */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-zinc-400 font-medium">
-                    {formCategory === "published_content" ? "Judul Konten / Brief Tayang" : "Event Title"} <span className="text-rose-400">*</span>
+                    {formCategory === "published_content" ? "Content Title" : "Event Title"} <span className="text-rose-400">*</span>
                   </label>
                 </div>
                 {formCategory === "published_content" && (
@@ -692,17 +720,18 @@ export function TeamCalendar() {
                   onChange={(e) => setFormTitle(e.target.value)}
                   placeholder={
                     formCategory === "published_content"
-                      ? "e.g. [Reels] Promo Launching Brand / Tips Feeds"
-                      : "e.g. Client Strategy Meeting"
+                      ? "e.g. [Reels] Brand Launch Video / Weekly Highlights"
+                      : "e.g. Client Strategy Sync"
                   }
                   className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs"
                 />
               </div>
 
+              {/* Client Selector */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-zinc-400 font-medium flex items-center gap-1">
-                    <Tag size={12} /> Client Tag
+                    <Tag size={12} /> Client
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -748,54 +777,46 @@ export function TeamCalendar() {
                     <input
                       type="text"
                       autoFocus
+                      required
                       value={editClientModalName}
                       onChange={(e) => setEditClientModalName(e.target.value)}
-                      placeholder="Nama client..."
-                      className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                      placeholder="Client Name..."
+                      className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
                     />
-                    <div>
-                      <span className="text-[10px] text-zinc-400 block mb-1">Pilihan Warna (Soft):</span>
-                      <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                        {COLOR_OPTIONS_LIST.map((opt) => {
-                          const isPicked = editClientModalColor === opt.key;
-                          return (
-                            <button
-                              key={opt.key}
-                              type="button"
-                              onClick={() => setEditClientModalColor(opt.key)}
-                              title={opt.label}
-                              className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
-                                }`}
-                              style={{ backgroundColor: opt.dot }}
-                            >
-                              {isPicked && <Check size={12} className="text-black font-bold" />}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    <div className="flex items-center gap-1.5 pt-1 overflow-x-auto pb-1">
+                      {COLOR_OPTIONS_LIST.map((c) => (
+                        <button
+                          key={c.name}
+                          type="button"
+                          onClick={() => setEditClientModalColor(c.name)}
+                          className={`w-5 h-5 rounded-full border-2 transition ${
+                            editClientModalColor === c.name ? "border-white scale-110" : "border-transparent"
+                          }`}
+                          style={{ backgroundColor: c.dot }}
+                        />
+                      ))}
                     </div>
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => setEditingClientModal(null)}
-                        className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
+                        className="px-2.5 py-1 text-zinc-400 hover:text-white text-xs"
                       >
-                        Batal
+                        Cancel
                       </button>
                       <button
                         type="submit"
-                        disabled={!editClientModalName.trim() || isUpdatingClientModal}
-                        className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
+                        disabled={isUpdatingClientModal}
+                        className="px-3 py-1 bg-white text-black font-semibold rounded-lg text-xs"
                       >
-                        {isUpdatingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                        <span>Save Changes</span>
+                        {isUpdatingClientModal ? "Updating..." : "Update"}
                       </button>
                     </div>
                   </form>
                 ) : isAddingNewClientModal ? (
-                  <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
+                  <form onSubmit={handleCreateClientModal} className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-white">Create New Client</span>
+                      <span className="text-[11px] font-semibold text-white">Add New Client</span>
                       <button
                         type="button"
                         onClick={() => setIsAddingNewClientModal(false)}
@@ -807,203 +828,65 @@ export function TeamCalendar() {
                     <input
                       type="text"
                       autoFocus
+                      required
                       value={newClientModalName}
                       onChange={(e) => setNewClientModalName(e.target.value)}
-                      placeholder="Client name (e.g. BABA)..."
-                      className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                      placeholder="Client Name..."
+                      className="w-full bg-[#121214] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
                     />
-                    <div>
-                      <span className="text-[10px] text-zinc-400 block mb-1">Color Palette:</span>
-                      <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                        {COLOR_OPTIONS_LIST.map((opt) => {
-                          const isPicked = newClientModalColor === opt.key;
-                          return (
-                            <button
-                              key={opt.key}
-                              type="button"
-                              onClick={() => setNewClientModalColor(opt.key)}
-                              title={opt.label}
-                              className={`h-6 rounded-md flex items-center justify-center transition cursor-pointer border ${isPicked ? "ring-2 ring-white border-white scale-105" : "border-zinc-700/60 hover:scale-105"
-                                }`}
-                              style={{ backgroundColor: opt.dot }}
-                            >
-                              {isPicked && <Check size={12} className="text-black font-bold" />}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    <div className="flex items-center gap-1.5 pt-1 overflow-x-auto pb-1">
+                      {COLOR_OPTIONS_LIST.map((c) => (
+                        <button
+                          key={c.name}
+                          type="button"
+                          onClick={() => setNewClientModalColor(c.name)}
+                          className={`w-5 h-5 rounded-full border-2 transition ${
+                            newClientModalColor === c.name ? "border-white scale-110" : "border-transparent"
+                          }`}
+                          style={{ backgroundColor: c.dot }}
+                        />
+                      ))}
                     </div>
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => setIsAddingNewClientModal(false)}
-                        className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white cursor-pointer"
+                        className="px-2.5 py-1 text-zinc-400 hover:text-white text-xs"
                       >
                         Cancel
                       </button>
                       <button
-                        type="button"
-                        disabled={!newClientModalName.trim() || isSavingClientModal}
-                        onClick={async () => {
-                          const trimmed = newClientModalName.trim();
-                          if (!trimmed || isSavingClientModal) return;
-                          setIsSavingClientModal(true);
-                          try {
-                            const res = await createClientAction({
-                              name: trimmed,
-                              color: newClientModalColor,
-                            });
-                            if (res && res.success && res.client) {
-                              setDbClients((prev) => {
-                                const filtered = prev.filter((c) => c.name.toLowerCase() !== trimmed.toLowerCase());
-                                return [...filtered, res.client].sort((a, b) => a.name.localeCompare(b.name));
-                              });
-                              setFormClient(res.client.name);
-                              setNewClientModalName("");
-                              setIsAddingNewClientModal(false);
-                              toast.success(`Client "${res.client.name}" added successfully!`);
-                            } else {
-                              toast.error(res?.error || "Failed to create client");
-                            }
-                          } catch (e: any) {
-                            toast.error("Failed to create client: " + e?.message);
-                          } finally {
-                            setIsSavingClientModal(false);
-                          }
-                        }}
-                        className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-50 cursor-pointer flex items-center gap-1 shadow-sm"
+                        type="submit"
+                        disabled={isSavingClientModal}
+                        className="px-3 py-1 bg-white text-black font-semibold rounded-lg text-xs"
                       >
-                        {isSavingClientModal ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
-                        <span>Save Client</span>
+                        {isSavingClientModal ? "Saving..." : "Save Client"}
                       </button>
                     </div>
-                  </div>
-                ) : isManagingClientsModal ? (
-                  <div className="p-3 bg-[#18181b] border border-zinc-700/80 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
-                      <span className="text-[11px] font-semibold text-white">Client List & Management</span>
-                      <button
-                        type="button"
-                        onClick={() => setIsManagingClientsModal(false)}
-                        className="text-zinc-400 hover:text-white p-0.5 cursor-pointer"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                    <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                      {dbClients.map((c) => {
-                        const theme = getClientThemeByName(c.name, dbClients);
-                        return (
-                          <div
-                            key={c.id || c.name}
-                            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#141416] border border-zinc-800/80 text-xs"
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: theme.dot }} />
-                              <span className={`px-2 py-0.5 rounded border text-[11px] font-medium truncate ${theme.badge}`}>
-                                {c.name}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0 ml-2">
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditClientModal(c)}
-                                title="Edit Client"
-                                className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
-                              >
-                                <Pencil size={11} />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={deletingClientIdModal === c.id}
-                                onClick={() => handleDeleteClientModal(c.id, c.name)}
-                                title="Delete Client"
-                                className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
-                              >
-                                {deletingClientIdModal === c.id ? (
-                                  <Loader2 size={11} className="animate-spin text-rose-400" />
-                                ) : (
-                                  <Trash2 size={11} />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="pt-1.5 border-t border-zinc-800">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAddingNewClientModal(true);
-                          setIsManagingClientsModal(false);
-                        }}
-                        className="w-full py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center justify-center gap-1 cursor-pointer transition"
-                      >
-                        <Plus size={12} /> + Add New Client
-                      </button>
-                    </div>
-                  </div>
+                  </form>
                 ) : (
                   <select
                     value={formClient}
-                    onChange={(e) => {
-                      if (e.target.value === "__NEW__") {
-                        setIsAddingNewClientModal(true);
-                      } else {
-                        setFormClient(e.target.value);
-                      }
-                    }}
-                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 cursor-pointer text-xs"
+                    onChange={(e) => setFormClient(e.target.value)}
+                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs"
                   >
                     {dbClients.map((c) => (
-                      <option key={c.id || c.name} value={c.name}>
+                      <option key={c.id} value={c.name}>
                         {c.name}
                       </option>
                     ))}
-                    <option value="__NEW__">+ Add New Client...</option>
                   </select>
                 )}
               </div>
 
-              {/* Assignees */}
+              {/* Team Members */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-zinc-400 font-medium flex items-center gap-1">
-                    <Users size={12} /> Assignees ({formAssignees.length} selected)
-                  </label>
-                  {formAssignees.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setFormAssignees([creatorName])}
-                      className="text-[10px] text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
-                    >
-                      Reset to You
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 p-2.5 bg-[#1c1c1f] border border-zinc-800 rounded-xl max-h-32 overflow-y-auto">
-                  {/* Pembuat jadwal terkunci otomatis sebagai assignee */}
-                  <button
-                    type="button"
-                    disabled
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-black border border-white flex items-center gap-1.5 shadow-sm opacity-95 cursor-default"
-                    title="Pembuat acara otomatis selalu masuk sebagai assignee"
-                  >
-                    <span>{creatorName} (You)</span>
-                    <Check size={11} className="font-bold" />
-                  </button>
-
-                  {/* Hanya tampilkan user terdaftar di database */}
+                <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
+                  <Users size={12} /> {formCategory === "published_content" ? "Assigned Team Members" : "Attendees"}
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1.5 bg-[#18181b]/50 border border-zinc-800/80 rounded-xl">
                   {dbUsers
-                    .filter((u) => {
-                      const name = u.name || u.email;
-                      return (
-                        name.toLowerCase() !== creatorName.toLowerCase() &&
-                        name.toLowerCase() !== "you"
-                      );
-                    })
+                    .filter((u) => u.name && u.name.trim() !== "")
                     .map((u) => {
                       const displayName = u.name || u.email;
                       const isSelected = formAssignees.includes(displayName);
@@ -1012,10 +895,11 @@ export function TeamCalendar() {
                           key={u.id}
                           type="button"
                           onClick={() => toggleAssignee(displayName)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${isSelected
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border ${
+                            isSelected
                               ? "bg-white text-black border-white shadow-sm font-semibold"
                               : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60 hover:text-zinc-200 hover:bg-zinc-700"
-                            }`}
+                          }`}
                         >
                           <span>{displayName}</span>
                           {isSelected && <Check size={11} className="font-bold" />}
@@ -1023,14 +907,11 @@ export function TeamCalendar() {
                       );
                     })}
                 </div>
-                <p className="text-[10px] text-zinc-500 mt-1">
-                  * Assigned team members will receive this schedule in their agenda.
-                </p>
               </div>
 
+              {/* Conditional: Meeting Format vs Live Content Link */}
               {formCategory === "schedule" ? (
                 <>
-                  {/* Event Format: Online vs Offline */}
                   <div>
                     <label className="block text-zinc-400 mb-1.5 font-medium">Meeting Format</label>
                     <div className="grid grid-cols-2 gap-2">
@@ -1040,10 +921,11 @@ export function TeamCalendar() {
                           setFormEventType("online");
                           if (!formMeetLink) setFormMeetLink("https://meet.google.com/new");
                         }}
-                        className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "online"
+                        className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                          formEventType === "online"
                             ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
                             : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                          }`}
+                        }`}
                       >
                         <Video size={13} />
                         <span>Online Meeting</span>
@@ -1051,23 +933,23 @@ export function TeamCalendar() {
                       <button
                         type="button"
                         onClick={() => setFormEventType("offline")}
-                        className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${formEventType === "offline"
+                        className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                          formEventType === "offline"
                             ? "bg-[#27272a] text-white border-zinc-600 shadow-xs"
                             : "bg-[#1c1c1f] text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                          }`}
+                        }`}
                       >
                         <MapPin size={13} />
-                        <span>Offline Meeting</span>
+                        <span>In-Person Meeting</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Conditional Field: Meet Link jika Online, Lokasi jika Offline */}
                   {formEventType === "online" ? (
                     <div>
                       <label className="block text-zinc-400 mb-1.5 font-medium flex items-center justify-between">
                         <span className="flex items-center gap-1">
-                          <Video size={12} className="text-zinc-400" /> Meeting Link (GMeet / Zoom) <span className="text-zinc-500">*</span>
+                          <Video size={12} className="text-zinc-400" /> Meeting Link (Google Meet / Zoom) <span className="text-zinc-500">*</span>
                         </span>
                         {attemptedSubmit && !formMeetLink.trim() && (
                           <span className="text-[10px] text-rose-400 font-medium flex items-center gap-1 animate-pulse">
@@ -1081,10 +963,11 @@ export function TeamCalendar() {
                         value={formMeetLink}
                         onChange={(e) => setFormMeetLink(e.target.value)}
                         placeholder="https://meet.google.com/xyz"
-                        className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formMeetLink.trim()
+                        className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
+                          attemptedSubmit && !formMeetLink.trim()
                             ? "border-rose-500/80 focus:border-rose-500"
                             : "border-zinc-800 focus:border-indigo-500"
-                          }`}
+                        }`}
                       />
                     </div>
                   ) : (
@@ -1105,10 +988,11 @@ export function TeamCalendar() {
                         value={formLocation}
                         onChange={(e) => setFormLocation(e.target.value)}
                         placeholder="e.g. Sika Office, Semarang / Client Address"
-                        className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${attemptedSubmit && !formLocation.trim()
+                        className={`w-full bg-[#1c1c1f] border rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none text-xs transition ${
+                          attemptedSubmit && !formLocation.trim()
                             ? "border-rose-500/80 focus:border-rose-500"
                             : "border-zinc-800 focus:border-emerald-500"
-                          }`}
+                        }`}
                       />
                     </div>
                   )}
@@ -1116,13 +1000,13 @@ export function TeamCalendar() {
               ) : (
                 <div>
                   <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
-                    <ExternalLink size={12} className="text-zinc-400" /> Link Postingan / Asset (Opsional)
+                    <ExternalLink size={12} className="text-zinc-400" /> Live URL or Drive Asset Link (Optional)
                   </label>
                   <input
                     type="url"
                     value={formMeetLink === "https://meet.google.com/new" ? "" : formMeetLink}
                     onChange={(e) => setFormMeetLink(e.target.value)}
-                    placeholder="https://instagram.com/p/... atau link Google Drive"
+                    placeholder="https://instagram.com/p/... or Google Drive asset link"
                     className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 text-xs transition"
                   />
                 </div>
@@ -1132,7 +1016,7 @@ export function TeamCalendar() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-zinc-400 mb-1.5 font-medium flex items-center gap-1">
-                    <CalendarIcon size={12} /> Date
+                    <CalendarIcon size={12} /> {formCategory === "published_content" ? "Publish Date" : "Date"}
                   </label>
                   <input
                     type="date"
@@ -1152,12 +1036,12 @@ export function TeamCalendar() {
                     required
                     value={formTime}
                     onChange={(e) => setFormTime(e.target.value)}
-                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs"
                   />
                 </div>
               </div>
 
-              {/* Option to direct to Google Calendar (Hanya jika jadwal agenda) */}
+              {/* Sync to Google Calendar */}
               {formCategory === "schedule" && (
                 <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1f] border border-zinc-800/80 cursor-pointer hover:border-zinc-700 transition select-none">
                   <input
@@ -1168,17 +1052,17 @@ export function TeamCalendar() {
                   />
                   <div className="flex items-center gap-1.5 text-xs text-zinc-300">
                     <ExternalLink size={13} className="text-[#C65921]" />
-                    <span>Direct ke Google Calendar setelah disimpan</span>
+                    <span>Sync to Google Calendar after saving</span>
                   </div>
                 </label>
               )}
 
-              {/* Buttons */}
-              <div className="flex items-center gap-2.5 pt-1">
+              {/* Action Buttons: Sticky inside the card */}
+              <div className="pt-3 border-t border-zinc-800/80 flex items-center gap-2.5 shrink-0 bg-[#141416]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white transition font-medium cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white transition font-medium cursor-pointer text-xs"
                 >
                   Cancel
                 </button>
@@ -1186,20 +1070,20 @@ export function TeamCalendar() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold transition shadow cursor-pointer disabled:opacity-50 text-xs"
                 >
                   {isSubmitting
                     ? "Saving..."
                     : formCategory === "published_content"
-                    ? "Tandai Konten Tayang"
-                    : "Save Schedule"}
+                    ? "Save Published Content"
+                    : "Create Schedule"}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 }
-
