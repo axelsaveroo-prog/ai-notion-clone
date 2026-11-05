@@ -199,12 +199,12 @@ export function MobileNotificationListener() {
         </div>
         <div className="min-w-0">
           <h4 className="font-semibold text-white truncate">
-            {isMobileDevice ? "Notifikasi HP" : "Notifikasi Browser"}
+            {isMobileDevice ? "Mobile Notifications" : "Browser Notifications"}
           </h4>
           <p className="text-[11px] text-zinc-400 line-clamp-1">
             {isMobileDevice
-              ? "Aktifkan pop-up saat ada chat & tag brief di HP"
-              : "Aktifkan notifikasi browser saat ada chat & brief"}
+              ? "Enable pop-up alerts on mobile for chats & brief tags"
+              : "Enable browser notifications for chats & briefs"}
           </p>
         </div>
       </div>
@@ -215,12 +215,12 @@ export function MobileNotificationListener() {
           className="px-3 py-1.5 bg-[#C65921] hover:bg-[#d86629] text-white font-medium text-[11px] rounded-lg transition cursor-pointer flex items-center gap-1 shadow-sm"
         >
           <Check size={12} />
-          <span>Izinkan</span>
+          <span>Allow</span>
         </button>
         <button
           onClick={handleDismissPrompt}
           className="p-1.5 text-zinc-500 hover:text-white rounded-lg transition cursor-pointer"
-          title="Tutup"
+          title="Dismiss"
         >
           <X size={14} />
         </button>

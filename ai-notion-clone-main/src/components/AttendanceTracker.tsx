@@ -385,7 +385,7 @@ export function AttendanceTracker() {
               rel="noopener noreferrer"
               className="text-[11px] font-medium px-2.5 py-1.5 bg-[#27272a] hover:bg-[#323236] text-zinc-300 rounded-xl border border-[#3f3f46] transition flex items-center gap-1"
             >
-              <ExternalLink size={12} /> Buka Peta
+              <ExternalLink size={12} /> View Map
             </a>
           )}
           <button
@@ -408,7 +408,7 @@ export function AttendanceTracker() {
                 <Clock size={16} />
               </div>
               <div>
-                <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">JAM MASUK (IN)</div>
+                <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">CLOCK IN</div>
                 <div className="text-sm font-bold text-white mt-0.5 font-medium">
                   {isLoadingStatus ? "--:--" : checkInTime || "--:--"}
                 </div>
@@ -421,17 +421,17 @@ export function AttendanceTracker() {
             {checkInPhoto ? (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                  <span className="flex items-center gap-1"><Camera size={11} /> Bukti Foto Masuk:</span>
+                  <span className="flex items-center gap-1"><Camera size={11} /> Clock In Photo:</span>
                   {recordedGpsIn && <span className="font-medium text-[9px] text-zinc-500">{recordedGpsIn}</span>}
                 </div>
                 <div className="w-full max-w-[150px] aspect-[4/3] rounded-xl overflow-hidden border border-[#27272a] bg-black">
-                  <img src={checkInPhoto} alt="Foto Masuk" className="w-full h-full object-cover" />
+                  <img src={checkInPhoto} alt="Clock In Photo" className="w-full h-full object-cover" />
                 </div>
               </div>
             ) : (
               <div className="h-16 rounded-xl border border-dashed border-[#2b2b30] flex flex-col items-center justify-center text-zinc-500 gap-1 text-[11px]">
                 <ImageIcon size={14} className="opacity-40" />
-                <span>Belum ada foto masuk</span>
+                <span>No clock-in photo yet</span>
               </div>
             )}
           </div>
@@ -445,7 +445,7 @@ export function AttendanceTracker() {
                 <LogOut size={16} />
               </div>
               <div>
-                <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">JAM PULANG (OUT)</div>
+                <div className="text-[10px] text-zinc-400 tracking-wider uppercase font-semibold">CLOCK OUT</div>
                 <div className="text-sm font-bold text-white mt-0.5 font-medium">
                   {isLoadingStatus ? "--:--" : checkOutTime || "--:--"}
                 </div>
@@ -458,17 +458,17 @@ export function AttendanceTracker() {
             {checkOutPhoto ? (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                  <span className="flex items-center gap-1"><Camera size={11} /> Bukti Foto Pulang:</span>
+                  <span className="flex items-center gap-1"><Camera size={11} /> Clock Out Photo:</span>
                   {recordedGpsOut && <span className="font-medium text-[9px] text-zinc-500">{recordedGpsOut}</span>}
                 </div>
                 <div className="w-full max-w-[150px] aspect-[4/3] rounded-xl overflow-hidden border border-[#27272a] bg-black">
-                  <img src={checkOutPhoto} alt="Foto Pulang" className="w-full h-full object-cover" />
+                  <img src={checkOutPhoto} alt="Clock Out Photo" className="w-full h-full object-cover" />
                 </div>
               </div>
             ) : (
               <div className="h-16 rounded-xl border border-dashed border-[#2b2b30] flex flex-col items-center justify-center text-zinc-500 gap-1 text-[11px]">
                 <ImageIcon size={14} className="opacity-40" />
-                <span>Belum ada foto pulang</span>
+                <span>No clock-out photo yet</span>
               </div>
             )}
           </div>
@@ -482,7 +482,7 @@ export function AttendanceTracker() {
             attendanceState === "checked_in" ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"
           }`} />
           <span className="text-xs text-zinc-300">
-            Status: {attendanceState === "checked_in" ? "Checked In (Aktif Bekerja)" : "Checked Out"}
+            Status: {attendanceState === "checked_in" ? "Checked In (Active)" : "Checked Out"}
           </span>
         </div>
 
@@ -492,14 +492,14 @@ export function AttendanceTracker() {
               onClick={() => openAttendanceModal("check_in")}
               className="px-4 py-2 rounded-xl text-xs font-semibold bg-white text-black hover:bg-zinc-200 transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
             >
-              <Camera size={14} /> Presensi Masuk (Wajib Foto)
+              <Camera size={14} /> Clock In (Photo Required)
             </button>
           ) : (
             <button
               onClick={() => openAttendanceModal("check_out")}
               className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#27272a] hover:bg-[#323236] text-zinc-200 border border-[#3f3f46] transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <Camera size={14} /> Presensi Pulang (Wajib Foto)
+              <Camera size={14} /> Clock Out (Photo Required)
             </button>
           )}
         </div>
@@ -513,7 +513,7 @@ export function AttendanceTracker() {
               <div className="flex items-center gap-2">
                 <Camera size={16} className="text-zinc-300" />
                 <h3 className="text-sm font-semibold text-white">
-                  {pendingAction === "check_in" ? "Verifikasi Presensi Masuk" : "Verifikasi Presensi Pulang"}
+                  {pendingAction === "check_in" ? "Verify Clock In" : "Verify Clock Out"}
                 </h3>
               </div>
               <button 
@@ -549,14 +549,14 @@ export function AttendanceTracker() {
                   onClick={closeAttendanceModal}
                   className="flex-1 py-2.5 rounded-xl border border-[#27272a] text-xs font-medium text-zinc-300 hover:bg-[#27272a] transition cursor-pointer"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="button"
                   onClick={snapPhoto}
                   className="flex-1 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Camera size={13} /> Jepret Foto
+                  <Camera size={13} /> Snap Photo
                 </button>
               </div>
             ) : (
@@ -567,7 +567,7 @@ export function AttendanceTracker() {
                   disabled={isSubmittingAttendance}
                   className="flex-1 py-2.5 rounded-xl border border-[#27272a] text-xs font-medium text-zinc-300 hover:bg-[#27272a] transition cursor-pointer disabled:opacity-50"
                 >
-                  Ulangi Foto
+                  Retake Photo
                 </button>
                 <button
                   type="button"
@@ -580,7 +580,7 @@ export function AttendanceTracker() {
                   ) : (
                     <CheckCircle2 size={13} />
                   )}
-                  {isSubmittingAttendance ? "Menyimpan ke DB..." : "Kirim Presensi"}
+                  {isSubmittingAttendance ? "Saving..." : "Submit Attendance"}
                 </button>
               </div>
             )}

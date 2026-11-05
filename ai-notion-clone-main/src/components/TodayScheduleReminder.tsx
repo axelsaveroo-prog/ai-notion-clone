@@ -251,7 +251,7 @@ export function TodayScheduleReminder() {
                 {/* Baris Atas: HANYA Badge Jadwal, Status Online/Offline, dan Status Persetujuan */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded bg-[#22201d] text-[#ded2be] border border-[#383329]">
-                    Schedule Hari Ini
+                    Today's Schedule
                   </span>
                   
                   {isOnline ? (

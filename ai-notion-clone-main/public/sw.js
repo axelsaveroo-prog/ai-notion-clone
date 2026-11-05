@@ -1,12 +1,22 @@
 // Sika Creative OS - Service Worker for Mobile Notifications & PWA
-const CACHE_NAME = 'sika-os-v1';
+const CACHE_NAME = 'sika-os-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((k) => {
+          if (k !== CACHE_NAME) {
+            return caches.delete(k);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
 // Listener PUSH NOTIFICATION (Saat aplikasi DITUTUP / CLOSE APPS di HP)
@@ -28,7 +38,7 @@ self.addEventListener('push', (event) => {
       requireInteraction: true,
       silent: false,
       actions: [
-        { action: 'open', title: 'Buka' }
+        { action: 'open', title: 'Open' }
       ],
       data: {
         url: data.url || '/',
@@ -54,7 +64,7 @@ self.addEventListener('message', (event) => {
       requireInteraction: true,
       silent: false,
       actions: [
-        { action: 'open', title: 'Buka' }
+        { action: 'open', title: 'Open' }
       ],
       ...options,
     });

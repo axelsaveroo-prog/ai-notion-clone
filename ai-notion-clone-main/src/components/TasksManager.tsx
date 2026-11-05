@@ -1258,7 +1258,7 @@ function TasksManagerContent() {
 
 export function TasksManager() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-xs text-zinc-500">Memuat Task Operations...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-xs text-zinc-500">Loading Task Operations...</div>}>
       <TasksManagerContent />
     </Suspense>
   );

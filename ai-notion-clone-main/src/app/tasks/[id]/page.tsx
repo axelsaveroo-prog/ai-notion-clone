@@ -431,7 +431,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           }}
           onBlur={handleBlurSave}
           className="w-full bg-transparent text-3xl font-bold text-white mb-6 tracking-tight focus:outline-none focus:border-b focus:border-zinc-700 pb-1"
-          placeholder="Judul task..."
+          placeholder="Task title..."
         />
 
         {/* Notion Properties Grid */}
@@ -516,7 +516,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-zinc-400 block mb-1.5 font-medium">Pilihan Warna (Soft):</span>
+                      <span className="text-[10px] text-zinc-400 block mb-1.5 font-medium">Color Palette:</span>
                       <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
                         {COLOR_OPTIONS_LIST.map((opt) => {
                           const isPicked = editClientColor === opt.key;
@@ -658,13 +658,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                         autoFocus
                         value={newClientName}
                         onChange={(e) => setNewClientName(e.target.value)}
-                        placeholder="Nama client (misal: BABA)..."
+                        placeholder="Client name (e.g. BABA)..."
                         className="w-full bg-[#141416] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
                       />
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-zinc-400 block mb-1.5 font-medium">Pilihan Warna (Soft):</span>
+                      <span className="text-[10px] text-zinc-400 block mb-1.5 font-medium">Color Palette:</span>
                       <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto pr-1">
                         {COLOR_OPTIONS_LIST.map((opt) => {
                           const isPicked = newClientColor === opt.key;

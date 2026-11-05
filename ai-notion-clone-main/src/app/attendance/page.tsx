@@ -230,18 +230,18 @@ export default function AttendancePage() {
             </span>
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white mt-1">
-            Presensi Harian
+            Daily Attendance
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Ambil swafoto dan kunci lokasi GPS Anda untuk melakukan presensi.
+            Capture a selfie photo and lock your GPS location to record attendance.
           </p>
         </div>
 
         {/* Status Card Hari Ini */}
         <div className="bg-[#141414] border border-zinc-800 rounded-2xl p-4 space-y-3 shadow-lg">
           <div className="flex items-center justify-between text-xs font-semibold text-zinc-400 border-b border-zinc-800 pb-2">
-            <span>Status Presensi Hari Ini</span>
-            <span className="text-[10px] text-zinc-500 font-medium">Reset Tiap 00:00</span>
+            <span>Today's Attendance Status</span>
+            <span className="text-[10px] text-zinc-500 font-medium">Resets at 00:00</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -255,7 +255,7 @@ export default function AttendancePage() {
                 {hasClockedIn && <CheckCircle2 size={14} className="text-emerald-400" />}
               </div>
               <span className="text-[10px] opacity-80">
-                {hasClockedIn ? "Sudah Presensi Masuk" : "Belum Clock In"}
+                {hasClockedIn ? "Clocked In" : "Not Clocked In"}
               </span>
             </div>
 
@@ -269,7 +269,7 @@ export default function AttendancePage() {
                 {hasClockedOut && <CheckCircle2 size={14} className="text-rose-400" />}
               </div>
               <span className="text-[10px] opacity-80">
-                {hasClockedOut ? "Sudah Presensi Keluar" : "Belum Clock Out"}
+                {hasClockedOut ? "Clocked Out" : "Not Clocked Out"}
               </span>
             </div>
           </div>
@@ -280,11 +280,11 @@ export default function AttendancePage() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-white flex items-center gap-1.5">
               <Camera size={14} className="text-zinc-400" />
-              <span>Swafoto Kamera</span>
+              <span>Camera Photo</span>
             </span>
             {isCameraActive && (
               <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 animate-pulse">
-                • Kamera Aktif
+                • Camera Active
               </span>
             )}
           </div>
@@ -293,7 +293,7 @@ export default function AttendancePage() {
             {capturedPhoto ? (
               <img 
                 src={capturedPhoto} 
-                alt="Captured Presensi" 
+                alt="Captured Attendance" 
                 className="w-full h-full object-cover" 
               />
             ) : isCameraActive ? (
@@ -307,7 +307,7 @@ export default function AttendancePage() {
             ) : (
               <div className="flex flex-col items-center gap-2 text-zinc-600 text-xs">
                 <Camera size={32} className="opacity-40" />
-                <span>Kamera Mati</span>
+                <span>Camera Off</span>
               </div>
             )}
           </div>
@@ -322,7 +322,7 @@ export default function AttendancePage() {
                   className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold border border-zinc-700 transition cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Camera size={14} />
-                  <span>Buka Kamera</span>
+                  <span>Open Camera</span>
                 </button>
               ) : (
                 <div className="grid grid-cols-2 gap-2 w-full">
@@ -332,7 +332,7 @@ export default function AttendancePage() {
                     className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow"
                   >
                     <Camera size={14} />
-                    <span>Ambil Foto</span>
+                    <span>Take Photo</span>
                   </button>
                   <button
                     type="button"
@@ -340,7 +340,7 @@ export default function AttendancePage() {
                     className="py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700 transition cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <XCircle size={14} />
-                    <span>Tutup Kamera</span>
+                    <span>Close Camera</span>
                   </button>
                 </div>
               )
@@ -354,7 +354,7 @@ export default function AttendancePage() {
                 className="w-full py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700 transition cursor-pointer flex items-center justify-center gap-2"
               >
                 <RefreshCw size={13} />
-                <span>Foto Ulang</span>
+                <span>Retake Photo</span>
               </button>
             )}
           </div>
@@ -365,7 +365,7 @@ export default function AttendancePage() {
           {gettingGPS && (
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2 font-medium">
               <MapPin size={14} className="animate-bounce shrink-0" />
-              <span>Mengunci posisi GPS lokasi Anda...</span>
+              <span>Locking GPS position...</span>
             </div>
           )}
 
@@ -377,7 +377,7 @@ export default function AttendancePage() {
               className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold text-xs transition shadow cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <LogIn size={15} />
-              <span>{hasClockedIn ? "Sudah Clock In" : "Clock In (Masuk)"}</span>
+              <span>{hasClockedIn ? "Clocked In" : "Clock In"}</span>
             </button>
 
             <button
@@ -387,7 +387,7 @@ export default function AttendancePage() {
               className="py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold text-xs transition shadow cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <LogOut size={15} />
-              <span>{hasClockedOut ? "Sudah Clock Out" : "Clock Out (Keluar)"}</span>
+              <span>{hasClockedOut ? "Clocked Out" : "Clock Out"}</span>
             </button>
           </div>
         </div>

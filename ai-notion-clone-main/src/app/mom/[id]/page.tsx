@@ -221,7 +221,7 @@ function MomContent({ eventId }: { eventId: string }) {
                 value={title}
                 onChange={(e) => handleSaveTitle(e.target.value)}
                 className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-white tracking-tight focus:outline-none border-b border-transparent focus:border-zinc-700 pb-1 print:hidden"
-                placeholder="Judul Rapat / MoM..."
+                placeholder="Meeting Title / MoM..."
               />
               {/* Judul khusus saat di-print */}
               <h1 className="hidden print:block text-2xl font-bold text-black pb-2">
