@@ -20,7 +20,7 @@ import {
   Loader2,
   Pencil,
   Trash2,
-  Rocket
+  CheckCircle2
 } from "lucide-react";
 import {
   getCalendarEvents,
@@ -597,12 +597,12 @@ export function TeamCalendar() {
 
       {/* MODAL FULL ADD SCHEDULE (Sama dengan Kalender) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 {formCategory === "published_content" ? (
-                  <Rocket size={16} className="text-[#C65921]" />
+                  <CheckCircle2 size={16} className="text-[#C65921]" />
                 ) : (
                   <CalendarIcon size={16} className="text-white" />
                 )}
@@ -620,17 +620,82 @@ export function TeamCalendar() {
             </div>
 
             <form onSubmit={handleSaveEvent} className="space-y-4 text-xs">
+              {/* 2 Opsi Utama: 1. Buat Jadwal vs 2. Penanda Konten Tayang */}
+              <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-900 border border-zinc-800 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setFormCategory("schedule")}
+                  className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
+                    formCategory === "schedule"
+                      ? "bg-[#C65921] text-white shadow-sm"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                  }`}
+                >
+                  <CalendarIcon size={13} />
+                  <span>1. Buat Jadwal</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormCategory("published_content");
+                    if (formMeetLink === "https://meet.google.com/new") setFormMeetLink("");
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
+                    formCategory === "published_content"
+                      ? "bg-[#C65921] text-white shadow-sm"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                  }`}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>2. Konten Tayang</span>
+                </button>
+              </div>
+
+              {formCategory === "published_content" && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-800/40 text-[11px] text-emerald-300/90 flex items-center gap-2">
+                  <CheckCircle2 size={14} className="shrink-0 text-emerald-400" />
+                  <span>
+                    Penanda konten/brief yang sudah live di sosial media. Tetap terlihat di tanggalan kalender dan tidak masuk ke upcoming list.
+                  </span>
+                </div>
+              )}
+
               <div>
-                <label className="block text-zinc-400 mb-1.5 font-medium">
-                  Event Title <span className="text-rose-400">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-zinc-400 font-medium">
+                    {formCategory === "published_content" ? "Judul Konten / Brief Tayang" : "Event Title"} <span className="text-rose-400">*</span>
+                  </label>
+                </div>
+                {formCategory === "published_content" && (
+                  <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 scrollbar-none">
+                    <span className="text-[10px] text-zinc-500 font-medium shrink-0">Format:</span>
+                    {["Feeds", "Reels", "Story", "Carousel", "TikTok"].map((fmt) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => {
+                          if (!formTitle.includes(`[${fmt}]`)) {
+                            setFormTitle(`[${fmt}] ${formTitle.replace(/^\[[^\]]+\]\s*/, "")}`.trim());
+                          }
+                        }}
+                        className="px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] border border-zinc-700/60 transition cursor-pointer shrink-0"
+                      >
+                        +{fmt}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <input
                   type="text"
                   required
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="e.g. Client Strategy Meeting"
-                  className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                  placeholder={
+                    formCategory === "published_content"
+                      ? "e.g. [Reels] Promo Launching Brand / Tips Feeds"
+                      : "e.g. Client Strategy Meeting"
+                  }
+                  className="w-full bg-[#1c1c1f] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 text-xs"
                 />
               </div>
 

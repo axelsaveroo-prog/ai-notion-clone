@@ -1009,7 +1009,7 @@ export async function createCalendarEvent(data: {
     // Send Notion-style mention email to tagged assignees
     if (data.assignees && data.assignees.length > 0) {
       const emailTitle = isPublishedContent
-        ? `🚀 Konten Tayang: ${data.title}`
+        ? `[Konten Tayang] ${data.title}`
         : `${data.title} (${data.date} • ${data.time})`;
       const snippet = isPublishedContent
         ? `${data.client} • Penanda Konten/Brief Tayang`
@@ -1028,7 +1028,7 @@ export async function createCalendarEvent(data: {
       sendWebPushNotification({
         userEmails: data.assignees,
         excludeEmail: data.creatorName || "",
-        title: isPublishedContent ? `🚀 Konten Tayang: ${data.title}` : `🗓️ Jadwal Baru: ${data.title}`,
+        title: isPublishedContent ? `[Konten Tayang] ${data.title}` : `🗓️ Jadwal Baru: ${data.title}`,
         body: isPublishedContent
           ? `${data.creatorName || "Tim"} menandai konten tayang [${data.client}] (${data.date})`
           : `${data.creatorName || "Tim"} menandai kamu di jadwal [${data.client}] (${data.date})`,

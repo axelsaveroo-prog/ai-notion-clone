@@ -40,7 +40,7 @@ import {
   Check,
   AlertCircle,
   Loader2,
-  Rocket
+  CheckCircle2
 } from "lucide-react";
 import { MobileContainer } from "@/components/MobileContainer";
 
@@ -889,16 +889,12 @@ export default function CalendarPage() {
                             className={`text-[10px] px-1.5 py-0.5 rounded border truncate font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer ${theme.badge} ${
                               isPublished ? "ring-1 ring-emerald-500/40 border-emerald-500/30" : ""
                             }`}
-                            title={isPublished ? `🚀 Konten Tayang: ${ev.title} (${ev.client})` : `${ev.title} (${ev.client})`}
+                            title={isPublished ? `Konten Tayang: ${ev.title} (${ev.client})` : `${ev.title} (${ev.client})`}
                           >
-                            {isPublished ? (
-                              <span className="text-[10px] leading-none shrink-0" title="Konten Tayang">🚀</span>
-                            ) : (
-                              <span 
-                                className="w-1.5 h-1.5 rounded-full shrink-0" 
-                                style={{ backgroundColor: theme.dot }} 
-                              />
-                            )}
+                            <span 
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${isPublished ? "bg-emerald-400" : ""}`} 
+                              style={!isPublished ? { backgroundColor: theme.dot } : undefined} 
+                            />
                             <span className="truncate">{ev.title}</span>
                             {isPublished && (
                               <span className="text-[8px] uppercase tracking-wider text-emerald-400 font-mono ml-auto shrink-0 hidden sm:inline">
@@ -927,14 +923,14 @@ export default function CalendarPage() {
 
         {/* MODAL SCHEDULE (ADD & EDIT) */}
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-[#141414] border border-zinc-800 rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl my-auto max-h-[85vh] sm:max-h-[88vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div className="flex items-center gap-2">
                   {editingId ? (
                     isViewOnlyModal ? (
                       formCategory === "published_content" ? (
-                        <Rocket size={16} className="text-emerald-400" />
+                        <CheckCircle2 size={16} className="text-emerald-400" />
                       ) : (
                         <CalendarIcon size={16} className="text-zinc-400" />
                       )
@@ -942,7 +938,7 @@ export default function CalendarPage() {
                       <Pencil size={16} className="text-amber-400" />
                     )
                   ) : formCategory === "published_content" ? (
-                    <Rocket size={16} className="text-[#C65921]" />
+                    <CheckCircle2 size={16} className="text-[#C65921]" />
                   ) : (
                     <CalendarIcon size={16} className="text-white" />
                   )}
@@ -1004,14 +1000,14 @@ export default function CalendarPage() {
                         : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
                     }`}
                   >
-                    <Rocket size={13} />
+                    <CheckCircle2 size={13} />
                     <span>2. Konten Tayang</span>
                   </button>
                 </div>
 
                 {formCategory === "published_content" && (
                   <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-800/40 text-[11px] text-emerald-300/90 flex items-center gap-2">
-                    <Rocket size={14} className="shrink-0 text-emerald-400" />
+                    <CheckCircle2 size={14} className="shrink-0 text-emerald-400" />
                     <span>
                       Penanda konten/brief yang sudah live di sosial media. Tetap terlihat di tanggalan kalender dan tidak masuk ke upcoming list.
                     </span>
