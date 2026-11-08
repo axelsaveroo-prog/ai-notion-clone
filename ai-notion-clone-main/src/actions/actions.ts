@@ -752,8 +752,10 @@ export async function sendChatMessage(data: {
   fileUrl?: string;
   fileType?: string;
   isForwarded?: boolean;
+  replyToId?: string;
   replyToSender?: string;
   replyToText?: string;
+  replyToFileUrl?: string;
 }) {
   try {
     await ensureDatabaseTables();
@@ -767,8 +769,10 @@ export async function sendChatMessage(data: {
         fileUrl: data.fileUrl || null,
         fileType: data.fileType || null,
         isForwarded: data.isForwarded || false,
+        replyToId: data.replyToId || null,
         replyToSender: data.replyToSender || null,
         replyToText: data.replyToText || null,
+        replyToFileUrl: data.replyToFileUrl || null,
       },
     });
 

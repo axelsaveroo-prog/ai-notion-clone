@@ -56,6 +56,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { showMobileNotification, triggerHapticFeedback } from "@/lib/mobile-notifications";
+import { toast } from "sonner";
 
 interface Attachment {
   name: string;
@@ -77,8 +78,10 @@ interface Message {
   isSelf: boolean;
   isEdited?: boolean;
   isForwarded?: boolean;
+  replyToId?: string | null;
   replyToSender?: string | null;
   replyToText?: string | null;
+  replyToFileUrl?: string | null;
 }
 
 interface Channel {
@@ -468,24 +471,39 @@ const ChatInputBar = memo(function ChatInputBar({
       {isInputDragOver && (
         <div className="mb-2 p-2 rounded-xl bg-[#C65921]/15 border border-[#C65921]/40 text-[#C65921] flex items-center justify-center gap-2 text-xs font-semibold animate-pulse">
           <ImageIcon size={15} />
-          <span>Lepaskan foto untuk dilampirkan ke chat</span>
+          <span>Drop photo to attach to chat</span>
         </div>
       )}
       {/* Replying Banner */}
       {replyingMessage && (
-        <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-[#C65921] flex items-center justify-between text-xs">
-          <div className="truncate min-w-0 flex-1 mr-2">
+        <div className="mb-2 p-2 rounded-xl bg-[#202024] border-l-4 border-[#C65921] flex items-center justify-between text-xs gap-2">
+          <div className="truncate min-w-0 flex-1">
             <span className="text-[10px] text-[#C65921] font-semibold block">
               Replying to {replyingMessage.sender}:
             </span>
-            <span className="text-zinc-300 truncate block text-[11px]">
-              {replyingMessage.text || "[Attachment]"}
-            </span>
+            <div className="flex items-center gap-1.5 text-zinc-300 text-[11px] truncate">
+              {replyingMessage.attachment?.type === "image" && (
+                <ImageIcon size={11} className="shrink-0 text-[#C65921]" />
+              )}
+              <span className="truncate">
+                {replyingMessage.text || (replyingMessage.attachment?.type === "image" ? "[Photo]" : "[Attachment]")}
+              </span>
+            </div>
           </div>
+          {replyingMessage.attachment?.type === "image" && replyingMessage.attachment.url && (
+            <div className="w-9 h-9 rounded-md overflow-hidden bg-black/40 shrink-0 border border-zinc-700/60 shadow-xs">
+              <img
+                src={replyingMessage.attachment.url}
+                alt="Replying thumbnail"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
           <button
             type="button"
             onClick={onCancelReply}
             className="text-zinc-400 hover:text-white p-1 cursor-pointer shrink-0"
+            title="Cancel reply"
           >
             <X size={14} />
           </button>
@@ -645,6 +663,7 @@ export function TeamChatSidebar() {
 
   // Lightbox Image Preview
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
 
   // Unread & Notification State
   const [lastReadPerChannel, setLastReadPerChannel] = useState<Record<string, number>>({});
@@ -841,8 +860,10 @@ export function TeamChatSidebar() {
             isSelf,
             isEdited: m.isEdited || false,
             isForwarded: m.isForwarded || false,
+            replyToId: m.replyToId || null,
             replyToSender: m.replyToSender || null,
             replyToText: m.replyToText || null,
+            replyToFileUrl: m.replyToFileUrl || null,
             attachment: m.fileUrl ? { name: "Attachment", size: "File", type: m.fileType || "file", url: m.fileUrl } : undefined,
           };
         });
@@ -909,8 +930,10 @@ export function TeamChatSidebar() {
           isSelf,
           isEdited: m.isEdited || false,
           isForwarded: m.isForwarded || false,
+          replyToId: m.replyToId || null,
           replyToSender: m.replyToSender || null,
           replyToText: m.replyToText || null,
+          replyToFileUrl: m.replyToFileUrl || null,
           attachment: m.fileUrl
             ? {
               name: "Attachment",
@@ -1518,6 +1541,8 @@ export function TeamChatSidebar() {
     const fileToSend = pendingFile;
     const replySender = replyingMessage?.sender || undefined;
     const replyText = replyingMessage?.text || (replyingMessage?.attachment ? `[${replyingMessage.attachment.type}]` : undefined);
+    const replyId = replyingMessage?.id || undefined;
+    const replyFileUrl = replyingMessage?.attachment?.url || undefined;
 
     setPendingFile(null);
     setReplyingMessage(null);
@@ -1534,8 +1559,10 @@ export function TeamChatSidebar() {
       createdAtRaw: new Date().toISOString(),
       isSelf: true,
       attachment: fileToSend || undefined,
+      replyToId: replyId,
       replyToSender: replySender,
       replyToText: replyText,
+      replyToFileUrl: replyFileUrl,
     };
 
     setMessages((prev) => ({
@@ -1554,8 +1581,10 @@ export function TeamChatSidebar() {
         text: textToSend.trim(),
         fileUrl: fileToSend?.url,
         fileType: fileToSend?.type,
+        replyToId: replyId,
         replyToSender: replySender,
         replyToText: replyText,
+        replyToFileUrl: replyFileUrl,
       });
 
       if (!res.success) {
@@ -1623,6 +1652,102 @@ export function TeamChatSidebar() {
     setReplyingMessage(msg);
     setContextMenuMsg(null);
   };
+
+  // Scroll to original replied message (like WhatsApp)
+  const handleScrollToRepliedMessage = useCallback(
+    (msg: Message) => {
+      const currentMsgs = messages[activeChannelId] || [];
+      let target: Message | undefined;
+
+      // 1. Direct match by replyToId if available
+      if (msg.replyToId) {
+        target = currentMsgs.find((m) => m.id === msg.replyToId);
+      }
+
+      // 2. Fallback matching for older messages without replyToId
+      if (!target && msg.replyToSender) {
+        const senderNorm = msg.replyToSender.toLowerCase().trim();
+        const textNorm = (msg.replyToText || "").toLowerCase().trim();
+        const isImageReply =
+          textNorm.includes("image") ||
+          textNorm.includes("photo") ||
+          textNorm.includes("lampiran") ||
+          !!msg.replyToFileUrl;
+
+        // Search backward from this message in current chat
+        const currentIdx = currentMsgs.findIndex((m) => m.id === msg.id);
+        const searchList = currentIdx > 0 ? currentMsgs.slice(0, currentIdx) : currentMsgs;
+
+        target = [...searchList].reverse().find((m) => {
+          const mSender = (m.sender || "").toLowerCase().trim();
+          if (mSender !== senderNorm) return false;
+
+          if (isImageReply) {
+            return m.attachment?.type === "image";
+          }
+          if (m.text && textNorm) {
+            return (
+              m.text.toLowerCase().trim() === textNorm ||
+              m.text.toLowerCase().includes(textNorm)
+            );
+          }
+          return true;
+        });
+      }
+
+      if (target) {
+        const el = document.getElementById(`chat-msg-${target.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setHighlightedMsgId(target.id);
+          setTimeout(() => {
+            setHighlightedMsgId((prev) => (prev === target!.id ? null : prev));
+          }, 2000);
+        } else {
+          toast.info("Original message is further up in history.");
+        }
+      } else {
+        toast.info("Original message not found in this chat session.");
+      }
+    },
+    [messages, activeChannelId]
+  );
+
+  // Helper to extract thumbnail for replied quote box
+  const getReplyThumbnail = useCallback(
+    (msg: Message) => {
+      if (msg.replyToFileUrl) return msg.replyToFileUrl;
+
+      const currentMsgs = messages[activeChannelId] || [];
+
+      // Try by replyToId
+      if (msg.replyToId) {
+        const t = currentMsgs.find((m) => m.id === msg.replyToId);
+        if (t?.attachment?.type === "image") return t.attachment.url;
+      }
+
+      // Fallback by sender & text
+      if (msg.replyToSender) {
+        const senderNorm = msg.replyToSender.toLowerCase().trim();
+        const textNorm = (msg.replyToText || "").toLowerCase().trim();
+        const isImage = textNorm.includes("image") || textNorm.includes("photo") || textNorm.includes("lampiran");
+        if (isImage) {
+          const currentIdx = currentMsgs.findIndex((m) => m.id === msg.id);
+          const searchList = currentIdx > 0 ? currentMsgs.slice(0, currentIdx) : currentMsgs;
+          const t = [...searchList]
+            .reverse()
+            .find(
+              (m) =>
+                (m.sender || "").toLowerCase().trim() === senderNorm &&
+                m.attachment?.type === "image"
+            );
+          if (t?.attachment?.url) return t.attachment.url;
+        }
+      }
+      return null;
+    },
+    [messages, activeChannelId]
+  );
 
   // Start Forward Message
   const handleStartForward = (msg: Message) => {
@@ -2633,6 +2758,7 @@ export function TeamChatSidebar() {
                           <Fragment key={msg.id}>
                             {dateDividerElement}
                             <div
+                              id={`chat-msg-${msg.id}`}
                               className={`group relative flex flex-col ${msg.isSelf ? "items-end" : "items-start"}`}
                             >
                             {/* Sender Name in Group */}
@@ -2646,7 +2772,11 @@ export function TeamChatSidebar() {
 
                             {/* Message Bubble (Soft Terracotta #C65921 for self) */}
                             <div
-                              className={`relative rounded-2xl text-xs leading-relaxed shadow-sm transition max-w-[85%] sm:max-w-[75%] ${isImageOnly
+                              className={`relative rounded-2xl text-xs leading-relaxed shadow-sm transition-all duration-300 max-w-[85%] sm:max-w-[75%] ${
+                                highlightedMsgId === msg.id
+                                  ? "ring-2 ring-[#C65921] ring-offset-2 ring-offset-[#0e0e11] shadow-[0_0_24px_rgba(198,89,33,0.7)] scale-[1.02] z-20"
+                                  : ""
+                              } ${isImageOnly
                                 ? "p-1 bg-transparent"
                                 : msg.isSelf
                                   ? "bg-[#C65921] text-white p-2.5 rounded-tr-xs"
@@ -2677,18 +2807,56 @@ export function TeamChatSidebar() {
                                 </div>
                               )}
 
-                              {/* Reply Quote Box */}
-                              {msg.replyToSender && (
-                                <div className={`mb-1.5 p-1.5 px-2 rounded-lg border-l-3 text-[11px] select-none ${msg.isSelf ? "bg-black/20 border-white/80" : "bg-black/30 border-[#C65921]"
-                                  }`}>
-                                  <span className={`font-semibold block text-[10px] ${msg.isSelf ? "text-orange-100" : "text-[#C65921]"}`}>
-                                    {msg.replyToSender}
-                                  </span>
-                                  <span className="text-white/80 line-clamp-1 italic text-[10px]">
-                                    {msg.replyToText}
-                                  </span>
-                                </div>
-                              )}
+                              {/* Reply Quote Box (Clickable, jumps & highlights original photo/message ala WhatsApp) */}
+                              {msg.replyToSender && (() => {
+                                const thumb = getReplyThumbnail(msg);
+                                const isImageReply =
+                                  !!thumb ||
+                                  (msg.replyToText?.toLowerCase().includes("image") ||
+                                    msg.replyToText?.toLowerCase().includes("photo") ||
+                                    msg.replyToText?.toLowerCase().includes("lampiran"));
+
+                                return (
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    title="Click to jump to replied message"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleScrollToRepliedMessage(msg);
+                                    }}
+                                    className={`mb-1.5 p-1.5 px-2.5 rounded-lg border-l-3 text-[11px] select-none cursor-pointer hover:bg-black/40 active:scale-[0.99] transition-all flex items-center justify-between gap-2.5 group/quote ${
+                                      msg.isSelf
+                                        ? "bg-black/20 border-white/80 hover:bg-black/30"
+                                        : "bg-black/30 border-[#C65921] hover:bg-black/40"
+                                    }`}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <span
+                                        className={`font-semibold block text-[10px] truncate ${
+                                          msg.isSelf ? "text-orange-100" : "text-[#C65921]"
+                                        }`}
+                                      >
+                                        {msg.replyToSender}
+                                      </span>
+                                      <div className="flex items-center gap-1 text-white/85 text-[10px] truncate italic">
+                                        {isImageReply && <ImageIcon size={10} className="shrink-0 opacity-80 text-[#C65921]" />}
+                                        <span className="truncate">{msg.replyToText || "[Photo]"}</span>
+                                      </div>
+                                    </div>
+
+                                    {thumb && (
+                                      <div className="w-9 h-9 rounded-md overflow-hidden bg-black/40 shrink-0 border border-white/10 shadow-xs">
+                                        <img
+                                          src={thumb}
+                                          alt="Quoted attachment"
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
 
                               {/* Image Attachment */}
                               {msg.attachment?.type === "image" && (

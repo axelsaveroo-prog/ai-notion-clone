@@ -29,8 +29,10 @@ model ChatMessage {
   fileType      String?
   isEdited      Boolean? @default(false)
   isForwarded   Boolean? @default(false)
+  replyToId     String?
   replyToSender String?
   replyToText   String?
+  replyToFileUrl String?
   createdAt     DateTime @default(now())
 
   @@index([channelId])
