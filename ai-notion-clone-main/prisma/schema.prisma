@@ -84,17 +84,18 @@ model CalendarEvent {
 }
 
 model Task {
-  id          String   @id @default(cuid())
-  title       String
-  client      String   @default("General")
-  type        String?  @default("Feeds")
-  status      String   @default("todo") // "todo" | "in_progress" | "done"
-  assignee    String?  @default("You")
-  assignedBy  String?
-  dueDate     String?
-  brief       String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  title             String
+  client            String   @default("General")
+  type              String?  @default("Feeds")
+  status            String   @default("todo") // "todo" | "in_progress" | "done"
+  assignee          String?  @default("You")
+  assignedBy        String?
+  notifiedAssignees String?  @default("")
+  dueDate           String?
+  brief             String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model MomNote {

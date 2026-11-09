@@ -352,7 +352,8 @@ function TasksManagerContent() {
     setIsCreating(true);
 
     try {
-      const defaultAssignee = user?.fullName || availableUsers[0]?.name || "You";
+      const creatorName = user?.fullName || user?.username || "You";
+      const defaultAssignee = creatorName;
       const targetClient = prefilledClient || (isClientPage ? activeClientName : clientList[0] || "General");
       const targetStatus = prefilledStatus || "todo";
 
@@ -362,6 +363,7 @@ function TasksManagerContent() {
         client: targetClient,
         type: "Feeds",
         assignee: defaultAssignee,
+        assignedBy: creatorName,
         brief: "",
       });
 

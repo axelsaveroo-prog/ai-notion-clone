@@ -124,6 +124,16 @@ export function MobileNotificationListener() {
           for (const task of tasks) {
             if (notifiedSet.has(`task-${task.id}`)) continue;
 
+            // ATURAN 1: Pembuat tidak dapat notif!
+            const creatorLower = (task.assignedBy || "").toLowerCase().trim();
+            const isCreator = userNames.some(
+              (name) => name && creatorLower && (creatorLower === name || creatorLower.includes(name) || name.includes(creatorLower))
+            );
+            if (isCreator) {
+              notifiedSet.add(`task-${task.id}`);
+              continue;
+            }
+
             const assigneeLower = (task.assignee || "").toLowerCase();
             const isUserAssigned = userNames.some(
               (name) => name && (assigneeLower.includes(name) || assigneeLower === "you")
@@ -135,7 +145,7 @@ export function MobileNotificationListener() {
               // Getar HP dan tampilkan notifikasi sistem/tray HP untuk task baru (tanpa logo pin)
               triggerHapticFeedback([300, 150, 300]);
               showMobileNotification(`Tagged in Brief: ${task.title}`, {
-                body: `${task.assignedBy || "Tim"} menugaskan kamu di brief [${task.client}]`,
+                body: `${task.assignedBy || "Tim"} menandai kamu di brief [${task.client}]`,
                 tag: `task-${task.id}`,
                 url: `/tasks/${task.id}`,
                 vibrate: [300, 150, 300],
@@ -150,6 +160,16 @@ export function MobileNotificationListener() {
         if (events && Array.isArray(events)) {
           for (const ev of events) {
             if (notifiedSet.has(`event-${ev.id}`)) continue;
+
+            // Pembuat jadwal tidak dapat notif!
+            const creatorLower = (ev.creatorName || "").toLowerCase().trim();
+            const isCreator = userNames.some(
+              (name) => name && creatorLower && (creatorLower === name || creatorLower.includes(name) || name.includes(creatorLower))
+            );
+            if (isCreator) {
+              notifiedSet.add(`event-${ev.id}`);
+              continue;
+            }
 
             const assignees = Array.isArray(ev.assignees) ? ev.assignees : [];
             const isUserTagged = assignees.some((a: string) => {

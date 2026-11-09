@@ -1212,6 +1212,27 @@ export async function createTaskAction(data?: {
 }) {
   try {
     await ensureDatabaseTables();
+
+    const creator = (data?.assignedBy || "").trim();
+    const creatorLower = creator.toLowerCase();
+
+    // 1. Saring assignee: siapa saja yang di-assign saat dibuat
+    const rawAssignees = (data?.assignee || "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    // ATURAN 1: Pembuat TIDAK DAPAT notif!
+    const recipientsToNotify = rawAssignees.filter((p) => {
+      const pLower = p.toLowerCase();
+      if (!pLower || pLower === "you" || pLower === "unassigned") return false;
+      // Jangan kirim ke pembuat
+      if (creatorLower && (pLower === creatorLower || pLower.includes(creatorLower) || creatorLower.includes(pLower))) {
+        return false;
+      }
+      return canSendTaskNotification("new-task", p);
+    });
+
     const newTask = await prisma.task.create({
       data: {
         id: crypto.randomUUID(),
@@ -1219,8 +1240,9 @@ export async function createTaskAction(data?: {
         client: data?.client || "General",
         type: data?.type || "Feeds",
         status: data?.status || "todo",
-        assignee: data?.assignee || "Member",
+        assignee: data?.assignee || "Unassigned",
         assignedBy: data?.assignedBy || null,
+        notifiedAssignees: recipientsToNotify.join(", "), // Tandai siapa saja yang sudah dinotifikasi
         dueDate: data?.dueDate || null,
         brief: data?.brief || "",
       },
@@ -1229,36 +1251,27 @@ export async function createTaskAction(data?: {
     revalidatePath("/tasks");
     revalidatePath("/");
 
-    // Send Notion-style mention email & web push to tagged task assignees
-    // HANYA kirim jika task memiliki judul nyata (bukan draft kosong "Untitled Task")
-    const isDraftTitle = !newTask.title || newTask.title.trim().toLowerCase() === "untitled task";
-    if (data?.assignee && !isDraftTitle) {
-      const parts = data.assignee.split(",").map((p) => p.trim()).filter(Boolean);
-      const author = (data.assignedBy || "").toLowerCase().trim();
-      const recipients = parts.filter(
-        (p) => p.toLowerCase().trim() !== author && canSendTaskNotification(newTask.id, p)
-      );
+    // ATURAN 2 & 3:
+    // Notif muncul HANYA ketika ditag saja.
+    // Mau judulnya "Untitled Task" atau belum selesai diisi gapapa, asal ditag langsung muncul sekali!
+    if (recipientsToNotify.length > 0) {
+      sendMentionEmailNotification({
+        type: "task",
+        authorName: creator || "Sika Creative Team",
+        itemTitle: newTask.title,
+        itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${newTask.id}`,
+        assignees: recipientsToNotify,
+        snippetText: `Client: ${newTask.client} • Status: ${newTask.status}`,
+      }).catch((e) => console.warn("Email notify error:", e));
 
-      if (recipients.length > 0) {
-        sendMentionEmailNotification({
-          type: "task",
-          authorName: data.assignedBy || "Sika Creative Team",
-          itemTitle: newTask.title,
-          itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${newTask.id}`,
-          assignees: recipients,
-          snippetText: `Client: ${newTask.client} • Status: ${newTask.status}`
-        }).catch((e) => console.warn("Email notify error:", e));
-
-        // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup (tanpa logo pin)
-        sendWebPushNotification({
-          userEmails: recipients,
-          excludeEmail: author,
-          title: `Tagged in Brief: ${newTask.title}`,
-          body: `${data?.assignedBy || "Tim"} menugaskan kamu di brief [${newTask.client}]`,
-          url: `/tasks/${newTask.id}`,
-          tag: `task-${newTask.id}`,
-        }).catch(() => {});
-      }
+      sendWebPushNotification({
+        userEmails: recipientsToNotify,
+        excludeEmail: creator,
+        title: `Tagged in Brief: ${newTask.title}`,
+        body: `${creator || "Tim"} menandai kamu di brief [${newTask.client}]`,
+        url: `/tasks/${newTask.id}`,
+        tag: `task-${newTask.id}`,
+      }).catch(() => {});
     }
 
     return { success: true, task: newTask };
@@ -1294,10 +1307,11 @@ export async function updateTaskAction(
     assignee?: string;
     dueDate?: string;
     brief?: string;
+    updaterName?: string;
   }
 ) {
   try {
-    // 1. Ambil data task lama untuk mengecek perubahan assignee secara akurat
+    // 1. Ambil data task lama beserta daftar orang yang sudah pernah dinotifikasi
     const existingTask = await prisma.task.findUnique({
       where: { id },
       select: {
@@ -1307,75 +1321,94 @@ export async function updateTaskAction(
         status: true,
         assignee: true,
         assignedBy: true,
+        notifiedAssignees: true,
       },
     });
+
+    const creator = (existingTask?.assignedBy || data.updaterName || "").trim();
+    const creatorLower = creator.toLowerCase();
+
+    // Kumpulan nama yang SUDAH PERNAH dinotifikasi untuk task ini
+    const alreadyNotifiedLower = new Set<string>();
+
+    if (existingTask?.notifiedAssignees) {
+      existingTask.notifiedAssignees
+        .split(",")
+        .map((p) => p.trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((p) => alreadyNotifiedLower.add(p));
+    } else if (existingTask?.assignee) {
+      // Fallback untuk task lama di database: anggap assignee yang lama sudah pernah dapat notif
+      existingTask.assignee
+        .split(",")
+        .map((p) => p.trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((p) => alreadyNotifiedLower.add(p));
+    }
+
+    // 2. Cek siapa yang baru ditag pada update kali ini
+    const currentAssignees = (data.assignee !== undefined ? data.assignee : existingTask?.assignee || "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    // ATURAN 1, 2, 3:
+    // - Pembuat TIDAK DAPAT notif
+    // - Notif HANYA muncul untuk orang yang BARU DITAG (belum pernah dinotif sama sekali di task ini)
+    // - Perubahan apapun (edit judul, ketik brief, ganti status, auto-save) TIDAK AKAN MENGIRIM NOTIFIKASI
+    const newlyTagged = currentAssignees.filter((p) => {
+      const pLower = p.toLowerCase();
+      if (!pLower || pLower === "you" || pLower === "unassigned") return false;
+      // Pembuat tidak dapat notif
+      if (creatorLower && (pLower === creatorLower || pLower.includes(creatorLower) || creatorLower.includes(pLower))) {
+        return false;
+      }
+      // Jika sudah pernah dinotif sebelumnya -> JANGAN kirim notif lagi!
+      if (alreadyNotifiedLower.has(pLower)) return false;
+      // Rate-limit check
+      return canSendTaskNotification(id, p);
+    });
+
+    // Perbarui riwayat notifiedAssignees
+    const updatedNotifiedSet = new Set(alreadyNotifiedLower);
+    newlyTagged.forEach((p) => updatedNotifiedSet.add(p.toLowerCase()));
+    const nextNotifiedAssignees = Array.from(updatedNotifiedSet).join(", ");
 
     const updated = await prisma.task.update({
       where: { id },
       data: {
-        ...(data.title ? { title: data.title } : {}),
-        ...(data.client ? { client: data.client } : {}),
-        ...(data.type ? { type: data.type } : {}),
-        ...(data.status ? { status: data.status } : {}),
-        ...(data.assignee ? { assignee: data.assignee } : {}),
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.client !== undefined ? { client: data.client } : {}),
+        ...(data.type !== undefined ? { type: data.type } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.assignee !== undefined ? { assignee: data.assignee } : {}),
         ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
         ...(data.brief !== undefined ? { brief: data.brief } : {}),
+        notifiedAssignees: nextNotifiedAssignees,
       },
     });
 
     revalidatePath("/tasks");
 
-    // 2. CEK NOTIFIKASI SECARA KETAT:
-    // - JANGAN kirim notifikasi jika task masih draft "Untitled Task"
-    // - JANGAN kirim notifikasi pada autosave biasa jika daftar assignee TIDAK BERUBAH
-    // - HANYA kirim notifikasi ke member yang BARU DITAMBAHKAN ke brief
-    // - JANGAN kirim notifikasi ke pembuat/pengubah itu sendiri
-    const isDraftTitle = !updated.title || updated.title.trim().toLowerCase() === "untitled task";
+    // HANYA kirim notif jika ada anggota tim yang BARU DITAG
+    if (newlyTagged.length > 0) {
+      sendMentionEmailNotification({
+        type: "task",
+        authorName: creator || "Sika Creative Team",
+        itemTitle: updated.title,
+        itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${updated.id}`,
+        assignees: newlyTagged,
+        snippetText: `Client: ${updated.client} • Status: ${updated.status}`,
+      }).catch((e) => console.warn("Email notify error:", e));
 
-    if (!isDraftTitle && data.assignee) {
-      const prevAssigneesLower = (existingTask?.assignee || "")
-        .split(",")
-        .map((p) => p.trim().toLowerCase())
-        .filter(Boolean);
-
-      const newAssignees = data.assignee
-        .split(",")
-        .map((p) => p.trim())
-        .filter(Boolean);
-
-      // Cek apakah judul baru saja diubah dari Untitled Task ke judul resmi pertama kali
-      const wasDraftBefore = existingTask && (!existingTask.title || existingTask.title.trim().toLowerCase() === "untitled task");
-
-      // Cari siapa saja yang baru ditambahkan
-      const newlyAdded = wasDraftBefore
-        ? newAssignees // jika baru pertama kali diberi judul resmi, notifikasi semua assignee
-        : newAssignees.filter((p) => !prevAssigneesLower.includes(p.toLowerCase()));
-
-      const author = (updated.assignedBy || "").toLowerCase().trim();
-      const recipientsToNotify = newlyAdded.filter(
-        (p) => p.toLowerCase().trim() !== author && canSendTaskNotification(updated.id, p)
-      );
-
-      if (recipientsToNotify.length > 0) {
-        sendMentionEmailNotification({
-          type: "task",
-          authorName: updated.assignedBy || "Sika Creative Team",
-          itemTitle: updated.title,
-          itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${updated.id}`,
-          assignees: recipientsToNotify,
-          snippetText: `Client: ${updated.client} • Status: ${updated.status}`
-        }).catch((e) => console.warn("Email notify error:", e));
-
-        // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup (tanpa logo pin)
-        sendWebPushNotification({
-          userEmails: recipientsToNotify,
-          excludeEmail: author,
-          title: `Tagged in Brief: ${updated.title}`,
-          body: `${updated.assignedBy || "Tim"} menugaskan kamu di brief [${updated.client}]`,
-          url: `/tasks/${updated.id}`,
-          tag: `task-${updated.id}`,
-        }).catch(() => {});
-      }
+      sendWebPushNotification({
+        userEmails: newlyTagged,
+        excludeEmail: creator,
+        title: `Tagged in Brief: ${updated.title}`,
+        body: `${creator || "Tim"} menandai kamu di brief [${updated.client}]`,
+        url: `/tasks/${updated.id}`,
+        tag: `task-${updated.id}`,
+      }).catch(() => {});
     }
 
     return { success: true, task: updated };

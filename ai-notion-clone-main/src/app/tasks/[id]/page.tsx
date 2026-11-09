@@ -184,6 +184,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           assignee: overrideData?.assignee !== undefined ? overrideData.assignee : assignee,
           dueDate: overrideData?.dueDate !== undefined ? overrideData.dueDate : due,
           brief: overrideData?.brief !== undefined ? overrideData.brief : content,
+          updaterName: user?.fullName || user?.username || "",
         };
 
         const res = await updateTaskAction(taskId, payload);
