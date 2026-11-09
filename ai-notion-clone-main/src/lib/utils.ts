@@ -65,7 +65,7 @@ export function getGoogleCalendarUrl(event: {
         isOnline && event.meetLink ? `Meeting Link: ${event.meetLink}` : null,
         !isOnline && event.location ? `Lokasi: ${event.location}` : null,
         event.assignees && event.assignees.length > 0 ? `Assignees: ${event.assignees.join(", ")}` : null,
-        `Sika Creative OS Workspace`,
+        `Sika Creative HQ Workspace`,
     ].filter(Boolean).join("\n");
 
     const params = new URLSearchParams({

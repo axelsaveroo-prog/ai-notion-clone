@@ -1,5 +1,5 @@
-// Sika Creative OS - Service Worker for Mobile Notifications & PWA
-const CACHE_NAME = 'sika-os-v3';
+// Sika Creative HQ - Service Worker for Mobile Notifications & PWA
+const CACHE_NAME = 'sika-hq-v4';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -25,7 +25,7 @@ self.addEventListener('push', (event) => {
 
   try {
     const data = event.data.json();
-    const title = data.title || 'Sika Creative OS';
+    const title = data.title || 'Sika Creative HQ';
     const options = {
       body: data.body || '',
       icon: data.icon || '/icon-192.png',

@@ -1,5 +1,5 @@
 /**
- * Sika Creative OS - Mobile Push & Notification Helper
+ * Sika Creative HQ - Mobile Push & Notification Helper
  * Mendukung notifikasi status bar / tray HP (Android & iOS PWA) dan desktop browser
  */
 

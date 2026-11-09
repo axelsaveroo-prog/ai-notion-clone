@@ -522,9 +522,35 @@ function TasksManagerContent() {
 
   // Untuk General Task Operations: 3 Kolom Standar
   const standardColumns = [
-    { key: "todo", label: "TO DO", filter: (s: string) => !s || s.toLowerCase() === "todo" || s === "no_status" || s.toLowerCase() === "brief ready", dotColor: "#71717a" },
-    { key: "in_progress", label: "IN PROGRESS", filter: (s: string) => s.toLowerCase() === "in_progress" || s.toLowerCase() === "in progress" || s.toLowerCase().includes("edit") || s.toLowerCase().includes("revisi"), dotColor: "#38bdf8" },
-    { key: "done", label: "DONE", filter: (s: string) => s.toLowerCase() === "done" || s.toLowerCase().includes("ready"), dotColor: "#34d399" },
+    {
+      key: "todo",
+      label: "TO DO",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return !norm || norm === "todo" || norm === "no_status" || norm === "brief ready" || norm === "brief_ready";
+      },
+      dotColor: "#71717a"
+    },
+    {
+      key: "in_progress",
+      label: "IN PROGRESS",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return norm === "in_progress" || norm === "in progress" || norm.includes("edit") || norm.includes("revisi") || norm.includes("revision");
+      },
+      dotColor: "#38bdf8"
+    },
+    {
+      key: "done",
+      label: "DONE",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        // Cegah brief ready masuk ke kolom done
+        if (norm === "brief ready" || norm === "brief_ready") return false;
+        return norm === "done" || norm === "completed" || norm === "published" || norm === "ready to publish";
+      },
+      dotColor: "#34d399"
+    },
   ];
 
   const currentColumns = isClientPage ? notionColumns : standardColumns;

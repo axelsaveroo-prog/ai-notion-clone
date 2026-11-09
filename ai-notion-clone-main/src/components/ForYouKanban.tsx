@@ -104,7 +104,20 @@ export function ForYouKanban() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {columns.map((col) => {
-            const colTasks = myTasks.filter((t) => t.status === col.key);
+            const colTasks = myTasks.filter((t) => {
+              const s = (t.status || "").toLowerCase().trim();
+              if (col.key === "todo") {
+                return !s || s === "todo" || s === "no_status" || s === "brief ready" || s === "brief_ready";
+              }
+              if (col.key === "in_progress") {
+                return s === "in_progress" || s === "in progress" || s.includes("edit") || s.includes("revisi") || s.includes("revision");
+              }
+              if (col.key === "done") {
+                if (s === "brief ready" || s === "brief_ready") return false;
+                return s === "done" || s === "completed" || s === "published";
+              }
+              return false;
+            });
 
             return (
               <div

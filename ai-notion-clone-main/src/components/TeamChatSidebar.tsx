@@ -288,13 +288,13 @@ if (typeof window !== "undefined") {
   window.addEventListener("touchstart", unlockAudio, { passive: true });
 }
 
-let originalTabTitle = typeof document !== "undefined" ? document.title : "Sika Creative OS";
+let originalTabTitle = typeof document !== "undefined" ? document.title : "Sika Creative HQ";
 let tabBlinkTimer: any = null;
 
 function flashTabNotification(senderName: string) {
   if (typeof document === "undefined") return;
   if (!originalTabTitle || originalTabTitle.includes("💬")) {
-    originalTabTitle = "Sika Creative OS";
+    originalTabTitle = "Sika Creative HQ";
   }
   if (document.hidden) {
     clearInterval(tabBlinkTimer);

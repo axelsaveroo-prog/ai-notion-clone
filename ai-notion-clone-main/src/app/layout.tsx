@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
     const isApp = host.startsWith("app.");
 
     return {
-        title: isApp ? "Sika Creative OS" : "Sika Creative Studio",
+        title: isApp ? "Sika Creative HQ" : "Sika Creative Studio",
         description: isApp ? "A minimalist workspace" : "Official website of Sika Creative Group",
         manifest: "/manifest.json",
         icons: {
