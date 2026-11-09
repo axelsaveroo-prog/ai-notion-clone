@@ -1209,6 +1209,7 @@ export async function createTaskAction(data?: {
   assignedBy?: string;
   dueDate?: string;
   brief?: string;
+  attachments?: string;
 }) {
   try {
     await ensureDatabaseTables();
@@ -1245,6 +1246,7 @@ export async function createTaskAction(data?: {
         notifiedAssignees: recipientsToNotify.join(", "), // Tandai siapa saja yang sudah dinotifikasi
         dueDate: data?.dueDate || null,
         brief: data?.brief || "",
+        attachments: data?.attachments || null,
       },
     });
 
@@ -1307,6 +1309,7 @@ export async function updateTaskAction(
     assignee?: string;
     dueDate?: string;
     brief?: string;
+    attachments?: string;
     updaterName?: string;
   }
 ) {
@@ -1322,6 +1325,7 @@ export async function updateTaskAction(
         assignee: true,
         assignedBy: true,
         notifiedAssignees: true,
+        attachments: true,
       },
     });
 
@@ -1384,6 +1388,7 @@ export async function updateTaskAction(
         ...(data.assignee !== undefined ? { assignee: data.assignee } : {}),
         ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
         ...(data.brief !== undefined ? { brief: data.brief } : {}),
+        ...(data.attachments !== undefined ? { attachments: data.attachments } : {}),
         notifiedAssignees: nextNotifiedAssignees,
       },
     });
@@ -1436,8 +1441,10 @@ export async function deleteTaskAction(id: string) {
 
 export async function getMomNoteAction(eventId: string) {
   try {
-    const note = await prisma.momNote.findUnique({
-      where: { eventId },
+    const note = await prisma.momNote.findFirst({
+      where: {
+        OR: [{ eventId }, { id: eventId }],
+      },
     });
     return note;
   } catch (error) {
@@ -1446,26 +1453,127 @@ export async function getMomNoteAction(eventId: string) {
   }
 }
 
-export async function saveMomNoteAction(eventId: string, content: string, title?: string) {
+export async function saveMomNoteAction(
+  eventId: string,
+  content: string,
+  title?: string,
+  meta?: { client?: string; date?: string; time?: string; creatorName?: string }
+) {
   try {
-    const note = await prisma.momNote.upsert({
-      where: { eventId },
-      update: {
-        content,
-        ...(title ? { title } : {}),
-      },
-      create: {
-        id: crypto.randomUUID(),
-        eventId,
-        title: title || "Minutes of Meeting",
-        content,
+    const existing = await prisma.momNote.findFirst({
+      where: {
+        OR: [{ eventId }, { id: eventId }],
       },
     });
 
+    let note;
+    if (existing) {
+      note = await prisma.momNote.update({
+        where: { id: existing.id },
+        data: {
+          content,
+          ...(title !== undefined ? { title } : {}),
+          ...(meta?.client !== undefined ? { client: meta.client } : {}),
+          ...(meta?.date !== undefined ? { date: meta.date } : {}),
+          ...(meta?.time !== undefined ? { time: meta.time } : {}),
+        },
+      });
+    } else {
+      note = await prisma.momNote.create({
+        data: {
+          id: crypto.randomUUID(),
+          eventId,
+          title: title || "Minutes of Meeting",
+          content,
+          client: meta?.client || "General",
+          date: meta?.date || new Date().toISOString().split("T")[0],
+          time: meta?.time || new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+          creatorName: meta?.creatorName || "Team",
+        },
+      });
+    }
+
     revalidatePath(`/mom/${eventId}`);
+    revalidatePath(`/calendar`);
+    revalidatePath(`/tasks`);
     return { success: true, note };
   } catch (error: any) {
     console.error("Gagal menyimpan notulen MoM:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+export async function createStandaloneMomAction(data?: {
+  title?: string;
+  client?: string;
+  date?: string;
+  time?: string;
+  creatorName?: string;
+}) {
+  try {
+    await ensureDatabaseTables();
+    const id = `mom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const today = new Date().toISOString().split("T")[0];
+    const nowTime = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+
+    const note = await prisma.momNote.create({
+      data: {
+        id,
+        eventId: id,
+        title: data?.title?.trim() || `MoM - ${data?.client || "Meeting"}`,
+        client: data?.client || "General",
+        date: data?.date || today,
+        time: data?.time || nowTime,
+        creatorName: data?.creatorName || "Team",
+        content: "",
+      },
+    });
+
+    revalidatePath(`/calendar`);
+    revalidatePath(`/tasks`);
+    return { success: true, note };
+  } catch (error: any) {
+    console.error("Gagal membuat MoM baru:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+export async function getMomNotesAction(clientName?: string) {
+  try {
+    await ensureDatabaseTables();
+    const notes = await prisma.momNote.findMany({
+      where: clientName
+        ? {
+            client: {
+              equals: clientName,
+              mode: "insensitive",
+            },
+          }
+        : {},
+      orderBy: { createdAt: "desc" },
+    });
+    return notes;
+  } catch (error) {
+    console.error("Gagal getMomNotesAction:", error);
+    return [];
+  }
+}
+
+export async function deleteMomNoteAction(eventIdOrId: string) {
+  try {
+    const existing = await prisma.momNote.findFirst({
+      where: {
+        OR: [{ eventId: eventIdOrId }, { id: eventIdOrId }],
+      },
+    });
+    if (existing) {
+      await prisma.momNote.delete({ where: { id: existing.id } });
+    }
+    revalidatePath(`/calendar`);
+    revalidatePath(`/tasks`);
+    return { success: true };
+  } catch (error: any) {
+    console.error("Gagal delete MoM:", error);
     return { success: false, error: error?.message };
   }
 }

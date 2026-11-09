@@ -16,7 +16,13 @@ import {
   AlertCircle,
   Plus,
   X,
-  Pencil
+  Pencil,
+  Paperclip,
+  Link as LinkIcon,
+  Upload,
+  Download,
+  ExternalLink,
+  FileText
 } from "lucide-react";
 import { 
   getTaskByIdAction, 
@@ -67,6 +73,15 @@ interface DbClient {
   color: string;
 }
 
+interface TaskAttachment {
+  id: string;
+  name: string;
+  size?: string;
+  type: "image" | "file" | "link";
+  url: string;
+  createdAt?: string;
+}
+
 export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const taskId = resolvedParams.id;
@@ -85,6 +100,15 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const [assignee, setAssignee] = useState("You");
   const [due, setDue] = useState("");
   const [content, setContent] = useState("");
+
+  // State Attachments (Files & media)
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [attachmentModalTab, setAttachmentModalTab] = useState<"upload" | "link">("upload");
+  const [linkUrlInput, setLinkUrlInput] = useState("");
+  const [linkNameInput, setLinkNameInput] = useState("");
+  const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [dbClients, setDbClients] = useState<DbClient[]>([]);
@@ -140,6 +164,16 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           setAssignee(taskData.assignee || "You");
           setDue(taskData.dueDate || "");
           setContent(taskData.brief || "");
+          if (taskData.attachments) {
+            try {
+              const parsed = JSON.parse(taskData.attachments);
+              if (Array.isArray(parsed)) setAttachments(parsed);
+            } catch {
+              setAttachments([]);
+            }
+          } else {
+            setAttachments([]);
+          }
         }
       } catch (err) {
         console.error("Gagal memuat task:", err);
@@ -171,6 +205,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       assignee: string;
       dueDate: string;
       brief: string;
+      attachments: string;
     }>) => {
       if (isInitialLoad.current || notFound) return;
 
@@ -184,6 +219,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           assignee: overrideData?.assignee !== undefined ? overrideData.assignee : assignee,
           dueDate: overrideData?.dueDate !== undefined ? overrideData.dueDate : due,
           brief: overrideData?.brief !== undefined ? overrideData.brief : content,
+          attachments: overrideData?.attachments !== undefined ? overrideData.attachments : JSON.stringify(attachments),
           updaterName: user?.fullName || user?.username || "",
         };
 
@@ -201,7 +237,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         setSaveStatus("error");
       }
     },
-    [taskId, title, type, client, status, assignee, due, content, notFound]
+    [taskId, title, type, client, status, assignee, due, content, attachments, notFound, user]
   );
 
   // Debounced auto-save untuk text inputs (Title & Content)
@@ -222,6 +258,166 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     }
     saveChanges();
   }, [saveChanges]);
+
+  // Compress image to Base64 data URL with max dimension and quality
+  const compressImage = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_DIM = 1600;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_DIM) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            }
+          } else {
+            if (height > MAX_DIM) {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const readFileAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Upload handler for files (Images & Docs)
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsUploadingAttachment(true);
+    try {
+      const newItems: TaskAttachment[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 25 * 1024 * 1024) {
+          toast.error(`File "${file.name}" exceeds 25MB limit.`);
+          continue;
+        }
+
+        let dataUrl = "";
+        const isImg = file.type.startsWith("image/");
+        if (isImg) {
+          dataUrl = await compressImage(file);
+        } else {
+          dataUrl = await readFileAsDataUrl(file);
+        }
+
+        newItems.push({
+          id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: file.name,
+          size: file.size > 1024 * 1024
+            ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+            : `${Math.round(file.size / 1024)} KB`,
+          type: isImg ? "image" : "file",
+          url: dataUrl,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      if (newItems.length > 0) {
+        const updated = [...attachments, ...newItems];
+        setAttachments(updated);
+        await saveChanges({ attachments: JSON.stringify(updated) });
+        toast.success(`Attached ${newItems.length} file(s)`);
+      }
+      setOpenDropdown(null);
+    } catch (err) {
+      console.error("Failed to upload attachment:", err);
+      toast.error("Failed to process attachment");
+    } finally {
+      setIsUploadingAttachment(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Embed web / cloud link handler
+  const handleAddLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let url = linkUrlInput.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      url = "https://" + url;
+    }
+
+    let defaultName = linkNameInput.trim();
+    if (!defaultName) {
+      try {
+        defaultName = new URL(url).hostname;
+      } catch {
+        defaultName = "External Link";
+      }
+    }
+
+    const newLink: TaskAttachment = {
+      id: `link_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: defaultName,
+      type: "link",
+      url,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [...attachments, newLink];
+    setAttachments(updated);
+    await saveChanges({ attachments: JSON.stringify(updated) });
+    setLinkUrlInput("");
+    setLinkNameInput("");
+    setOpenDropdown(null);
+    toast.success("Link attached successfully");
+  };
+
+  // Remove attachment handler
+  const handleRemoveAttachment = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = attachments.filter((a) => a.id !== id);
+    setAttachments(updated);
+    await saveChanges({ attachments: JSON.stringify(updated) });
+    toast.success("Attachment removed");
+  };
+
+  // Click on attachment (Lightbox for images, open for links, download for files)
+  const handleAttachmentClick = (att: TaskAttachment) => {
+    if (att.type === "image") {
+      setPreviewAttachment(att);
+    } else if (att.type === "link") {
+      window.open(att.url, "_blank", "noopener,noreferrer");
+    } else {
+      const link = document.createElement("a");
+      link.href = att.url;
+      link.download = att.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   // Menutup menu jika klik di luar
   useEffect(() => {
@@ -826,6 +1022,190 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             />
           </div>
 
+          {/* PROPERTY: FILES & MEDIA */}
+          <div className="flex flex-col sm:flex-row sm:items-start md:col-span-2 relative pt-1 gap-2 sm:gap-0">
+            <span className="flex items-center gap-2 text-zinc-400 w-32 font-medium shrink-0 pt-1">
+              <Paperclip size={15} /> Files & media
+            </span>
+
+            <div className="flex-1 flex flex-wrap items-center gap-2 min-h-[32px]">
+              {/* List of uploaded attachments */}
+              {attachments.map((att) => (
+                <div
+                  key={att.id}
+                  onClick={() => handleAttachmentClick(att)}
+                  className="group relative flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/60 text-xs text-zinc-200 transition cursor-pointer max-w-xs shadow-sm"
+                  title="Click to view or download"
+                >
+                  {att.type === "image" ? (
+                    <img
+                      src={att.url}
+                      alt={att.name}
+                      className="w-4 h-4 rounded object-cover shrink-0"
+                    />
+                  ) : att.type === "link" ? (
+                    <ExternalLink size={13} className="text-sky-400 shrink-0" />
+                  ) : (
+                    <FileText size={13} className="text-amber-400 shrink-0" />
+                  )}
+
+                  <span className="truncate max-w-[130px] font-medium" title={att.name}>
+                    {att.name}
+                  </span>
+
+                  {att.size && (
+                    <span className="text-[10px] text-zinc-400 font-mono">
+                      {att.size}
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveAttachment(att.id, e)}
+                    title="Remove attachment"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-zinc-600 text-zinc-400 hover:text-white transition"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+
+              {/* Add file / link trigger */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenDropdown(openDropdown === "files" ? null : "files")}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700/50 hover:border-zinc-600 text-xs transition cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>{attachments.length === 0 ? "Empty" : "Add"}</span>
+                </button>
+
+                {/* Popover Dropdown for Files & Media */}
+                {openDropdown === "files" && (
+                  <div className="absolute left-0 top-8 z-50 w-76 bg-[#1A1A1D] border border-zinc-800 rounded-xl p-3 shadow-2xl space-y-3">
+                    {/* Tab Switcher */}
+                    <div className="flex items-center gap-1 bg-[#141416] p-1 rounded-lg border border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => setAttachmentModalTab("upload")}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                          attachmentModalTab === "upload"
+                            ? "bg-zinc-800 text-white shadow-sm"
+                            : "text-zinc-400 hover:text-white"
+                        }`}
+                      >
+                        <Upload size={12} />
+                        <span>Upload File</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAttachmentModalTab("link")}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                          attachmentModalTab === "link"
+                            ? "bg-zinc-800 text-white shadow-sm"
+                            : "text-zinc-400 hover:text-white"
+                        }`}
+                      >
+                        <LinkIcon size={12} />
+                        <span>Embed Link</span>
+                      </button>
+                    </div>
+
+                    {/* Tab 1: Upload */}
+                    {attachmentModalTab === "upload" && (
+                      <div className="space-y-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          onChange={(e) => handleFileUpload(e.target.files)}
+                          className="hidden"
+                          id="task-file-input"
+                        />
+                        <label
+                          htmlFor="task-file-input"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            handleFileUpload(e.dataTransfer.files);
+                          }}
+                          className="border border-dashed border-zinc-700 hover:border-zinc-500 rounded-xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer transition hover:bg-zinc-800/40 text-center"
+                        >
+                          {isUploadingAttachment ? (
+                            <>
+                              <Loader2 size={20} className="text-zinc-300 animate-spin" />
+                              <span className="text-xs text-zinc-300">Processing file...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload size={20} className="text-zinc-400" />
+                              <div>
+                                <span className="text-xs font-medium text-white block">
+                                  Click to upload or drag & drop
+                                </span>
+                                <span className="text-[10px] text-zinc-500 block mt-0.5">
+                                  Images, documents, PDF (max 25MB)
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Tab 2: Link */}
+                    {attachmentModalTab === "link" && (
+                      <form onSubmit={handleAddLink} className="space-y-2.5">
+                        <div>
+                          <label className="text-[10px] font-medium text-zinc-400 block mb-1">
+                            Link URL *
+                          </label>
+                          <input
+                            type="url"
+                            autoFocus
+                            value={linkUrlInput}
+                            onChange={(e) => setLinkUrlInput(e.target.value)}
+                            placeholder="https://drive.google.com/..."
+                            className="w-full bg-[#141416] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-zinc-400 block mb-1">
+                            Link Title (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={linkNameInput}
+                            onChange={(e) => setLinkNameInput(e.target.value)}
+                            placeholder="e.g. Asset Folder / Canva Draft"
+                            className="w-full bg-[#141416] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setOpenDropdown(null)}
+                            className="px-2.5 py-1 rounded-md text-[11px] text-zinc-400 hover:text-white transition cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={!linkUrlInput.trim()}
+                            className="px-3 py-1 rounded-md text-[11px] font-semibold bg-white text-black hover:bg-zinc-200 disabled:opacity-50 transition cursor-pointer flex items-center gap-1 shadow-sm"
+                          >
+                            Attach Link
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
         </div>
 
         {/* Notion Content Brief Body */}
@@ -850,6 +1230,49 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           />
         </div>
       </div>
+
+      {/* Lightbox Modal for Image Preview */}
+      {previewAttachment && (
+        <div 
+          onClick={() => setPreviewAttachment(null)}
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="relative max-w-4xl max-h-[90vh] flex flex-col items-center bg-[#141416] border border-zinc-800 rounded-2xl p-3 shadow-2xl overflow-hidden"
+          >
+            <div className="w-full flex items-center justify-between px-3 py-2 border-b border-zinc-800/80 text-xs">
+              <span className="font-medium text-white truncate max-w-md">{previewAttachment.name}</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewAttachment.url}
+                  download={previewAttachment.name}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition flex items-center gap-1.5 text-[11px] font-medium"
+                  title="Download Image"
+                >
+                  <Download size={13} />
+                  <span>Download</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewAttachment(null)}
+                  className="p-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+            <div className="p-3 flex items-center justify-center overflow-auto max-h-[calc(90vh-70px)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img 
+                src={previewAttachment.url} 
+                alt={previewAttachment.name} 
+                className="max-w-full max-h-[75vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

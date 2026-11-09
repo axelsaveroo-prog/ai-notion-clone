@@ -40,7 +40,9 @@ import {
   getClientsAction,
   createClientAction,
   updateClientDescriptionAction,
-  getCalendarEvents
+  getCalendarEvents,
+  getMomNotesAction,
+  createStandaloneMomAction
 } from "@/actions/actions";
 import { getClientThemeByName, COLOR_OPTIONS_LIST } from "@/lib/client-colors";
 import { toast } from "sonner";
@@ -125,6 +127,10 @@ function TasksManagerContent() {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
+  // State Standalone MoM
+  const [standaloneMoms, setStandaloneMoms] = useState<any[]>([]);
+  const [isCreatingMom, setIsCreatingMom] = useState(false);
+
   // Sinkronisasi query param ke state
   useEffect(() => {
     const clientParam = searchParams.get("client");
@@ -136,11 +142,12 @@ function TasksManagerContent() {
   // Load Data
   const loadData = useCallback(async () => {
     try {
-      const [tasksData, usersData, clientsData, eventsData] = await Promise.all([
+      const [tasksData, usersData, clientsData, eventsData, momsData] = await Promise.all([
         getTasksAction(),
         getUsersAction(),
         getClientsAction(),
         getCalendarEvents(),
+        getMomNotesAction(),
       ]);
 
       if (tasksData && Array.isArray(tasksData)) {
@@ -154,6 +161,9 @@ function TasksManagerContent() {
       }
       if (eventsData && Array.isArray(eventsData)) {
         setCalendarEvents(eventsData as any);
+      }
+      if (momsData && Array.isArray(momsData)) {
+        setStandaloneMoms(momsData as any);
       }
     } catch (e) {
       console.error("Gagal memuat task:", e);
@@ -316,13 +326,65 @@ function TasksManagerContent() {
     return result;
   }, [tasks, isClientPage, activeClientName, isTaskForCurrentUser, taskSearchQuery, selectedTypeFilter]);
 
-  // MoM / Agenda pertemuan untuk client aktif
+  // MoM / Agenda pertemuan untuk client aktif (Merge Calendar Events & Standalone MoMs)
   const clientMeetingNotes = useMemo(() => {
     if (!isClientPage) return [];
-    return calendarEvents.filter(
+    const clientEvents = calendarEvents.filter(
       (ev) => ev.client && ev.client.toLowerCase() === activeClientName.toLowerCase()
     );
-  }, [isClientPage, calendarEvents, activeClientName]);
+    const clientMoms = standaloneMoms.filter(
+      (m) => m.client && m.client.toLowerCase() === activeClientName.toLowerCase()
+    );
+
+    const merged = [
+      ...clientEvents.map((ev) => ({
+        id: ev.id,
+        title: ev.title,
+        date: ev.date,
+        time: ev.time,
+        isCalendar: true,
+      })),
+      ...clientMoms.map((m) => ({
+        id: m.id || m.eventId,
+        title: m.title || "Minutes of Meeting",
+        date: m.date || new Date(m.createdAt).toISOString().split("T")[0],
+        time: m.time || "",
+        isCalendar: false,
+      })),
+    ];
+
+    const seen = new Set<string>();
+    return merged.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [isClientPage, calendarEvents, standaloneMoms, activeClientName]);
+
+  // Handler buat standalone MoM (tanpa schedule)
+  const handleCreateStandaloneMom = async (targetClient?: string) => {
+    if (isCreatingMom) return;
+    setIsCreatingMom(true);
+    const clientName = targetClient || (isClientPage ? activeClientName : "General");
+    try {
+      const res = await createStandaloneMomAction({
+        client: clientName,
+        title: `MoM - ${clientName}`,
+        creatorName: user?.fullName || user?.username || "Team",
+      });
+      if (res && res.success && res.note) {
+        toast.success("MoM note created!");
+        router.push(`/mom/${res.note.id}`);
+      } else {
+        toast.error("Failed to create MoM note");
+      }
+    } catch (err) {
+      console.error("Gagal create MoM:", err);
+      toast.error("Failed to create MoM note");
+    } finally {
+      setIsCreatingMom(false);
+    }
+  };
 
   // Drive link per client (localStorage persistent)
   const clientDriveLink = useMemo(() => {
@@ -859,12 +921,24 @@ function TasksManagerContent() {
                     <FileText size={13} className="text-amber-400" />
                     <span>NOTES & MOM</span>
                   </h4>
-                  <Link
-                    href="/calendar"
-                    className="text-[10px] text-zinc-500 hover:text-white transition"
-                  >
-                    + Calendar
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCreateStandaloneMom(activeClientName)}
+                      disabled={isCreatingMom}
+                      className="text-[10px] text-zinc-300 hover:text-white px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 transition flex items-center gap-1 cursor-pointer border border-zinc-700/60"
+                      title="Create MoM without scheduling"
+                    >
+                      <Plus size={10} />
+                      <span>New MoM</span>
+                    </button>
+                    <Link
+                      href="/calendar"
+                      className="text-[10px] text-zinc-500 hover:text-white transition"
+                    >
+                      Calendar
+                    </Link>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 flex-1 max-h-36 overflow-y-auto no-scrollbar">
@@ -959,6 +1033,17 @@ function TasksManagerContent() {
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCreateStandaloneMom()}
+                  disabled={isCreatingMom}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700 font-semibold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                  title="Create Minutes of Meeting (MoM) directly"
+                >
+                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  <span>New MoM</span>
+                </button>
+
                 <button
                   onClick={() => handleCreateNewTask()}
                   disabled={isCreating}

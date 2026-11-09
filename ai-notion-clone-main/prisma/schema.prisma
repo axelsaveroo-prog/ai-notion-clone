@@ -94,17 +94,22 @@ model Task {
   notifiedAssignees String?  @default("")
   dueDate           String?
   brief             String?  @db.Text
+  attachments       String?  @db.Text
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
 
 model MomNote {
-  id        String   @id @default(cuid())
-  eventId   String   @unique
-  title     String?
-  content   String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  title       String?
+  client      String?  @default("General")
+  date        String?
+  time        String?
+  creatorName String?
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Client {

@@ -14,8 +14,10 @@ import {
   getClientsAction,
   createClientAction,
   updateClientAction,
-  deleteClientAction
+  deleteClientAction,
+  createStandaloneMomAction
 } from "@/actions/actions";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getGoogleCalendarUrl } from "@/lib/utils";
 import { 
@@ -82,8 +84,33 @@ const getTodayFormatted = () => {
 };
 
 export default function CalendarPage() {
+  const router = useRouter();
   const { user } = useUser();
   const creatorName = user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || "You";
+  const [isCreatingMom, setIsCreatingMom] = useState(false);
+
+  const handleCreateStandaloneMom = async () => {
+    if (isCreatingMom) return;
+    setIsCreatingMom(true);
+    try {
+      const res = await createStandaloneMomAction({
+        client: "General",
+        title: "MoM - Meeting",
+        creatorName,
+      });
+      if (res && res.success && res.note) {
+        toast.success("MoM note created!");
+        router.push(`/mom/${res.note.id}`);
+      } else {
+        toast.error("Failed to create MoM note");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to create MoM note");
+    } finally {
+      setIsCreatingMom(false);
+    }
+  };
 
   // Set default bulan & tanggal sesuai hari ini
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -669,6 +696,16 @@ export default function CalendarPage() {
               <span>Google Calendar</span>
               <ExternalLink size={11} className="opacity-60" />
             </a>
+
+            <button
+              onClick={handleCreateStandaloneMom}
+              disabled={isCreatingMom}
+              className="h-10 px-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-medium text-xs border border-zinc-800 transition flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+              title="Create Minutes of Meeting (MoM) directly without a schedule"
+            >
+              <FileText size={14} className="text-amber-400" />
+              <span>New MoM</span>
+            </button>
 
             <button
               onClick={() => handleOpenAddModal()}

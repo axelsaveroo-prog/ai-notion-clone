@@ -21,7 +21,8 @@ import {
 import { 
   getMomNoteAction, 
   saveMomNoteAction, 
-  getCalendarEvents 
+  getCalendarEvents,
+  getClientsAction
 } from "@/actions/actions";
 
 function MomContent({ eventId }: { eventId: string }) {
@@ -29,12 +30,13 @@ function MomContent({ eventId }: { eventId: string }) {
   const isPublicView = searchParams.get("view") === "public";
 
   const [title, setTitle] = useState("Minutes of Meeting (MoM)");
-  const [client, setClient] = useState("APERIO");
+  const [client, setClient] = useState("General");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [content, setContent] = useState("");
   const [isSaved, setIsSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [dbClients, setDbClients] = useState<any[]>([]);
 
   // State Share Modal
   const [isShareOpen, setIsShareOpen] = useState(false);
@@ -44,11 +46,21 @@ function MomContent({ eventId }: { eventId: string }) {
     async function loadData() {
       setIsLoading(true);
       try {
-        // Ambil data event dari database
-        const events = await getCalendarEvents();
+        const [events, clientsData, momData] = await Promise.all([
+          getCalendarEvents(),
+          getClientsAction(),
+          getMomNoteAction(eventId),
+        ]);
+
+        if (clientsData && Array.isArray(clientsData)) {
+          setDbClients(clientsData);
+        }
+
+        let matchedEvent = null;
         if (events && Array.isArray(events)) {
           const match = events.find((e: any) => e.id === eventId);
           if (match) {
+            matchedEvent = match;
             setTitle(`MoM: ${match.title}`);
             setClient(match.client || "General");
             setDate(match.date || "");
@@ -56,14 +68,22 @@ function MomContent({ eventId }: { eventId: string }) {
           }
         }
 
-        // Ambil realtime MoM note dari Supabase
-        const momData = await getMomNoteAction(eventId);
-        if (momData && momData.content) {
-          setContent(momData.content);
+        if (momData) {
+          if (momData.content) setContent(momData.content);
           if (momData.title) setTitle(momData.title);
+          if (!matchedEvent) {
+            if (momData.client) setClient(momData.client);
+            if (momData.date) setDate(momData.date);
+            if (momData.time) setTime(momData.time);
+          }
         } else {
-          // Kosongkan agar murni inputan riil user, tanpa teks dummy
           setContent("");
+          if (!matchedEvent) {
+            const today = new Date().toISOString().split("T")[0];
+            const nowTime = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+            setDate(today);
+            setTime(nowTime);
+          }
         }
       } catch (err) {
         console.error("Gagal memuat MoM dari database:", err);
@@ -79,7 +99,7 @@ function MomContent({ eventId }: { eventId: string }) {
     if (isPublicView) return;
     setContent(val);
     try {
-      await saveMomNoteAction(eventId, val, title);
+      await saveMomNoteAction(eventId, val, title, { client, date, time });
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (e) {
@@ -91,10 +111,33 @@ function MomContent({ eventId }: { eventId: string }) {
     if (isPublicView) return;
     setTitle(newTitle);
     try {
-      await saveMomNoteAction(eventId, content, newTitle);
+      await saveMomNoteAction(eventId, content, newTitle, { client, date, time });
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (e) {}
+  };
+
+  const handleSaveMeta = async (updates: { client?: string; date?: string; time?: string }) => {
+    if (isPublicView) return;
+    const nextClient = updates.client !== undefined ? updates.client : client;
+    const nextDate = updates.date !== undefined ? updates.date : date;
+    const nextTime = updates.time !== undefined ? updates.time : time;
+
+    if (updates.client !== undefined) setClient(updates.client);
+    if (updates.date !== undefined) setDate(updates.date);
+    if (updates.time !== undefined) setTime(updates.time);
+
+    try {
+      await saveMomNoteAction(eventId, content, title, {
+        client: nextClient,
+        date: nextDate,
+        time: nextTime,
+      });
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    } catch (e) {
+      console.error("Gagal menyimpan metadata MoM:", e);
+    }
   };
 
   // URL share khusus klien (dengan parameter ?view=public)
@@ -126,12 +169,26 @@ function MomContent({ eventId }: { eventId: string }) {
             <span>Public Document • Read-Only</span>
           </div>
         ) : (
-          <Link
-            href="/calendar"
-            className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
-          >
-            <ArrowLeft size={16} /> Back to Calendar
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/tasks"
+              className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft size={14} /> Tasks
+            </Link>
+            <span className="text-zinc-700">/</span>
+            <Link
+              href="/calendar"
+              className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+            >
+              Calendar
+            </Link>
+            {isSaved && (
+              <span className="text-[11px] text-emerald-400 flex items-center gap-1 ml-2">
+                <Check size={12} /> Saved
+              </span>
+            )}
+          </div>
         )}
 
         <div className="flex items-center gap-2">
@@ -237,23 +294,59 @@ function MomContent({ eventId }: { eventId: string }) {
             <span className="flex items-center gap-2 text-zinc-400 font-medium print:text-zinc-600">
               <CalendarIcon size={14} /> Date:
             </span>
-            <span className="text-zinc-200 font-sans print:text-black">{date || "-"}</span>
+            {isPublicView ? (
+              <span className="text-zinc-200 font-sans print:text-black">{date || "-"}</span>
+            ) : (
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => handleSaveMeta({ date: e.target.value })}
+                className="bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors"
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-2 text-zinc-400 font-medium print:text-zinc-600">
               <Clock size={14} /> Time:
             </span>
-            <span className="text-zinc-200 font-sans print:text-black">{time ? `${time} WIB` : "-"}</span>
+            {isPublicView ? (
+              <span className="text-zinc-200 font-sans print:text-black">{time ? `${time} WIB` : "-"}</span>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => handleSaveMeta({ time: e.target.value })}
+                  className="bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors"
+                />
+                <span className="text-[11px] text-zinc-500">WIB</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-2 text-zinc-400 font-medium print:text-zinc-600">
               <Tag size={14} /> Client Tag:
             </span>
-            <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium print:bg-zinc-100 print:text-black print:border-zinc-300">
-              {client}
-            </span>
+            {isPublicView ? (
+              <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium print:bg-zinc-100 print:text-black print:border-zinc-300">
+                {client}
+              </span>
+            ) : (
+              <select
+                value={client}
+                onChange={(e) => handleSaveMeta({ client: e.target.value })}
+                className="bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors cursor-pointer"
+              >
+                <option value="General">General</option>
+                {dbClients.map((c: any) => (
+                  <option key={c.id || c.name} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
