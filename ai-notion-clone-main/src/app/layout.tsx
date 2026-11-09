@@ -20,8 +20,8 @@ export async function generateMetadata(): Promise<Metadata> {
         description: isApp ? "A minimalist workspace" : "Official website of Sika Creative Group",
         manifest: "/manifest.json",
         icons: {
-            icon: isApp ? "/touch icon sika-04.png" : "/touch icon sika-03.png",
-            apple: isApp ? "/touch icon sika-04.png" : "/touch icon sika-03.png",
+            icon: "/icon-192.png",
+            apple: "/apple-touch-icon.png",
         },
     };
 }

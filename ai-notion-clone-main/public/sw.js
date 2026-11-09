@@ -1,5 +1,5 @@
 // Sika Creative OS - Service Worker for Mobile Notifications & PWA
-const CACHE_NAME = 'sika-os-v2';
+const CACHE_NAME = 'sika-os-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -28,14 +28,13 @@ self.addEventListener('push', (event) => {
     const title = data.title || 'Sika Creative OS';
     const options = {
       body: data.body || '',
-      icon: data.icon || '/touch icon sika-04.png',
-      badge: data.badge || '/touch icon sika-03.png',
+      icon: data.icon || '/icon-192.png',
+      badge: data.badge || '/icon-192.png',
       // Pola getar berulang agar terasa jelas di HP
       vibrate: [300, 100, 300, 100, 300],
-      // Tag unik memicu heads-up popup banner di atas layar Android
-      tag: data.tag || `heads-up-${Date.now()}`,
-      renotify: true,
-      requireInteraction: true,
+      tag: data.tag || 'sika-general',
+      renotify: false,
+      requireInteraction: false,
       silent: false,
       actions: [
         { action: 'open', title: 'Open' }
@@ -56,12 +55,12 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
     self.registration.showNotification(title, {
-      icon: '/touch icon sika-04.png',
-      badge: '/touch icon sika-03.png',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
       vibrate: [300, 100, 300, 100, 300],
-      tag: `heads-up-${Date.now()}`,
-      renotify: true,
-      requireInteraction: true,
+      tag: options?.tag || 'sika-general',
+      renotify: false,
+      requireInteraction: false,
       silent: false,
       actions: [
         { action: 'open', title: 'Open' }

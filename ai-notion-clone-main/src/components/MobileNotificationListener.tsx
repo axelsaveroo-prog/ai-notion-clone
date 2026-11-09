@@ -132,12 +132,12 @@ export function MobileNotificationListener() {
             if (isUserAssigned) {
               notifiedSet.add(`task-${task.id}`);
 
-              // Getar HP dan tampilkan notifikasi sistem/tray HP untuk task baru
+              // Getar HP dan tampilkan notifikasi sistem/tray HP untuk task baru (tanpa logo pin)
               triggerHapticFeedback([300, 150, 300]);
-              showMobileNotification(`📌 Tagged in Brief: ${task.title}`, {
+              showMobileNotification(`Tagged in Brief: ${task.title}`, {
                 body: `${task.assignedBy || "Tim"} menugaskan kamu di brief [${task.client}]`,
                 tag: `task-${task.id}`,
-                url: "/tasks",
+                url: `/tasks/${task.id}`,
                 vibrate: [300, 150, 300],
               });
             } else {

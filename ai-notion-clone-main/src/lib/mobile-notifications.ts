@@ -115,12 +115,12 @@ export async function showMobileNotification(
 
   const notificationOptions = {
     body: options.body,
-    icon: options.icon || "/touch icon sika-04.png",
-    badge: options.badge || "/touch icon sika-03.png",
-    tag: options.tag || `heads-up-${Date.now()}`,
+    icon: options.icon || "/icon-192.png",
+    badge: options.badge || "/icon-192.png",
+    tag: options.tag || `sika-${Date.now()}`,
     vibrate: options.vibrate || [300, 100, 300, 100, 300],
-    renotify: true,
-    requireInteraction: true,
+    renotify: false,
+    requireInteraction: false,
     silent: false,
     data: {
       url: options.url || "/",

@@ -1032,7 +1032,7 @@ export function TeamChatSidebar() {
           // Tampilkan notifikasi native di HP (Android / iOS PWA / Desktop) dengan getar & suara
           showMobileNotification(`💬 ${lastIncomingMsg.sender || "Pesan Baru"}`, {
             body: lastIncomingMsg.text || (lastIncomingMsg.fileType === "image" ? "📷 Mengirim foto" : "📎 Mengirim lampiran"),
-            icon: lastIncomingMsg.senderImage || "/touch icon sika-04.png",
+            icon: lastIncomingMsg.senderImage || "/icon-192.png",
             tag: `chat-${lastIncomingMsg.channelId}`,
             url: `/?chat=${lastIncomingMsg.channelId}`,
             vibrate: [250, 100, 250],

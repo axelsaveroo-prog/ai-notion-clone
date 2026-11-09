@@ -1181,6 +1181,25 @@ export async function getTaskByIdAction(id: string) {
   }
 }
 
+// Rate-limit task notifications: maksimal 1 notifikasi per task ID per penerima dalam 60 detik
+const taskNotificationThrottle = new Map<string, number>();
+
+function canSendTaskNotification(taskId: string, recipient: string): boolean {
+  const key = `${taskId}:${recipient.toLowerCase().trim()}`;
+  const now = Date.now();
+  const lastSent = taskNotificationThrottle.get(key) || 0;
+  if (now - lastSent < 60000) {
+    return false;
+  }
+  taskNotificationThrottle.set(key, now);
+  if (taskNotificationThrottle.size > 500) {
+    for (const [k, time] of taskNotificationThrottle.entries()) {
+      if (now - time > 120000) taskNotificationThrottle.delete(k);
+    }
+  }
+  return true;
+}
+
 export async function createTaskAction(data?: {
   title?: string;
   client?: string;
@@ -1210,26 +1229,36 @@ export async function createTaskAction(data?: {
     revalidatePath("/tasks");
     revalidatePath("/");
 
-    // Send Notion-style mention email to tagged task assignees
-    if (data?.assignee) {
+    // Send Notion-style mention email & web push to tagged task assignees
+    // HANYA kirim jika task memiliki judul nyata (bukan draft kosong "Untitled Task")
+    const isDraftTitle = !newTask.title || newTask.title.trim().toLowerCase() === "untitled task";
+    if (data?.assignee && !isDraftTitle) {
       const parts = data.assignee.split(",").map((p) => p.trim()).filter(Boolean);
-      sendMentionEmailNotification({
-        type: "task",
-        authorName: data.assignedBy || "Sika Creative Team",
-        itemTitle: newTask.title || "Untitled Task",
-        itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${newTask.id}`,
-        assignees: parts,
-        snippetText: `Client: ${newTask.client} • Status: ${newTask.status}`
-      }).catch((e) => console.warn("Email notify error:", e));
+      const author = (data.assignedBy || "").toLowerCase().trim();
+      const recipients = parts.filter(
+        (p) => p.toLowerCase().trim() !== author && canSendTaskNotification(newTask.id, p)
+      );
 
-      // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup
-      sendWebPushNotification({
-        userEmails: parts,
-        title: `📌 Tagged in Brief: ${newTask.title}`,
-        body: `${data?.assignedBy || "Tim"} menugaskan kamu di brief [${newTask.client}]`,
-        url: `/tasks`,
-        tag: `task-${newTask.id}`,
-      }).catch(() => {});
+      if (recipients.length > 0) {
+        sendMentionEmailNotification({
+          type: "task",
+          authorName: data.assignedBy || "Sika Creative Team",
+          itemTitle: newTask.title,
+          itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${newTask.id}`,
+          assignees: recipients,
+          snippetText: `Client: ${newTask.client} • Status: ${newTask.status}`
+        }).catch((e) => console.warn("Email notify error:", e));
+
+        // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup (tanpa logo pin)
+        sendWebPushNotification({
+          userEmails: recipients,
+          excludeEmail: author,
+          title: `Tagged in Brief: ${newTask.title}`,
+          body: `${data?.assignedBy || "Tim"} menugaskan kamu di brief [${newTask.client}]`,
+          url: `/tasks/${newTask.id}`,
+          tag: `task-${newTask.id}`,
+        }).catch(() => {});
+      }
     }
 
     return { success: true, task: newTask };
@@ -1268,6 +1297,19 @@ export async function updateTaskAction(
   }
 ) {
   try {
+    // 1. Ambil data task lama untuk mengecek perubahan assignee secara akurat
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        client: true,
+        status: true,
+        assignee: true,
+        assignedBy: true,
+      },
+    });
+
     const updated = await prisma.task.update({
       where: { id },
       data: {
@@ -1283,25 +1325,57 @@ export async function updateTaskAction(
 
     revalidatePath("/tasks");
 
-    if (data.assignee) {
-      const parts = data.assignee.split(",").map((p) => p.trim()).filter(Boolean);
-      sendMentionEmailNotification({
-        type: "task",
-        authorName: updated.assignedBy || "Sika Creative Team",
-        itemTitle: updated.title || "Task Brief",
-        itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${updated.id}`,
-        assignees: parts,
-        snippetText: `Client: ${updated.client} • Status: ${updated.status}`
-      }).catch((e) => console.warn("Email notify error:", e));
+    // 2. CEK NOTIFIKASI SECARA KETAT:
+    // - JANGAN kirim notifikasi jika task masih draft "Untitled Task"
+    // - JANGAN kirim notifikasi pada autosave biasa jika daftar assignee TIDAK BERUBAH
+    // - HANYA kirim notifikasi ke member yang BARU DITAMBAHKAN ke brief
+    // - JANGAN kirim notifikasi ke pembuat/pengubah itu sendiri
+    const isDraftTitle = !updated.title || updated.title.trim().toLowerCase() === "untitled task";
 
-      // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup
-      sendWebPushNotification({
-        userEmails: parts,
-        title: `📌 Update Brief: ${updated.title}`,
-        body: `${updated.assignedBy || "Tim"} menandai kamu di brief [${updated.client}]`,
-        url: `/tasks`,
-        tag: `task-${updated.id}`,
-      }).catch(() => {});
+    if (!isDraftTitle && data.assignee) {
+      const prevAssigneesLower = (existingTask?.assignee || "")
+        .split(",")
+        .map((p) => p.trim().toLowerCase())
+        .filter(Boolean);
+
+      const newAssignees = data.assignee
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      // Cek apakah judul baru saja diubah dari Untitled Task ke judul resmi pertama kali
+      const wasDraftBefore = existingTask && (!existingTask.title || existingTask.title.trim().toLowerCase() === "untitled task");
+
+      // Cari siapa saja yang baru ditambahkan
+      const newlyAdded = wasDraftBefore
+        ? newAssignees // jika baru pertama kali diberi judul resmi, notifikasi semua assignee
+        : newAssignees.filter((p) => !prevAssigneesLower.includes(p.toLowerCase()));
+
+      const author = (updated.assignedBy || "").toLowerCase().trim();
+      const recipientsToNotify = newlyAdded.filter(
+        (p) => p.toLowerCase().trim() !== author && canSendTaskNotification(updated.id, p)
+      );
+
+      if (recipientsToNotify.length > 0) {
+        sendMentionEmailNotification({
+          type: "task",
+          authorName: updated.assignedBy || "Sika Creative Team",
+          itemTitle: updated.title,
+          itemUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.sikacreative.com"}/tasks/${updated.id}`,
+          assignees: recipientsToNotify,
+          snippetText: `Client: ${updated.client} • Status: ${updated.status}`
+        }).catch((e) => console.warn("Email notify error:", e));
+
+        // Kirim Web Push ke HP yang di-tag brief meskipun aplikasi ditutup (tanpa logo pin)
+        sendWebPushNotification({
+          userEmails: recipientsToNotify,
+          excludeEmail: author,
+          title: `Tagged in Brief: ${updated.title}`,
+          body: `${updated.assignedBy || "Tim"} menugaskan kamu di brief [${updated.client}]`,
+          url: `/tasks/${updated.id}`,
+          tag: `task-${updated.id}`,
+        }).catch(() => {});
+      }
     }
 
     return { success: true, task: updated };

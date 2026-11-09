@@ -158,10 +158,10 @@ export async function sendWebPushNotification(params: {
     const payloadString = JSON.stringify({
       title: params.title,
       body: params.body,
-      icon: "/touch icon sika-04.png",
-      badge: "/touch icon sika-03.png",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       url: params.url || "/",
-      tag: params.tag || `heads-up-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      tag: params.tag || `sika-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     });
 
     const sendPromises = subs.map(async (sub) => {
