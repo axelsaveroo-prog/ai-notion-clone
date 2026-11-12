@@ -279,11 +279,6 @@ export function StickyNotes() {
                 <div className="flex items-center gap-1.5 opacity-60">
                   <GripHorizontal size={14} />
                   <span className="text-[10px] tracking-wider uppercase font-semibold">Note</span>
-                  {isResizing && (
-                    <span className="text-[9px] font-mono text-zinc-400 ml-1">
-                      {width}×{height}
-                    </span>
-                  )}
                 </div>
                 <button
                   type="button"
