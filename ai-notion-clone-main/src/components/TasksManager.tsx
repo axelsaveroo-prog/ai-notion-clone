@@ -476,10 +476,20 @@ function TasksManagerContent() {
 
   // Update Status / Move Task
   const moveTask = async (id: string, newStatus: string) => {
+    const targetCol = notionColumns.find((c) => c.key === newStatus);
+    const targetLabel = targetCol?.label || newStatus;
+
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
     try {
-      await updateTaskStatusAction(id, newStatus);
+      const res = await updateTaskStatusAction(id, newStatus);
+      if (res && res.success) {
+        toast.success(`Brief moved to ${targetLabel}`);
+      } else {
+        toast.error(res?.error || "Failed to update brief status");
+        loadData();
+      }
     } catch {
+      toast.error("Failed to update brief status");
       loadData();
     }
   };
@@ -505,6 +515,7 @@ function TasksManagerContent() {
   };
 
   const handleDragLeave = (e: React.DragEvent, colKey: string) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     if (dragOverCol === colKey) {
       setDragOverCol(null);
     }
@@ -518,7 +529,13 @@ function TasksManagerContent() {
 
     if (!taskId) return;
     const currentTask = tasks.find((t) => t.id === taskId);
-    if (!currentTask || currentTask.status === newStatus) return;
+    if (!currentTask) return;
+
+    // Cek apakah task sudah berada di status/kolom ini
+    const targetCol = notionColumns.find((c) => c.key === newStatus);
+    if (targetCol && targetCol.filter(currentTask.status || "")) {
+      return;
+    }
 
     await moveTask(taskId, newStatus);
   };
@@ -534,88 +551,77 @@ function TasksManagerContent() {
   };
 
   // =========================================================
-  // DEFINISI KOLOM KANBAN
+  // DEFINISI KOLOM KANBAN (7 Kolom Lengkap ala Notion)
+  // Berlaku untuk Client Page maupun My Tasks
   // =========================================================
-  // Untuk Client Page (Notion Progress Board): 7 Kolom sesuai status brief
   const notionColumns = [
     { 
       key: "todo", 
       label: "To Do", 
-      filter: (s: string) => !s || s.toLowerCase() === "todo" || s === "no_status",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return !norm || norm === "todo" || norm === "no_status";
+      },
       dotColor: "#71717a"
     },
     { 
       key: "in_progress", 
       label: "In Progress", 
-      filter: (s: string) => s.toLowerCase() === "in_progress" || s.toLowerCase() === "in progress",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return norm === "in_progress" || norm === "in progress";
+      },
       dotColor: "#d97706"
     },
     { 
       key: "done", 
       label: "Done", 
-      filter: (s: string) => s.toLowerCase() === "done",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        if (norm === "brief ready" || norm === "brief_ready") return false;
+        return norm === "done" || norm === "completed" || norm === "published" || norm === "ready to publish";
+      },
       dotColor: "#10b981"
     },
     { 
       key: "Brief Ready", 
       label: "Brief Ready", 
-      filter: (s: string) => s.toLowerCase() === "brief ready" || s.toLowerCase() === "brief_ready",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return norm === "brief ready" || norm === "brief_ready";
+      },
       dotColor: "#f43f5e"
     },
     { 
       key: "Editing", 
       label: "Editing", 
-      filter: (s: string) => s.toLowerCase() === "editing",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return norm === "editing";
+      },
       dotColor: "#38bdf8"
     },
     { 
       key: "Edited", 
       label: "Edited", 
-      filter: (s: string) => s.toLowerCase() === "edited",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return norm === "edited";
+      },
       dotColor: "#eab308"
     },
     { 
       key: "Revisi", 
       label: "Revisi", 
-      filter: (s: string) => s.toLowerCase() === "revisi" || s.toLowerCase() === "revision",
+      filter: (s: string) => {
+        const norm = (s || "").toLowerCase().trim();
+        return norm === "revisi" || norm === "revision";
+      },
       dotColor: "#f97316"
     },
   ];
 
-  // Untuk General Task Operations: 3 Kolom Standar
-  const standardColumns = [
-    {
-      key: "todo",
-      label: "TO DO",
-      filter: (s: string) => {
-        const norm = (s || "").toLowerCase().trim();
-        return !norm || norm === "todo" || norm === "no_status" || norm === "brief ready" || norm === "brief_ready";
-      },
-      dotColor: "#71717a"
-    },
-    {
-      key: "in_progress",
-      label: "IN PROGRESS",
-      filter: (s: string) => {
-        const norm = (s || "").toLowerCase().trim();
-        return norm === "in_progress" || norm === "in progress" || norm.includes("edit") || norm.includes("revisi") || norm.includes("revision");
-      },
-      dotColor: "#38bdf8"
-    },
-    {
-      key: "done",
-      label: "DONE",
-      filter: (s: string) => {
-        const norm = (s || "").toLowerCase().trim();
-        // Cegah brief ready masuk ke kolom done
-        if (norm === "brief ready" || norm === "brief_ready") return false;
-        return norm === "done" || norm === "completed" || norm === "published" || norm === "ready to publish";
-      },
-      dotColor: "#34d399"
-    },
-  ];
-
-  const currentColumns = isClientPage ? notionColumns : standardColumns;
+  const currentColumns = notionColumns;
 
   return (
     <div className="w-full flex flex-col lg:flex-row items-start gap-5 relative">
@@ -1087,8 +1093,8 @@ function TasksManagerContent() {
         {/* ========================================================= */}
         {/* 3. KANBAN PROGRESS BOARD (HORIZONTAL COLUMNS)             */}
         {/* ========================================================= */}
-        <div className={isClientPage ? "w-full overflow-x-auto pb-4 no-scrollbar" : "w-full"}>
-          <div className={isClientPage ? "flex items-start gap-3.5 min-w-max" : "grid grid-cols-1 md:grid-cols-3 gap-3.5 items-start"}>
+        <div className="w-full overflow-x-auto pb-4 no-scrollbar">
+          <div className="flex items-start gap-3.5 min-w-max">
             {currentColumns.map((col) => {
               const colTasks = displayedTasks.filter((t) => col.filter(t.status || ""));
               const isOver = dragOverCol === col.key;
@@ -1099,9 +1105,7 @@ function TasksManagerContent() {
                   onDragOver={(e) => handleDragOver(e, col.key)}
                   onDragLeave={(e) => handleDragLeave(e, col.key)}
                   onDrop={(e) => handleDrop(e, col.key)}
-                  className={`bg-[#121214] p-3 rounded-2xl border transition-all duration-200 flex flex-col gap-2.5 shadow-sm min-h-[360px] ${
-                    isClientPage ? "w-[275px] shrink-0" : "w-full"
-                  } ${
+                  className={`bg-[#121214] p-3 rounded-2xl border transition-all duration-200 flex flex-col gap-2.5 shadow-sm min-h-[360px] w-[275px] shrink-0 ${
                     isOver 
                       ? "border-zinc-500/70 bg-[#161619] ring-1 ring-zinc-500/30 scale-[1.005]" 
                       : "border-[#222226]"
@@ -1182,9 +1186,10 @@ function TasksManagerContent() {
                           {/* Title Link to Brief Editor */}
                           <Link 
                             href={`/tasks/${task.id}`}
+                            draggable={false}
                             className="hover:underline cursor-pointer"
                           >
-                            <p className="text-xs font-semibold text-zinc-100 leading-snug group-hover:text-white transition-colors line-clamp-2">
+                            <p draggable={false} className="text-xs font-semibold text-zinc-100 leading-snug group-hover:text-white transition-colors line-clamp-2">
                               {task.title || "Untitled Task"}
                             </p>
                           </Link>
