@@ -22,7 +22,11 @@ import {
   Upload,
   Download,
   ExternalLink,
-  FileText
+  FileText,
+  Eye,
+  RotateCw,
+  Copy,
+  Globe
 } from "lucide-react";
 import { 
   getTaskByIdAction, 
@@ -82,6 +86,82 @@ interface TaskAttachment {
   createdAt?: string;
 }
 
+// Helper untuk deteksi label dan icon link
+function parseUrlLabel(urlStr: string): { label: string; service: string } {
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes("drive.google.com")) {
+      if (urlStr.includes("/folders/")) return { label: "Google Drive Folder", service: "Google Drive" };
+      return { label: "Google Drive File", service: "Google Drive" };
+    }
+    if (host.includes("docs.google.com")) {
+      if (urlStr.includes("/document/")) return { label: "Google Doc", service: "Google Docs" };
+      if (urlStr.includes("/spreadsheets/")) return { label: "Google Sheet", service: "Google Sheets" };
+      if (urlStr.includes("/presentation/")) return { label: "Google Slide", service: "Google Slides" };
+      return { label: "Google Docs", service: "Google Docs" };
+    }
+    if (host.includes("figma.com")) return { label: "Figma File", service: "Figma" };
+    if (host.includes("canva.com")) return { label: "Canva Design", service: "Canva" };
+    if (host.includes("dropbox.com")) return { label: "Dropbox File", service: "Dropbox" };
+    if (host.includes("youtube.com") || host.includes("youtu.be")) return { label: "YouTube Video", service: "YouTube" };
+    const cleanHost = host.replace(/^www\./, "");
+    return { label: cleanHost, service: cleanHost };
+  } catch {
+    return { label: "Direct Link", service: "Link" };
+  }
+}
+
+// Helper untuk mengekstrak semua url unik dari brief
+function extractAllUrls(text: string): { url: string; label: string; service: string }[] {
+  if (!text) return [];
+  const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/gi;
+  const matches = text.match(urlRegex) || [];
+  const uniqueUrls = Array.from(new Set(matches));
+  return uniqueUrls.map((url) => {
+    const meta = parseUrlLabel(url);
+    return {
+      url,
+      label: meta.label,
+      service: meta.service,
+    };
+  });
+}
+
+// Render brief dengan URL otomatis menjadi clickable link
+function renderFormattedBrief(text: string) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/gi;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (part.match(/^https?:\/\//i)) {
+      const meta = parseUrlLabel(part);
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => {
+            // Mencegah klik link memicu masuk mode edit
+            e.stopPropagation();
+          }}
+          title={`Buka ${meta.label}: ${part}`}
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 my-0.5 mx-1 rounded-md bg-sky-950/60 hover:bg-sky-900/90 text-sky-300 hover:text-sky-100 border border-sky-700/60 hover:border-sky-500 font-mono text-xs font-normal underline underline-offset-2 break-all transition-colors cursor-pointer align-baseline"
+        >
+          <ExternalLink size={12} className="shrink-0 text-sky-400" />
+          <span className="font-medium">{meta.label}</span>
+          <span className="opacity-70 text-[10px] hidden sm:inline max-w-[200px] truncate">
+            ({part.replace(/^https?:\/\/(www\.)?/, "")})
+          </span>
+        </a>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
 export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const taskId = resolvedParams.id;
@@ -132,6 +212,21 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialLoad = useRef(true);
 
+  // Realtime Polling & Concurrency Protection
+  const isDirtyRef = useRef(false);
+  const isTextareaFocusedRef = useRef(false);
+  const lastServerUpdatedAtRef = useRef<string | null>(null);
+  const lastSavedContentRef = useRef<string>("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isLiveSyncing, setIsLiveSyncing] = useState(false);
+  const [remoteConflictData, setRemoteConflictData] = useState<{
+    brief: string;
+    title?: string;
+    updatedAt?: string;
+  } | null>(null);
+  const [briefMode, setBriefMode] = useState<"view" | "edit">("view");
+  const [copiedBrief, setCopiedBrief] = useState(false);
+
   // Load Task, Members, and Database Clients
   useEffect(() => {
     let mounted = true;
@@ -163,7 +258,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           setStatus(taskData.status || "todo");
           setAssignee(taskData.assignee || "You");
           setDue(taskData.dueDate || "");
-          setContent(taskData.brief || "");
+          const briefStr = taskData.brief || "";
+          setContent(briefStr);
+          lastSavedContentRef.current = briefStr;
+          lastServerUpdatedAtRef.current = taskData.updatedAt ? new Date(taskData.updatedAt).toISOString() : null;
+          // Bila brief sudah ada isinya, buka mode view (direct links). Bila kosong, buka mode edit.
+          setBriefMode(briefStr.trim().length > 0 ? "view" : "edit");
+
           if (taskData.attachments) {
             try {
               const parsed = JSON.parse(taskData.attachments);
@@ -225,10 +326,26 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
 
         const res = await updateTaskAction(taskId, payload);
         if (res && res.success) {
+          isDirtyRef.current = false;
+          lastSavedContentRef.current = payload.brief;
+          const nowIso = new Date().toISOString();
+          lastServerUpdatedAtRef.current = nowIso;
+          setRemoteConflictData(null);
           setSaveStatus("saved");
           setTimeout(() => {
             setSaveStatus("idle");
           }, 2500);
+
+          // Broadcast ke tab lain di browser yang sama
+          try {
+            if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+              const channel = new BroadcastChannel("sika_task_sync_" + taskId);
+              channel.postMessage({ type: "TASK_SAVED", taskId, time: nowIso });
+              channel.close();
+            }
+          } catch {
+            // ignore
+          }
         } else {
           setSaveStatus("error");
         }
@@ -258,6 +375,122 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     }
     saveChanges();
   }, [saveChanges]);
+
+  // Polling data task untuk sinkronisasi realtime multi-user
+  const pollTaskUpdates = useCallback(async (isManual = false) => {
+    if (!taskId || notFound) return;
+    if (isManual) setIsLiveSyncing(true);
+    try {
+      const fresh = await getTaskByIdAction(taskId);
+      if (!fresh) return;
+
+      const freshUpdatedAt = fresh.updatedAt ? new Date(fresh.updatedAt).toISOString() : null;
+      const freshBrief = fresh.brief || "";
+      const freshTitle = fresh.title || "";
+
+      // Cek apakah ada pembaruan di server
+      const isServerNewer = Boolean(
+        freshUpdatedAt &&
+        lastServerUpdatedAtRef.current &&
+        new Date(freshUpdatedAt).getTime() > new Date(lastServerUpdatedAtRef.current).getTime() + 400
+      );
+      const isContentDifferent = freshBrief !== lastSavedContentRef.current;
+
+      if (isServerNewer || isContentDifferent) {
+        // Jika user lokal sedang aktif mengetik di textarea / input:
+        if (isDirtyRef.current || isTextareaFocusedRef.current) {
+          // Bila isi brief berbeda, tampilkan conflict warning banner
+          if (content !== freshBrief) {
+            setRemoteConflictData({
+              brief: freshBrief,
+              title: fresh.title,
+              updatedAt: freshUpdatedAt || undefined,
+            });
+          }
+        } else {
+          // Aman untuk di-sync otomatis secara seamless tanpa mengganggu user!
+          lastServerUpdatedAtRef.current = freshUpdatedAt;
+          lastSavedContentRef.current = freshBrief;
+          setContent(freshBrief);
+          setTitle(freshTitle);
+          setType(fresh.type || "Feeds");
+          setClient(fresh.client || "General");
+          setStatus(fresh.status || "todo");
+          setAssignee(fresh.assignee || "You");
+          setDue(fresh.dueDate || "");
+          if (fresh.attachments) {
+            try {
+              const parsed = JSON.parse(fresh.attachments);
+              if (Array.isArray(parsed)) setAttachments(parsed);
+            } catch {
+              // ignore
+            }
+          }
+          if (isManual) {
+            toast.success("Brief berhasil disinkronkan ke versi terbaru tim!");
+          }
+        }
+      } else {
+        if (isManual) {
+          toast.info("Brief sudah dalam versi paling baru.");
+        }
+      }
+    } catch (err) {
+      console.error("Polling task error:", err);
+    } finally {
+      if (isManual) setIsLiveSyncing(false);
+    }
+  }, [taskId, notFound, content]);
+
+  // Efek interval polling realtime & BroadcastChannel
+  useEffect(() => {
+    if (!taskId || notFound) return;
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        channel = new BroadcastChannel("sika_task_sync_" + taskId);
+        channel.onmessage = (event) => {
+          if (event.data?.type === "TASK_SAVED" && event.data?.taskId === taskId) {
+            pollTaskUpdates(false);
+          }
+        };
+      }
+    } catch {
+      // ignore
+    }
+
+    const handleFocus = () => {
+      if (!document.hidden) {
+        pollTaskUpdates(false);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    // Polling setiap 2.5 detik saat tab aktif
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        pollTaskUpdates(false);
+      }
+    }, 2500);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+      clearInterval(interval);
+    };
+  }, [taskId, notFound, pollTaskUpdates]);
+
+  const handleCopyBrief = () => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
+    setCopiedBrief(true);
+    toast.success("Teks brief berhasil disalin ke clipboard!");
+    setTimeout(() => setCopiedBrief(false), 2000);
+  };
 
   // Compress image to Base64 data URL with max dimension and quality
   const compressImage = async (file: File): Promise<string> => {
@@ -554,6 +787,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     return assignee.split(",").map((s) => s.trim()).filter(Boolean);
   }, [assignee]);
 
+  const detectedLinks = useMemo(() => extractAllUrls(content), [content]);
+
   const toggleAssignee = (name: string) => {
     let updated: string[];
     if (selectedAssignees.includes(name)) {
@@ -594,7 +829,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="min-h-screen bg-[#0F0F0F] text-zinc-200 p-8 pb-32">
       {/* Top Header */}
-      <div className="max-w-4xl mx-auto mb-6 flex items-center justify-between">
+      <div className="max-w-4xl mx-auto mb-6 flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/tasks"
           className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
@@ -602,7 +837,48 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           <ArrowLeft size={16} /> Back to Task Board
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Realtime Live Indicator */}
+          <div 
+            title="Realtime sync aktif: perubahan tim tersinkron otomatis"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#18181b] border border-zinc-800 text-[11px] text-zinc-300 font-medium select-none"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="hidden sm:inline text-zinc-400">Live Sync</span>
+          </div>
+
+          {/* Save Status Indicator */}
+          {saveStatus === "saving" && (
+            <span className="text-[11px] text-zinc-400 flex items-center gap-1.5 px-2 py-0.5">
+              <Loader2 size={12} className="animate-spin text-zinc-400" />
+              <span className="hidden sm:inline">Menyimpan...</span>
+            </span>
+          )}
+          {saveStatus === "saved" && (
+            <span className="text-[11px] text-emerald-400 flex items-center gap-1.5 px-2 py-0.5">
+              <Check size={12} />
+              <span className="hidden sm:inline">Tersimpan</span>
+            </span>
+          )}
+          {saveStatus === "error" && (
+            <span className="text-[11px] text-rose-400 flex items-center gap-1.5 px-2 py-0.5">
+              <AlertCircle size={12} />
+              <span className="hidden sm:inline">Gagal simpan</span>
+            </span>
+          )}
+
+          {/* Manual Sync Button */}
+          <button
+            type="button"
+            onClick={() => pollTaskUpdates(true)}
+            disabled={isLiveSyncing}
+            title="Sinkronkan & cek pembaruan realtime dari tim sekarang"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-medium transition cursor-pointer disabled:opacity-60"
+          >
+            <RotateCw size={12} className={isLiveSyncing ? "animate-spin text-emerald-400" : ""} />
+            <span className="hidden sm:inline">Sync</span>
+          </button>
+
           <button
             onClick={handleDelete}
             title="Delete Task"
@@ -622,11 +898,18 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         <input
           type="text"
           value={title}
+          onFocus={() => {
+            isTextareaFocusedRef.current = true;
+          }}
           onChange={(e) => {
+            isDirtyRef.current = true;
             setTitle(e.target.value);
             triggerDebouncedSave();
           }}
-          onBlur={handleBlurSave}
+          onBlur={() => {
+            isTextareaFocusedRef.current = false;
+            handleBlurSave();
+          }}
           className="w-full bg-transparent text-3xl font-bold text-white mb-6 tracking-tight focus:outline-none focus:border-b focus:border-zinc-700 pb-1"
           placeholder="Task title..."
         />
@@ -1209,25 +1492,210 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         {/* Notion Content Brief Body */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs uppercase font-semibold tracking-wider text-zinc-500">
-              Brief & Deliverables Content
-            </h3>
-            <span className="text-[11px] text-zinc-500">
-              Tersinkronisasi realtime ke database
-            </span>
+        <div className="space-y-4 pt-2">
+          {/* Conflict Warning Alert jika ada update remote saat sedang mengetik */}
+          {remoteConflictData && (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5 text-amber-300 font-medium">
+                <AlertCircle size={16} className="shrink-0 text-amber-400" />
+                <span>Rekan tim Anda baru saja memperbarui brief ini di server.</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContent(remoteConflictData.brief);
+                    lastSavedContentRef.current = remoteConflictData.brief;
+                    lastServerUpdatedAtRef.current = remoteConflictData.updatedAt || new Date().toISOString();
+                    setRemoteConflictData(null);
+                    isDirtyRef.current = false;
+                    toast.success("Brief berhasil diperbarui ke versi tim terbaru!");
+                  }}
+                  className="px-3 py-1 rounded-lg bg-amber-500 text-black font-semibold hover:bg-amber-400 transition cursor-pointer text-xs"
+                >
+                  Muat Versi Tim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRemoteConflictData(null);
+                    saveChanges();
+                    toast.info("Menyimpan versi Anda ke database.");
+                  }}
+                  className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition cursor-pointer text-xs"
+                >
+                  Pertahankan Versi Saya
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Detected Links Bar */}
+          {detectedLinks.length > 0 && (
+            <div className="p-3 bg-[#18181b] border border-zinc-800/90 rounded-xl space-y-2 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
+                  <Globe size={13} className="text-sky-400" />
+                  <span>Direct Links ({detectedLinks.length})</span>
+                  <span className="text-[10px] text-zinc-500 font-normal hidden sm:inline">
+                    Klik untuk langsung membuka file / folder tanpa copas
+                  </span>
+                </div>
+                {detectedLinks.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      detectedLinks.forEach((item) => {
+                        window.open(item.url, "_blank", "noopener,noreferrer");
+                      });
+                    }}
+                    className="text-[11px] text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                  >
+                    <span>Buka Semua Link ({detectedLinks.length})</span>
+                    <ExternalLink size={11} />
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {detectedLinks.map((item, idx) => (
+                  <a
+                    key={idx}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={item.url}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-sky-500/50 text-xs text-zinc-200 hover:text-white transition group cursor-pointer max-w-full"
+                  >
+                    <ExternalLink size={12} className="text-sky-400 group-hover:scale-110 transition-transform shrink-0" />
+                    <span className="font-medium text-sky-300">{item.label}</span>
+                    <span className="text-[10px] text-zinc-400 truncate max-w-[200px]">
+                      {item.url.replace(/^https?:\/\//, "")}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section Header with Tabs & Copy button */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 pb-2.5">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs uppercase font-semibold tracking-wider text-zinc-400">
+                Brief & Deliverables Content
+              </h3>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/70 text-zinc-400 font-mono">
+                {content.length} chars
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Copy Brief Button */}
+              {content.trim() && (
+                <button
+                  type="button"
+                  onClick={handleCopyBrief}
+                  title="Salin seluruh isi brief"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs transition cursor-pointer border border-zinc-800"
+                >
+                  {copiedBrief ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  <span>{copiedBrief ? "Tersalin!" : "Copy"}</span>
+                </button>
+              )}
+
+              {/* View / Edit Mode Switcher */}
+              <div className="inline-flex items-center p-0.5 rounded-lg bg-[#141416] border border-zinc-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setBriefMode("view")}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                    briefMode === "view"
+                      ? "bg-zinc-800 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title="Tampilan interaktif dengan direct clickable links"
+                >
+                  <Eye size={12} />
+                  <span>Direct Links</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBriefMode("edit");
+                    setTimeout(() => textareaRef.current?.focus(), 50);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                    briefMode === "edit"
+                      ? "bg-zinc-800 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title="Edit teks mentah"
+                >
+                  <Pencil size={12} />
+                  <span>Edit Text</span>
+                </button>
+              </div>
+            </div>
           </div>
-          <textarea
-            value={content}
-            onChange={(e) => {
-              setContent(e.target.value);
-              triggerDebouncedSave();
-            }}
-            onBlur={handleBlurSave}
-            rows={14}
-            className="w-full bg-[#181818] border border-zinc-800 rounded-xl p-4 text-zinc-300  text-sm leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y"
-          />
+
+          {/* Mode 1: Direct Links / Formatted View */}
+          {briefMode === "view" ? (
+            <div
+              onClick={() => {
+                setBriefMode("edit");
+                setTimeout(() => textareaRef.current?.focus(), 50);
+              }}
+              className="w-full min-h-[300px] bg-[#181818] border border-zinc-800 hover:border-zinc-700 rounded-xl p-5 text-zinc-300 text-sm leading-relaxed transition-colors cursor-text group relative"
+            >
+              {content.trim() ? (
+                <div className="whitespace-pre-wrap font-sans break-words selection:bg-zinc-700">
+                  {renderFormattedBrief(content)}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-zinc-500 gap-2">
+                  <FileText size={28} className="opacity-40" />
+                  <p className="text-xs">Brief masih kosong. Klik di sini untuk mulai mengetik.</p>
+                </div>
+              )}
+              <div className="absolute right-3 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <span className="text-[11px] px-2 py-1 rounded-md bg-zinc-800/90 text-zinc-400 border border-zinc-700 flex items-center gap-1 shadow">
+                  <Pencil size={11} /> Klik untuk edit teks
+                </span>
+              </div>
+            </div>
+          ) : (
+            /* Mode 2: Raw Textarea Edit */
+            <div className="space-y-2">
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onFocus={() => {
+                  isTextareaFocusedRef.current = true;
+                }}
+                onChange={(e) => {
+                  isDirtyRef.current = true;
+                  setContent(e.target.value);
+                  triggerDebouncedSave();
+                }}
+                onBlur={() => {
+                  isTextareaFocusedRef.current = false;
+                  handleBlurSave();
+                }}
+                rows={14}
+                placeholder="Tuliskan detail brief, instruksi visual/audio, copy text, dan tempel link aset (Google Drive, Canva, Figma)..."
+                className="w-full bg-[#181818] border border-zinc-800 rounded-xl p-4 text-zinc-200 text-sm leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y font-sans"
+              />
+              <div className="flex items-center justify-between text-[11px] text-zinc-500 px-1">
+                <span>Tip: Link (Google Drive, Figma, dll) otomatis clickable di tab &quot;Direct Links&quot; dan panel di atas.</span>
+                <button
+                  type="button"
+                  onClick={() => setBriefMode("view")}
+                  className="text-sky-400 hover:text-sky-300 hover:underline cursor-pointer"
+                >
+                  Lihat mode Direct Links ↗
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
