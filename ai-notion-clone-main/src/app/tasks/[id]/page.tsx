@@ -23,10 +23,8 @@ import {
   Download,
   ExternalLink,
   FileText,
-  Eye,
   RotateCw,
-  Copy,
-  Globe
+  Copy
 } from "lucide-react";
 import { 
   getTaskByIdAction, 
@@ -86,49 +84,7 @@ interface TaskAttachment {
   createdAt?: string;
 }
 
-// Helper untuk deteksi label dan icon link
-function parseUrlLabel(urlStr: string): { label: string; service: string } {
-  try {
-    const parsed = new URL(urlStr);
-    const host = parsed.hostname.toLowerCase();
-    if (host.includes("drive.google.com")) {
-      if (urlStr.includes("/folders/")) return { label: "Google Drive Folder", service: "Google Drive" };
-      return { label: "Google Drive File", service: "Google Drive" };
-    }
-    if (host.includes("docs.google.com")) {
-      if (urlStr.includes("/document/")) return { label: "Google Doc", service: "Google Docs" };
-      if (urlStr.includes("/spreadsheets/")) return { label: "Google Sheet", service: "Google Sheets" };
-      if (urlStr.includes("/presentation/")) return { label: "Google Slide", service: "Google Slides" };
-      return { label: "Google Docs", service: "Google Docs" };
-    }
-    if (host.includes("figma.com")) return { label: "Figma File", service: "Figma" };
-    if (host.includes("canva.com")) return { label: "Canva Design", service: "Canva" };
-    if (host.includes("dropbox.com")) return { label: "Dropbox File", service: "Dropbox" };
-    if (host.includes("youtube.com") || host.includes("youtu.be")) return { label: "YouTube Video", service: "YouTube" };
-    const cleanHost = host.replace(/^www\./, "");
-    return { label: cleanHost, service: cleanHost };
-  } catch {
-    return { label: "Direct Link", service: "Link" };
-  }
-}
-
-// Helper untuk mengekstrak semua url unik dari brief
-function extractAllUrls(text: string): { url: string; label: string; service: string }[] {
-  if (!text) return [];
-  const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/gi;
-  const matches = text.match(urlRegex) || [];
-  const uniqueUrls = Array.from(new Set(matches));
-  return uniqueUrls.map((url) => {
-    const meta = parseUrlLabel(url);
-    return {
-      url,
-      label: meta.label,
-      service: meta.service,
-    };
-  });
-}
-
-// Render brief dengan URL otomatis menjadi clickable link
+// Render brief ala Notion: teks bersih alami & URL otomatis menjadi clickable link dengan garis bawah halus
 function renderFormattedBrief(text: string) {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/gi;
@@ -136,7 +92,6 @@ function renderFormattedBrief(text: string) {
 
   return parts.map((part, index) => {
     if (part.match(/^https?:\/\//i)) {
-      const meta = parseUrlLabel(part);
       return (
         <a
           key={index}
@@ -147,14 +102,9 @@ function renderFormattedBrief(text: string) {
             // Mencegah klik link memicu masuk mode edit
             e.stopPropagation();
           }}
-          title={`Buka ${meta.label}: ${part}`}
-          className="inline-flex items-center gap-1.5 px-2 py-0.5 my-0.5 mx-1 rounded-md bg-sky-950/60 hover:bg-sky-900/90 text-sky-300 hover:text-sky-100 border border-sky-700/60 hover:border-sky-500 font-mono text-xs font-normal underline underline-offset-2 break-all transition-colors cursor-pointer align-baseline"
+          className="text-zinc-200 hover:text-white underline underline-offset-4 decoration-zinc-500 hover:decoration-zinc-300 transition-colors cursor-pointer break-all"
         >
-          <ExternalLink size={12} className="shrink-0 text-sky-400" />
-          <span className="font-medium">{meta.label}</span>
-          <span className="opacity-70 text-[10px] hidden sm:inline max-w-[200px] truncate">
-            ({part.replace(/^https?:\/\/(www\.)?/, "")})
-          </span>
+          {part}
         </a>
       );
     }
@@ -787,8 +737,6 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     return assignee.split(",").map((s) => s.trim()).filter(Boolean);
   }, [assignee]);
 
-  const detectedLinks = useMemo(() => extractAllUrls(content), [content]);
-
   const toggleAssignee = (name: string) => {
     let updated: string[];
     if (selectedAssignees.includes(name)) {
@@ -837,46 +785,36 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           <ArrowLeft size={16} /> Back to Task Board
         </Link>
 
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Realtime Live Indicator */}
-          <div 
-            title="Realtime sync aktif: perubahan tim tersinkron otomatis"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#18181b] border border-zinc-800 text-[11px] text-zinc-300 font-medium select-none"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="hidden sm:inline text-zinc-400">Live Sync</span>
-          </div>
-
-          {/* Save Status Indicator */}
+        <div className="flex items-center gap-2.5 sm:gap-3 text-zinc-500 text-xs">
+          {/* Status Simpan / Sync Minimalis ala Notion */}
           {saveStatus === "saving" && (
-            <span className="text-[11px] text-zinc-400 flex items-center gap-1.5 px-2 py-0.5">
-              <Loader2 size={12} className="animate-spin text-zinc-400" />
+            <span className="flex items-center gap-1.5 text-zinc-500">
+              <Loader2 size={11} className="animate-spin" />
               <span className="hidden sm:inline">Menyimpan...</span>
             </span>
           )}
           {saveStatus === "saved" && (
-            <span className="text-[11px] text-emerald-400 flex items-center gap-1.5 px-2 py-0.5">
-              <Check size={12} />
+            <span className="flex items-center gap-1 text-zinc-400">
+              <Check size={11} />
               <span className="hidden sm:inline">Tersimpan</span>
             </span>
           )}
           {saveStatus === "error" && (
-            <span className="text-[11px] text-rose-400 flex items-center gap-1.5 px-2 py-0.5">
-              <AlertCircle size={12} />
+            <span className="flex items-center gap-1 text-rose-400">
+              <AlertCircle size={11} />
               <span className="hidden sm:inline">Gagal simpan</span>
             </span>
           )}
 
-          {/* Manual Sync Button */}
+          {/* Sync Button Halus */}
           <button
             type="button"
             onClick={() => pollTaskUpdates(true)}
             disabled={isLiveSyncing}
-            title="Sinkronkan & cek pembaruan realtime dari tim sekarang"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-medium transition cursor-pointer disabled:opacity-60"
+            title="Sinkronkan pembaruan realtime"
+            className="p-1.5 rounded-md hover:bg-zinc-800 hover:text-zinc-200 transition cursor-pointer disabled:opacity-50"
           >
-            <RotateCw size={12} className={isLiveSyncing ? "animate-spin text-emerald-400" : ""} />
-            <span className="hidden sm:inline">Sync</span>
+            <RotateCw size={13} className={isLiveSyncing ? "animate-spin text-zinc-300" : ""} />
           </button>
 
           <button
@@ -1492,13 +1430,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         {/* Notion Content Brief Body */}
-        <div className="space-y-4 pt-2">
+        <div className="space-y-3 pt-2">
           {/* Conflict Warning Alert jika ada update remote saat sedang mengetik */}
           {remoteConflictData && (
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
-              <div className="flex items-center gap-2.5 text-amber-300 font-medium">
-                <AlertCircle size={16} className="shrink-0 text-amber-400" />
-                <span>Rekan tim Anda baru saja memperbarui brief ini di server.</span>
+            <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-zinc-300">
+                <AlertCircle size={14} className="shrink-0 text-zinc-400" />
+                <span>Rekan tim baru saja memperbarui brief ini.</span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
@@ -1509,9 +1447,9 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                     lastServerUpdatedAtRef.current = remoteConflictData.updatedAt || new Date().toISOString();
                     setRemoteConflictData(null);
                     isDirtyRef.current = false;
-                    toast.success("Brief berhasil diperbarui ke versi tim terbaru!");
+                    toast.success("Brief diperbarui ke versi tim terbaru");
                   }}
-                  className="px-3 py-1 rounded-lg bg-amber-500 text-black font-semibold hover:bg-amber-400 transition cursor-pointer text-xs"
+                  className="px-2.5 py-1 rounded bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white transition cursor-pointer text-xs"
                 >
                   Muat Versi Tim
                 </button>
@@ -1520,9 +1458,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                   onClick={() => {
                     setRemoteConflictData(null);
                     saveChanges();
-                    toast.info("Menyimpan versi Anda ke database.");
                   }}
-                  className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition cursor-pointer text-xs"
+                  className="px-2.5 py-1 rounded text-zinc-400 hover:text-zinc-200 transition cursor-pointer text-xs"
                 >
                   Pertahankan Versi Saya
                 </button>
@@ -1530,140 +1467,73 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           )}
 
-          {/* Quick Detected Links Bar */}
-          {detectedLinks.length > 0 && (
-            <div className="p-3 bg-[#18181b] border border-zinc-800/90 rounded-xl space-y-2 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
-                  <Globe size={13} className="text-sky-400" />
-                  <span>Direct Links ({detectedLinks.length})</span>
-                  <span className="text-[10px] text-zinc-500 font-normal hidden sm:inline">
-                    Klik untuk langsung membuka file / folder tanpa copas
-                  </span>
-                </div>
-                {detectedLinks.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      detectedLinks.forEach((item) => {
-                        window.open(item.url, "_blank", "noopener,noreferrer");
-                      });
-                    }}
-                    className="text-[11px] text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 font-medium cursor-pointer"
-                  >
-                    <span>Buka Semua Link ({detectedLinks.length})</span>
-                    <ExternalLink size={11} />
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                {detectedLinks.map((item, idx) => (
-                  <a
-                    key={idx}
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={item.url}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-sky-500/50 text-xs text-zinc-200 hover:text-white transition group cursor-pointer max-w-full"
-                  >
-                    <ExternalLink size={12} className="text-sky-400 group-hover:scale-110 transition-transform shrink-0" />
-                    <span className="font-medium text-sky-300">{item.label}</span>
-                    <span className="text-[10px] text-zinc-400 truncate max-w-[200px]">
-                      {item.url.replace(/^https?:\/\//, "")}
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Section Header ala Notion */}
+          <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2">
+            <span className="text-xs uppercase font-medium tracking-wider text-zinc-500">
+              Brief
+            </span>
 
-          {/* Section Header with Tabs & Copy button */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 pb-2.5">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs uppercase font-semibold tracking-wider text-zinc-400">
-                Brief & Deliverables Content
-              </h3>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/70 text-zinc-400 font-mono">
-                {content.length} chars
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* Copy Brief Button */}
+            <div className="flex items-center gap-2 text-xs">
               {content.trim() && (
                 <button
                   type="button"
                   onClick={handleCopyBrief}
-                  title="Salin seluruh isi brief"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs transition cursor-pointer border border-zinc-800"
+                  title="Salin isi brief"
+                  className="text-zinc-500 hover:text-zinc-300 transition cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-zinc-800/60"
                 >
                   {copiedBrief ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                  <span>{copiedBrief ? "Tersalin!" : "Copy"}</span>
+                  <span>{copiedBrief ? "Tersalin" : "Copy"}</span>
                 </button>
               )}
 
-              {/* View / Edit Mode Switcher */}
-              <div className="inline-flex items-center p-0.5 rounded-lg bg-[#141416] border border-zinc-800 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setBriefMode("view")}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                    briefMode === "view"
-                      ? "bg-zinc-800 text-white shadow-sm"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                  title="Tampilan interaktif dengan direct clickable links"
-                >
-                  <Eye size={12} />
-                  <span>Direct Links</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
+              <button
+                type="button"
+                onClick={() => {
+                  if (briefMode === "view") {
                     setBriefMode("edit");
                     setTimeout(() => textareaRef.current?.focus(), 50);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                    briefMode === "edit"
-                      ? "bg-zinc-800 text-white shadow-sm"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                  title="Edit teks mentah"
-                >
-                  <Pencil size={12} />
-                  <span>Edit Text</span>
-                </button>
-              </div>
+                  } else {
+                    setBriefMode("view");
+                  }
+                }}
+                className="text-zinc-400 hover:text-white transition cursor-pointer flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-800"
+              >
+                {briefMode === "view" ? (
+                  <>
+                    <Pencil size={11} />
+                    <span>Edit</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={11} />
+                    <span>Selesai</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* Mode 1: Direct Links / Formatted View */}
+          {/* Mode 1: View (Notion style, clean text + clickable underlined URLs) */}
           {briefMode === "view" ? (
             <div
               onClick={() => {
                 setBriefMode("edit");
                 setTimeout(() => textareaRef.current?.focus(), 50);
               }}
-              className="w-full min-h-[300px] bg-[#181818] border border-zinc-800 hover:border-zinc-700 rounded-xl p-5 text-zinc-300 text-sm leading-relaxed transition-colors cursor-text group relative"
+              className="w-full min-h-[300px] text-zinc-300 text-sm sm:text-[15px] leading-relaxed transition-colors cursor-text group py-1"
             >
               {content.trim() ? (
-                <div className="whitespace-pre-wrap font-sans break-words selection:bg-zinc-700">
+                <div className="whitespace-pre-wrap font-sans break-words selection:bg-zinc-800">
                   {renderFormattedBrief(content)}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-zinc-500 gap-2">
-                  <FileText size={28} className="opacity-40" />
-                  <p className="text-xs">Brief masih kosong. Klik di sini untuk mulai mengetik.</p>
+                <div className="py-8 text-zinc-500 text-xs">
+                  Brief masih kosong. Klik di sini untuk mulai mengetik...
                 </div>
               )}
-              <div className="absolute right-3 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                <span className="text-[11px] px-2 py-1 rounded-md bg-zinc-800/90 text-zinc-400 border border-zinc-700 flex items-center gap-1 shadow">
-                  <Pencil size={11} /> Klik untuk edit teks
-                </span>
-              </div>
             </div>
           ) : (
-            /* Mode 2: Raw Textarea Edit */
+            /* Mode 2: Edit Textarea (Notion style, clean writing) */
             <div className="space-y-2">
               <textarea
                 ref={textareaRef}
@@ -1681,17 +1551,17 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                   handleBlurSave();
                 }}
                 rows={14}
-                placeholder="Tuliskan detail brief, instruksi visual/audio, copy text, dan tempel link aset (Google Drive, Canva, Figma)..."
-                className="w-full bg-[#181818] border border-zinc-800 rounded-xl p-4 text-zinc-200 text-sm leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y font-sans"
+                placeholder="Tuliskan brief di sini..."
+                className="w-full bg-[#181818] border border-zinc-800/80 rounded-xl p-4 text-zinc-200 text-sm sm:text-[15px] leading-relaxed focus:outline-none focus:border-zinc-600 transition-colors resize-y font-sans"
               />
-              <div className="flex items-center justify-between text-[11px] text-zinc-500 px-1">
-                <span>Tip: Link (Google Drive, Figma, dll) otomatis clickable di tab &quot;Direct Links&quot; dan panel di atas.</span>
+              <div className="flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => setBriefMode("view")}
-                  className="text-sky-400 hover:text-sky-300 hover:underline cursor-pointer"
+                  className="text-xs text-zinc-400 hover:text-white transition px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 cursor-pointer flex items-center gap-1"
                 >
-                  Lihat mode Direct Links ↗
+                  <Check size={12} />
+                  <span>Selesai Edit</span>
                 </button>
               </div>
             </div>
